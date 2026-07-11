@@ -1,0 +1,45 @@
+# 文档清单
+
+| 文件 | 行数 | 字节 | SHA256前12位 |
+|---|---|---|---|
+| 00_项目文档导航与执行顺序.md | 59 | 4205 | b2fb18ef1ad1 |
+| 01_赛题需求_PRD与验收追踪矩阵.md | 80 | 3741 | 477a37b15d87 |
+| 02_产品范围_用户体验与非功能需求.md | 72 | 2508 | 7810c92ee5d0 |
+| 03_核心数据契约_事件模型与状态机.md | 153 | 4006 | 27a758f8dda6 |
+| 04_总体架构_技术选型与ADR.md | 92 | 3034 | de449ec5404b |
+| 05_Agent编排_模型路由与MCP工具协议.md | 75 | 2583 | 23dcda0ab887 |
+| 06_检索_RAG_GraphRAG与知识管理.md | 45 | 1687 | 324b09e0ca5f |
+| 07_DomainPack_任务原型与跨领域泛化.md | 86 | 2355 | 63171c4479dc |
+| 08_数据平台_API_安全与可观测性.md | 53 | 1782 | a11784820f36 |
+| 09_量化指标_基准测试与故障注入.md | 67 | 2199 | 81da13cb27d7 |
+| 10_项目实施路线_DoD与风险管理.md | 44 | 1781 | 472e37b0915e |
+| 11_Codex执行手册与AGENTS规则.md | 62 | 1861 | a6fa69b0967f |
+| 12_比赛演示_答辩与交付材料.md | 46 | 1966 | 538ac1e7339c |
+| README.md | 37 | 1488 | dd32a2552f90 |
+| modules/M00_任务接入、安全检查与预算.md | 330 | 11836 | 432f82b837e6 |
+| modules/M01_科研问题编译器.md | 325 | 11245 | e8d42961fafb |
+| modules/M02_领域与任务原型路由.md | 328 | 11161 | 96499e82cde8 |
+| modules/M03_动态数据合同编译.md | 326 | 11370 | fcc75d433b6b |
+| modules/M04_检索策略与覆盖规划.md | 328 | 11278 | 92263749734d |
+| modules/M05_联邦Connector与来源评估.md | 327 | 11447 | 471d41e3b5a4 |
+| modules/M06_覆盖度评估与来源选择.md | 324 | 11086 | f39cc30056fe |
+| modules/M07_下载、固化与数据湖.md | 328 | 11219 | b4ca707cc929 |
+| modules/M08_文件分类与解析路由.md | 324 | 11062 | 3099341caa33 |
+| modules/M09_PDF与通用文档解析集成.md | 328 | 11421 | 287b0389e5c3 |
+| modules/M10_表格结构恢复.md | 333 | 11215 | 05f2652240f6 |
+| modules/M11_图表数字化.md | 334 | 11578 | d9ce015e8d27 |
+| modules/M12_科学文件格式解析.md | 324 | 11342 | 329e7bdd9459 |
+| modules/M13_证据优先字段抽取.md | 331 | 11499 | 61ae357f3ce0 |
+| modules/M14_字段映射与语义对齐.md | 325 | 11158 | 51c32560badb |
+| modules/M15_单位、时间、坐标与值规范化.md | 326 | 11300 | d6828f5465d3 |
+| modules/M16_实体消歧与重复检测.md | 326 | 11239 | c9503fe23471 |
+| modules/M17_冲突保留式融合.md | 329 | 11176 | 819d08113f54 |
+| modules/M18_质量审计与自动修复.md | 330 | 11473 | b2b8bb6401a6 |
+| modules/M19_RAG、知识图谱与任务记忆.md | 332 | 11487 | d8d7fe057947 |
+| modules/M20_交付、报告与复现包.md | 335 | 11622 | b923d1a84a2e |
+| prompts/CODEX_MASTER_START_PROMPT.md | 21 | 1251 | 6c8070cf1cd9 |
+| prompts/MODULE_PROMPTS_INDEX.md | 28 | 3009 | 8c905c978ddc |
+| prompts/PHASE_PROMPTS.md | 32 | 1181 | 228bc2e21d18 |
+| references/前沿技术参考与采用决策.md | 45 | 2944 | e84a6060a25b |
+| templates/ADR_TEMPLATE.md | 17 | 262 | 0025f4f2240b |
+| templates/MODULE_ACCEPTANCE_TEMPLATE.md | 14 | 246 | a022ff2f50e4 |

@@ -1,0 +1,70 @@
+"""Immutable event envelope for workflow replay and audit."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Generic, TypeVar
+
+from pydantic import Field, field_validator
+
+from scidatafusion.contracts.base import (
+    EventId,
+    NonEmptyStr,
+    RunId,
+    SemanticVersion,
+    StrictContract,
+    TaskId,
+    generate_id,
+    utc_now,
+)
+
+
+class EventType(StrEnum):
+    """Event names reserved by the V4 state model."""
+
+    TASK_CREATED = "task.created"
+    PROBLEM_COMPILED = "problem.compiled"
+    CONTRACT_CONFIRMED = "contract.confirmed"
+    SEARCH_COMPLETED = "search.completed"
+    ARTIFACT_STORED = "artifact.stored"
+    DOCUMENT_PARSED = "document.parsed"
+    FIELD_EXTRACTED = "field.extracted"
+    RECORD_NORMALIZED = "record.normalized"
+    FUSION_COMPLETED = "fusion.completed"
+    QUALITY_ISSUE_CREATED = "quality.issue.created"
+    REVIEW_RESOLVED = "review.resolved"
+    DELIVERY_COMPLETED = "delivery.completed"
+
+
+class ProducerRef(StrictContract):
+    """Versioned component that emitted an event."""
+
+    component: NonEmptyStr
+    version: SemanticVersion
+
+
+PayloadT = TypeVar("PayloadT", bound=StrictContract)
+
+
+class EventEnvelope(StrictContract, Generic[PayloadT]):
+    """Typed event record; large payloads are represented by artifact references."""
+
+    event_id: EventId = Field(default_factory=lambda: generate_id("evt"))
+    event_type: EventType
+    task_id: TaskId
+    run_id: RunId
+    occurred_at: datetime = Field(default_factory=utc_now)
+    schema_version: SemanticVersion = "1.0.0"
+    producer: ProducerRef
+    payload: PayloadT
+    correlation_id: NonEmptyStr | None = None
+    causation_event_id: EventId | None = None
+
+    @field_validator("occurred_at")
+    @classmethod
+    def require_aware_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            msg = "occurred_at must include a timezone"
+            raise ValueError(msg)
+        return value.astimezone(UTC)

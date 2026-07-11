@@ -1,0 +1,272 @@
+{
+  "package": "AI_Data_Scientist_Codex_Documentation_V4",
+  "version": "4.0.0",
+  "generated_at": "2026-07-11",
+  "file_count": 44,
+  "files": [
+    {
+      "path": "00_项目文档导航与执行顺序.md",
+      "bytes": 4205,
+      "sha256": "b2fb18ef1ad111dc3e4f3e28640e9cedabebcb42fa7d6e33d9630a1ae511eabb",
+      "lines": 59
+    },
+    {
+      "path": "01_赛题需求_PRD与验收追踪矩阵.md",
+      "bytes": 3741,
+      "sha256": "477a37b15d8779b1ba7269bb2d5989e2a209834d392226cc27a579f4a1929621",
+      "lines": 80
+    },
+    {
+      "path": "02_产品范围_用户体验与非功能需求.md",
+      "bytes": 2508,
+      "sha256": "7810c92ee5d056e2aefcfd148bc8039e1ac75167295958bf985a40fa5bb9d47f",
+      "lines": 72
+    },
+    {
+      "path": "03_核心数据契约_事件模型与状态机.md",
+      "bytes": 4006,
+      "sha256": "27a758f8dda6f32a94642ea480f998580c14f12e7c3d3d60aaea43621d719c2f",
+      "lines": 153
+    },
+    {
+      "path": "04_总体架构_技术选型与ADR.md",
+      "bytes": 3034,
+      "sha256": "de449ec5404bc58a9dc3cd746ea83306cef2a38d718edb09018832b14d6a4a94",
+      "lines": 92
+    },
+    {
+      "path": "05_Agent编排_模型路由与MCP工具协议.md",
+      "bytes": 2583,
+      "sha256": "23dcda0ab887856e5e890434cb3f5eb2150e8012ccc29fc5aac0c3bd0fa16861",
+      "lines": 75
+    },
+    {
+      "path": "06_检索_RAG_GraphRAG与知识管理.md",
+      "bytes": 1687,
+      "sha256": "324b09e0ca5fb7eb8ee5802c2215d2e080aab3accfd1d3ac5d258409b0417947",
+      "lines": 45
+    },
+    {
+      "path": "07_DomainPack_任务原型与跨领域泛化.md",
+      "bytes": 2355,
+      "sha256": "63171c4479dc67b2d2ec101e3c36bd4b8ef822951b1951c5a767c75a4c647f2a",
+      "lines": 86
+    },
+    {
+      "path": "08_数据平台_API_安全与可观测性.md",
+      "bytes": 1782,
+      "sha256": "a11784820f360f8597ae30349583728dcf92ae6ba4cb5106f20cba14f753b4c9",
+      "lines": 53
+    },
+    {
+      "path": "09_量化指标_基准测试与故障注入.md",
+      "bytes": 2199,
+      "sha256": "81da13cb27d746bb76b75b4621725e5daf2984612adad5867b51ae1eb6c576f7",
+      "lines": 67
+    },
+    {
+      "path": "10_项目实施路线_DoD与风险管理.md",
+      "bytes": 1781,
+      "sha256": "472e37b0915ed569863feb81844ed6087c9115a6a090555f5bd8d51ac1724b98",
+      "lines": 44
+    },
+    {
+      "path": "11_Codex执行手册与AGENTS规则.md",
+      "bytes": 1861,
+      "sha256": "a6fa69b0967fa89791398beba7361b0bd2361ad20e5fab5a731d712cb02cb020",
+      "lines": 62
+    },
+    {
+      "path": "12_比赛演示_答辩与交付材料.md",
+      "bytes": 1966,
+      "sha256": "538ac1e7339cbf1d6e512cd28ac745941b63ee6946d3cd9fd2aa5dced0b98d78",
+      "lines": 46
+    },
+    {
+      "path": "AI_Data_Scientist_V4_全量合并文档.md",
+      "bytes": 284463,
+      "sha256": "fa2e4b6cacdfb49ce443a0e021126c08f21bd611853bfc7a1e7631603067dcad",
+      "lines": 8189
+    },
+    {
+      "path": "DOCUMENT_MANIFEST.md",
+      "bytes": 3083,
+      "sha256": "99982c8156f276b0d14d9eaa990b7c3453c47c3de6b86eab5140c0d12143b444",
+      "lines": 46
+    },
+    {
+      "path": "MANIFEST.json",
+      "bytes": 8155,
+      "sha256": "3a4918db07cc0b80d480b52e03e52b61261926f79d0f7e7439e97558202a31d2",
+      "lines": null
+    },
+    {
+      "path": "README.md",
+      "bytes": 1488,
+      "sha256": "dd32a2552f9011a3fbe3f15a380ddcac317b1bed5b23125df044267d18036cb0",
+      "lines": 37
+    },
+    {
+      "path": "modules/M00_任务接入、安全检查与预算.md",
+      "bytes": 11836,
+      "sha256": "432f82b837e68f5004cd7f5b75eb5f8ab6addf43371864785b1659bb5afa1242",
+      "lines": 330
+    },
+    {
+      "path": "modules/M01_科研问题编译器.md",
+      "bytes": 11245,
+      "sha256": "e8d42961fafbc49914032fe3c44176aa157ee268e920d88dbacea7566830fa02",
+      "lines": 325
+    },
+    {
+      "path": "modules/M02_领域与任务原型路由.md",
+      "bytes": 11161,
+      "sha256": "96499e82cde8c5791f78db7bbd799fcb33eeb3dbcc901a7b0b570296ba86c6f9",
+      "lines": 328
+    },
+    {
+      "path": "modules/M03_动态数据合同编译.md",
+      "bytes": 11370,
+      "sha256": "fcc75d433b6bee39743795399b45a795fc591174858bef2431a76211060ac1b8",
+      "lines": 326
+    },
+    {
+      "path": "modules/M04_检索策略与覆盖规划.md",
+      "bytes": 11278,
+      "sha256": "92263749734db408ea33ce02b73085f9cc097a56dce55cda9f0e064dc675a884",
+      "lines": 328
+    },
+    {
+      "path": "modules/M05_联邦Connector与来源评估.md",
+      "bytes": 11447,
+      "sha256": "471d41e3b5a4029ff08efe582364fa84b838e29ff3d983538625272eed391dcc",
+      "lines": 327
+    },
+    {
+      "path": "modules/M06_覆盖度评估与来源选择.md",
+      "bytes": 11086,
+      "sha256": "f39cc30056feb649eb1ea0d9010a25b225209e733b7b50d96004c999468d3e90",
+      "lines": 324
+    },
+    {
+      "path": "modules/M07_下载、固化与数据湖.md",
+      "bytes": 11219,
+      "sha256": "b4ca707cc929990c0395c8ad36f77d044111891be56b3cbafb11b08e7d3a3e5d",
+      "lines": 328
+    },
+    {
+      "path": "modules/M08_文件分类与解析路由.md",
+      "bytes": 11062,
+      "sha256": "3099341caa3379f4c371c8172ef20b67ffdb6d073f87f32fc19cf5f29ff7dee7",
+      "lines": 324
+    },
+    {
+      "path": "modules/M09_PDF与通用文档解析集成.md",
+      "bytes": 11421,
+      "sha256": "287b0389e5c3bce91bedfbd9984bacc9eb8ecf7c5c07e92806f137671afe50c5",
+      "lines": 328
+    },
+    {
+      "path": "modules/M10_表格结构恢复.md",
+      "bytes": 11215,
+      "sha256": "05f2652240f61fcd1e4a139d5a98c04b90b809677dd430cd321d7c675a0fdbc7",
+      "lines": 333
+    },
+    {
+      "path": "modules/M11_图表数字化.md",
+      "bytes": 11578,
+      "sha256": "d9ce015e8d2771ebf5f44692612f25a0737ed0336753d9fd2f7abe152d4e9730",
+      "lines": 334
+    },
+    {
+      "path": "modules/M12_科学文件格式解析.md",
+      "bytes": 11342,
+      "sha256": "329e7bdd94597659d1358824cc47fd9f61798fa889fd97af562dd47a7763e8e9",
+      "lines": 324
+    },
+    {
+      "path": "modules/M13_证据优先字段抽取.md",
+      "bytes": 11499,
+      "sha256": "61ae357f3ce07ded0872990c4f4cc5945db949511a657f843e81a80579665262",
+      "lines": 331
+    },
+    {
+      "path": "modules/M14_字段映射与语义对齐.md",
+      "bytes": 11158,
+      "sha256": "51c32560badb1cb7492e1a2a2199e4815dec9bf0f37c9a242fdb223c82db0fd7",
+      "lines": 325
+    },
+    {
+      "path": "modules/M15_单位、时间、坐标与值规范化.md",
+      "bytes": 11300,
+      "sha256": "d6828f5465d334939f34dcb11bd01df8a2b93c53239ed7725d6d1904bf22d931",
+      "lines": 326
+    },
+    {
+      "path": "modules/M16_实体消歧与重复检测.md",
+      "bytes": 11239,
+      "sha256": "c9503fe23471ffb3aa7dfdc7fb83b5ade51c2c860f85c5e8a2cd82573dea99ad",
+      "lines": 326
+    },
+    {
+      "path": "modules/M17_冲突保留式融合.md",
+      "bytes": 11176,
+      "sha256": "819d08113f543230b8d5aee1c5995729f57af4468641b237b02da5c44e12fe2a",
+      "lines": 329
+    },
+    {
+      "path": "modules/M18_质量审计与自动修复.md",
+      "bytes": 11473,
+      "sha256": "b2b8bb6401a643039b26c5bd897c3144574387e9533d8090e1e2e2042c59d1d3",
+      "lines": 330
+    },
+    {
+      "path": "modules/M19_RAG、知识图谱与任务记忆.md",
+      "bytes": 11487,
+      "sha256": "d8d7fe057947b9244cc60227f67eb4e842f3329ef4effddb84b0ae4004436b8c",
+      "lines": 332
+    },
+    {
+      "path": "modules/M20_交付、报告与复现包.md",
+      "bytes": 11622,
+      "sha256": "b923d1a84a2e7e673ab111c10dd1936c53f58f000c637c81cd8f9b67fa304709",
+      "lines": 335
+    },
+    {
+      "path": "prompts/CODEX_MASTER_START_PROMPT.md",
+      "bytes": 1251,
+      "sha256": "6c8070cf1cd94f190799401b06149e1fa114ebaef0cbce1ec89eefe41f2b1551",
+      "lines": 21
+    },
+    {
+      "path": "prompts/MODULE_PROMPTS_INDEX.md",
+      "bytes": 3009,
+      "sha256": "8c905c978ddc8c5b6d9b640973290f4a07429b5bc3b5f50dede089b045b4b77e",
+      "lines": 28
+    },
+    {
+      "path": "prompts/PHASE_PROMPTS.md",
+      "bytes": 1181,
+      "sha256": "228bc2e21d1811e076c14055e6707386fe8eb0b0657abed19ccd7fc38fe5eaf1",
+      "lines": 32
+    },
+    {
+      "path": "references/前沿技术参考与采用决策.md",
+      "bytes": 2944,
+      "sha256": "e84a6060a25b01f9906b5558e3e75e2d78803c394c82a802d3d2876faadcb715",
+      "lines": 45
+    },
+    {
+      "path": "templates/ADR_TEMPLATE.md",
+      "bytes": 262,
+      "sha256": "0025f4f2240b7ac083f395fb72887086b653dfa5bb4b1572f7be466495dce1f0",
+      "lines": 17
+    },
+    {
+      "path": "templates/MODULE_ACCEPTANCE_TEMPLATE.md",
+      "bytes": 246,
+      "sha256": "a022ff2f50e4186db494a46fa80d99fb83b7cdbc88a2f89e460746202ac2bc9c",
+      "lines": 14
+    }
+  ]
+}

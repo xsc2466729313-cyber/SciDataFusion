@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "scidatafusion"
+version = "0.1.0"
+description = "Evidence-first AI workflow for finding, parsing, and integrating scientific data"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.7,<3",
+]
+
+[project.optional-dependencies]
+api = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.34,<1",
+]
+data = [
+  "duckdb>=1.2,<2",
+  "polars>=1.22,<2",
+  "pyarrow>=19,<21",
+]
+
+[dependency-groups]
+dev = [
+  "bandit>=1.8,<2",
+  "mypy>=1.15,<2",
+  "pip-audit>=2.8,<3",
+  "pytest>=9.0.3,<10",
+  "pytest-cov>=6,<7",
+  "ruff>=0.11,<1",
+]
+
+[project.scripts]
+scidatafusion = "scidatafusion.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/scidatafusion"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "S", "DTZ", "LOG", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S105"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src", "tests"]
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers --cov=scidatafusion --cov-report=term-missing --cov-fail-under=90"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["scidatafusion"]
+
+[tool.coverage.report]
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]
