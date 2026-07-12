@@ -24,6 +24,7 @@ sys.path.insert(0, str(installed_root))
 
 import scidatafusion
 from scidatafusion.domain.registry import DomainPackRegistry, TaskPackRegistry
+from scidatafusion.parsing.registry import ParserCapabilityRegistryLoader
 from scidatafusion.schema.registry import SchemaPackRegistry
 from scidatafusion.search.registry import SourceCapabilityRegistryLoader
 
@@ -32,10 +33,12 @@ domain = DomainPackRegistry.load_default()
 task = TaskPackRegistry.load_default()
 schema = SchemaPackRegistry.load_default()
 search = SourceCapabilityRegistryLoader.load_default()
+parsers = ParserCapabilityRegistryLoader.load_default()
 vizier = next(item for item in search.capabilities if item.source_id == "vizier_tap")
 assert domain.packs
 assert task.packs
 assert schema.packs
+assert any(item.parser_id == "m09.pdf_text" for item in parsers.parsers)
 assert vizier.operations[0].supports_pagination is False
 """
 

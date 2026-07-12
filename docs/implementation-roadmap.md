@@ -7,7 +7,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 0 | repository, contracts, configuration, quality gates | locked clean build and doctor | complete |
 | 1 | M00-M03 | research goal to confirmed data contract | complete |
 | 2 | M04-M06 | federated discovery, coverage, selected sources | complete |
-| 3 | M07-M10 | immutable download, document and table IR | in progress (M07 complete; M08 next) |
+| 3 | M07-M10 | immutable download, document and table IR | in progress (M07-M08 complete; M09 next) |
 | 4 | M13-M15 | field evidence, mapping, unit/time normalization | pending |
 | 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | pending |
 | 6 | M19 | hybrid retrieval and evidence graph | pending |
@@ -34,8 +34,15 @@ then support materials/chemistry and environment/life-science cases.
 M07 converts authorized selected-source locators into content-addressed Bronze bytes under exact
 HTTPS, redirect, DNS, retry, rate, byte-budget, MIME, archive, and license controls. The offline Ia
 fixture produces five unique objects and six provenance acquisitions with no external network, and
-complete results can replay from an immutable checkpoint. M08 next classifies those objects and
-plans parser routes; M07 does not claim parsed scientific values or Silver/Gold completeness.
+complete results can replay from an immutable checkpoint. M08 consumes those objects without
+changing them; M07 does not claim parsed scientific values or Silver/Gold completeness.
+
+M08 verifies the exact M07 request/result and Bronze hashes, classifies each unique object from
+bounded inert samples, and creates one content-addressed aggregate plan from a separately verified
+parser registry and runtime snapshot. The offline Ia slice accounts for all five objects with four
+executable routes and one archive metadata-only disposition; one PDF OCR fallback is planned but
+not executed. M09 next executes document routes and produces validated document IR. M08 does not
+claim parser success, recovered scientific values, or benchmark-backed page-routing accuracy.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

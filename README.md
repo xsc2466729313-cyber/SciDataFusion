@@ -11,8 +11,9 @@ The source package is being built phase by phase from the
 ## Current checkpoint
 
 Phase 2 is complete and Phase 3 is in progress. Phase 1 turns an accepted research goal into a
-confirmed scientific data contract; M04-M06 discover and select evidence-backed sources; the M07
-selected-source acquisition checkpoint now preserves authorized bytes in immutable Bronze storage:
+confirmed scientific data contract; M04-M06 discover and select evidence-backed sources; M07
+preserves authorized bytes in immutable Bronze storage; and the M08 checkpoint now creates an
+explainable, registry-bound downstream parse plan without executing a parser:
 
 - M00 security, privacy, upload, and finite-budget intake gates;
 - M01 evidence-grounded problem compilation with deterministic fallback and a validated Qwen
@@ -48,15 +49,27 @@ selected-source acquisition checkpoint now preserves authorized bytes in immutab
 - SHA-256 Bronze storage, cross-source deduplication, root/attachment/archive provenance,
   deterministic events, single-flight execution, and durable complete-result checkpoints;
 - an offline Ia acquisition fixture with five unique Bronze objects, six provenance acquisitions,
-  no external network, and a privacy-reduced `phase3-download-demo` summary.
+  no external network, and a privacy-reduced `phase3-download-demo` summary;
+- M08 strict classification, capability-registry, runtime, policy, page-scope, route, gap, metric,
+  aggregate-plan, checkpoint, and `parse.plan.created` event contracts bound to the exact M07
+  request, result, completion event, and Bronze hashes;
+- signature-first bounded classification with conservative structural facts, low-cost-first parser
+  selection, quality-gated OCR fallback planning, explicit unknown/capability gaps, and no raw-byte
+  or scientific-value retention;
+- a content-addressed parser registry separated from its runtime availability snapshot, plus
+  immutable complete-result checkpoints and single-flight execution;
+- an offline Ia M08 fixture result with five classifications and five plan entries: four executable
+  routes, one archive metadata-only disposition, one conditional PDF OCR fallback, and zero
+  network, model-classification, downstream-parser, or Bronze-write operations.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
 credentials or external-source calls. M06 adds no network or model call. In the Ia fixture it
 selects three source categories with full Required/entity/source-type candidate coverage, then
 correctly remains partial because record-level scope and reuse permission are not yet proven. M07
-retains controlled source bytes but does not parse scientific values. M08-M10 parsing, later
-evidence/normalization/fusion, and the web workbench remain future checkpoints.
+retains controlled source bytes but does not parse scientific values. M08 classifies and plans only;
+M09-M10 parser execution and IR generation, later evidence/normalization/fusion, and the web
+workbench remain future checkpoints.
 
 ## Quick start
 
@@ -69,6 +82,7 @@ uv run scidatafusion phase2-plan-demo --goal "Study Type Ia supernova light curv
 uv run scidatafusion phase2-connect-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase2-select-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase3-download-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase3-parse-plan-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -95,6 +109,13 @@ manifest, run log, and event construction used by the service. Its output omits 
 approval references, source content, the research goal, and reviewer identity. Acceptance is
 offline only: it does not claim real-source availability, legal approval, mid-download resume, M00
 upload ingestion, or parsed Silver/Gold data.
+
+`phase3-parse-plan-demo` carries the exact M07 request, result, completion event, and in-memory
+Bronze bytes into M08. Its privacy-reduced output reports format families, route dispositions,
+downstream module families, parser identifiers, costs, gaps, and hashes. M08 performs no parser,
+OCR, VLM, network, or model call and writes no Bronze bytes. The packaged Ia PDF is intentionally
+minimal, so this checkpoint does not claim the specification's file/page accuracy or latency
+targets; those require a versioned judged routing corpus and representative mixed-page PDFs.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported

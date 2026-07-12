@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from scidatafusion import __version__
 from scidatafusion.artifacts import (
     ArtifactDownloadService,
+    BronzeByteStore,
     MemoryBronzeStore,
     build_offline_ia_artifact_bundle,
 )
@@ -27,10 +28,16 @@ from scidatafusion.contracts.artifacts import (
     ArtifactDownloadResult,
     ArtifactDownloadStatus,
 )
+from scidatafusion.contracts.base import utc_now
 from scidatafusion.contracts.connectors import (
     ConnectorBatchStatus,
     ConnectorExecutionRequest,
     ConnectorExecutionResult,
+)
+from scidatafusion.contracts.parsing import (
+    ParsePlanningRequest,
+    ParsePlanningResult,
+    ParsePlanningStatus,
 )
 from scidatafusion.contracts.scientific import ScientificDataContract
 from scidatafusion.contracts.search import (
@@ -45,7 +52,10 @@ from scidatafusion.contracts.selection import (
 )
 from scidatafusion.contracts.task import TaskIntakeRequest
 from scidatafusion.contracts.workflow import Phase1Status, Phase1WorkflowResult
+from scidatafusion.domain.registry import RegistryLoadError
 from scidatafusion.errors import AppError
+from scidatafusion.parsing import ParsePlanningService
+from scidatafusion.parsing.fixtures import build_offline_parse_planning_bundle
 from scidatafusion.search import SearchPlanner, SourceCapabilityRegistryLoader, source_ids
 from scidatafusion.selection import SourceSelectionService
 from scidatafusion.workflow import build_offline_demo_workflow
@@ -115,6 +125,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     artifacts.add_argument("--goal", required=True, help="scientific research goal")
     artifacts.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    parse_plan = subparsers.add_parser(
+        "phase3-parse-plan-demo",
+        help="run M00-M08 and plan downstream parsers without executing them",
+    )
+    parse_plan.add_argument("--goal", required=True, help="scientific research goal")
+    parse_plan.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -391,6 +411,46 @@ def build_artifact_summary(result: ArtifactDownloadResult) -> dict[str, object]:
     }
 
 
+def build_parse_plan_summary(result: ParsePlanningResult) -> dict[str, object]:
+    """Render M08 routing facts without bytes, source text, URLs, or scientific values."""
+
+    plan = result.plan
+    formats = Counter(item.format_family.value for item in plan.classifications)
+    dispositions = Counter(item.disposition.value for item in plan.routes)
+    target_modules = Counter(
+        item.target_module.value for item in plan.routes if item.target_module is not None
+    )
+    primary_parsers = Counter(
+        item.primary_parser_id for item in plan.routes if item.primary_parser_id is not None
+    )
+    return {
+        "status": result.status.value,
+        "execution_mode": plan.runtime.execution_mode.value,
+        "network_performed": False,
+        "model_classification_performed": False,
+        "downstream_parser_executions": 0,
+        "bronze_writes": 0,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "plan_id": plan.plan_id,
+        "plan_hash": plan.plan_hash,
+        "artifact_set_hash": plan.artifact_set_hash,
+        "manifest_hash": plan.manifest_hash,
+        "capability_registry_hash": plan.capability_registry.registry_hash,
+        "runtime_hash": plan.runtime.runtime_hash,
+        "policy_hash": plan.policy_hash,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "format_families": dict(sorted(formats.items())),
+        "route_dispositions": dict(sorted(dispositions.items())),
+        "target_modules": dict(sorted(target_modules.items())),
+        "primary_parsers": dict(sorted(primary_parsers.items())),
+        "fallback_count": sum(len(item.fallback_parser_ids) for item in plan.routes),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -471,6 +531,20 @@ async def _execute_offline_selection(
 async def _execute_offline_artifacts(
     selection: SourceSelectionResult,
 ) -> ArtifactDownloadResult:
+    _, result = await _execute_offline_artifacts_with_request(
+        selection,
+        store=MemoryBronzeStore(),
+    )
+    return result
+
+
+async def _execute_offline_artifacts_with_request(
+    selection: SourceSelectionResult,
+    *,
+    store: BronzeByteStore,
+) -> tuple[ArtifactDownloadRequest, ArtifactDownloadResult]:
+    """Execute M07 while retaining the exact request and read-only Bronze store for M08."""
+
     bundle = build_offline_ia_artifact_bundle(selection.selected_source_set)
     request = ArtifactDownloadRequest(
         selected_source_set=selection.selected_source_set,
@@ -480,11 +554,11 @@ async def _execute_offline_artifacts(
         requested_at=bundle.runtime.checked_at,
     )
     service = ArtifactDownloadService(
-        store=MemoryBronzeStore(),
+        store=store,
         transport=bundle.transport,
     )
     try:
-        return await service.execute(request)
+        return request, await service.execute(request)
     finally:
         await service.aclose()
 
@@ -540,8 +614,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 }
                 else 3
             )
-        except (AppError, ValidationError) as exc:
-            code = exc.code.value if isinstance(exc, AppError) else "validation_failed"
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
             print(
                 json.dumps(
                     {"status": "error", "error": code},
@@ -625,6 +704,49 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         except (AppError, ValidationError) as exc:
             code = exc.code.value if isinstance(exc, AppError) else "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase3-parse-plan-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            selection = asyncio.run(
+                _execute_offline_selection(phase1.confirmation.contract, planning)
+            )
+            store = MemoryBronzeStore()
+            download_request, download_result = asyncio.run(
+                _execute_offline_artifacts_with_request(selection, store=store)
+            )
+            parse_bundle = build_offline_parse_planning_bundle()
+            parse_request = ParsePlanningRequest(
+                contract=phase1.confirmation.contract,
+                download_request=download_request,
+                download_result=download_result,
+                capability_registry=parse_bundle.registry,
+                policy=parse_bundle.policy,
+                runtime=parse_bundle.runtime,
+                requested_at=utc_now(),
+            )
+            parse_result = asyncio.run(ParsePlanningService(store=store).execute(parse_request))
+            print(json.dumps(build_parse_plan_summary(parse_result), ensure_ascii=True, indent=2))
+            return (
+                0
+                if parse_result.status
+                in {ParsePlanningStatus.SUCCEEDED, ParsePlanningStatus.PARTIAL}
+                else 3
+            )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
             print(
                 json.dumps({"status": "error", "error": code}, ensure_ascii=True),
                 file=sys.stderr,

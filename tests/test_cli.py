@@ -306,3 +306,77 @@ def test_phase3_download_demo_builds_safe_replayable_bronze_summary(
     assert "malware.exe" not in captured.out
     assert "offline-fixture:" not in captured.out
     assert "https://" not in captured.out
+
+
+def test_phase3_parse_plan_demo_routes_every_object_without_parsing_values(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m08-reviewer@example.org"
+
+    exit_code = main(
+        [
+            "phase3-parse-plan-demo",
+            "--goal",
+            goal,
+            "--confirmed-by",
+            reviewer,
+        ]
+    )
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "succeeded"
+    assert report["execution_mode"] == "offline"
+    assert report["network_performed"] is False
+    assert report["model_classification_performed"] is False
+    assert report["downstream_parser_executions"] == 0
+    assert report["bronze_writes"] == 0
+    assert report["metrics"] == {
+        "artifact_count": 5,
+        "classification_count": 5,
+        "route_count": 5,
+        "page_route_count": 0,
+        "succeeded_plan_count": 5,
+        "partial_plan_count": 0,
+        "review_plan_count": 0,
+        "unsupported_plan_count": 0,
+        "failed_plan_count": 0,
+        "gap_count": 0,
+        "format_gap_count": 0,
+        "capability_gap_count": 0,
+        "model_candidate_classification_count": 0,
+        "high_resource_primary_route_count": 0,
+        "planned_cost_micro_usd": 5000,
+    }
+    assert report["format_families"] == {
+        "archive": 1,
+        "csv": 1,
+        "html": 1,
+        "pdf": 1,
+        "plain_text": 1,
+    }
+    assert report["route_dispositions"] == {"metadata_only": 1, "parse": 4}
+    assert report["target_modules"] == {"M09": 3, "M10": 1}
+    assert report["primary_parsers"] == {
+        "m09.html": 1,
+        "m09.pdf_text": 1,
+        "m09.text": 1,
+        "m10.csv": 1,
+    }
+    assert report["fallback_count"] == 1
+    assert report["event_type"] == "parse.plan.created"
+    assert report["event_count"] == 1
+    for secret_or_content in (
+        goal,
+        reviewer,
+        "evil.example",
+        "malware.exe",
+        "offline-fixture:",
+        "https://",
+        "photometry.csv",
+        "59000.1",
+        "12.3",
+    ):
+        assert secret_or_content not in captured.out
