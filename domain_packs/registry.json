@@ -1,0 +1,113 @@
+{
+  "registry_type": "domain",
+  "registry_version": "1.0.0",
+  "content_hash": "c7008187a1bb3d111a79882ac2749297a863b4863cfe8685c3f4071032d4ba35",
+  "packs": [
+    {
+      "name": "astronomy",
+      "version": "1.0.0",
+      "description": "Astronomical objects, observations, photometry, and time-series data.",
+      "domains": ["astronomy"],
+      "subdomains": ["time_domain_astronomy", "stellar_astrophysics"],
+      "keyword_rules": [
+        {"term": "type ia supernova", "weight": 1.5},
+        {"term": "ia supernova", "weight": 1.3},
+        {"term": "supernova", "weight": 0.8},
+        {"term": "light curve", "weight": 1.2},
+        {"term": "light curves", "weight": 1.2},
+        {"term": "photometry", "weight": 0.8},
+        {"term": "astronomy", "weight": 0.7},
+        {"term": "transient survey", "weight": 0.8},
+        {"term": "mjd", "weight": 0.6},
+        {"term": "\u5929\u6587", "weight": 0.7},
+        {"term": "ia \u578b\u8d85\u65b0\u661f", "weight": 1.5},
+        {"term": "\u8d85\u65b0\u661f", "weight": 0.8},
+        {"term": "\u5149\u53d8\u66f2\u7ebf", "weight": 1.2},
+        {"term": "\u661f\u7b49", "weight": 0.6}
+      ],
+      "supported_archetypes": ["light_curve", "data_integration", "figure_digitization"],
+      "required_capabilities": [
+        "literature_search",
+        "table_extraction",
+        "astronomy_catalog_search",
+        "time_series_parser"
+      ],
+      "optional_capabilities": ["chart_digitization"]
+    },
+    {
+      "name": "materials_chemistry",
+      "version": "1.0.0",
+      "description": "Materials science and chemistry properties, structures, and experiments.",
+      "domains": ["materials_chemistry"],
+      "subdomains": ["materials_science", "chemistry"],
+      "keyword_rules": [
+        {"term": "materials science", "weight": 1.1},
+        {"term": "material property", "weight": 0.8},
+        {"term": "band gap", "weight": 1.1},
+        {"term": "crystal structure", "weight": 1.0},
+        {"term": "perovskite", "weight": 0.9},
+        {"term": "alloy", "weight": 0.8},
+        {"term": "catalyst", "weight": 0.8},
+        {"term": "chemical synthesis", "weight": 1.0},
+        {"term": "reaction yield", "weight": 0.9},
+        {"term": "chemistry", "weight": 0.7},
+        {"term": "\u6750\u6599\u79d1\u5b66", "weight": 1.1},
+        {"term": "\u5e26\u9699", "weight": 1.1},
+        {"term": "\u6676\u4f53\u7ed3\u6784", "weight": 1.0},
+        {"term": "\u5408\u91d1", "weight": 0.8},
+        {"term": "\u50ac\u5316\u5242", "weight": 0.8},
+        {"term": "\u5316\u5b66\u5408\u6210", "weight": 1.0}
+      ],
+      "supported_archetypes": [
+        "property_aggregation",
+        "experiment_condition_extraction",
+        "data_integration"
+      ],
+      "required_capabilities": ["literature_search", "table_extraction", "chemistry_parser"],
+      "optional_capabilities": ["structure_file_parser"]
+    },
+    {
+      "name": "environment_life",
+      "version": "1.0.0",
+      "description": "Environmental, ecological, geospatial, genomic, and life-science data.",
+      "domains": ["environment_life"],
+      "subdomains": ["environmental_science", "ecology", "life_science"],
+      "keyword_rules": [
+        {"term": "environmental", "weight": 0.8},
+        {"term": "ecology", "weight": 0.9},
+        {"term": "biodiversity", "weight": 0.9},
+        {"term": "climate", "weight": 0.8},
+        {"term": "water quality", "weight": 1.0},
+        {"term": "genomics", "weight": 0.9},
+        {"term": "gene expression", "weight": 1.0},
+        {"term": "rna-seq", "weight": 1.0},
+        {"term": "species", "weight": 0.6},
+        {"term": "life science", "weight": 0.8},
+        {"term": "\u73af\u5883", "weight": 0.8},
+        {"term": "\u751f\u6001", "weight": 0.9},
+        {"term": "\u751f\u7269\u591a\u6837\u6027", "weight": 0.9},
+        {"term": "\u6c14\u5019", "weight": 0.8},
+        {"term": "\u6c34\u8d28", "weight": 1.0},
+        {"term": "\u57fa\u56e0\u8868\u8fbe", "weight": 1.0}
+      ],
+      "supported_archetypes": [
+        "spatiotemporal_alignment",
+        "data_integration",
+        "matrix_dataset_integration"
+      ],
+      "required_capabilities": ["literature_search", "table_extraction", "geospatial_parser"],
+      "optional_capabilities": ["sequence_parser"]
+    },
+    {
+      "name": "generic",
+      "version": "1.0.0",
+      "description": "Conservative fallback for unknown or held-out scientific domains.",
+      "domains": ["generic"],
+      "subdomains": [],
+      "keyword_rules": [],
+      "supported_archetypes": ["generic_data_integration"],
+      "required_capabilities": ["literature_search", "table_extraction"],
+      "optional_capabilities": []
+    }
+  ]
+}

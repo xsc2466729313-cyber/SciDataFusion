@@ -1,0 +1,112 @@
+{
+  "registry_type": "task",
+  "registry_version": "1.0.0",
+  "content_hash": "7c63f1943a352f074502580dca0b027ccf2b60675bed9aecb42be061d55d3ce5",
+  "packs": [
+    {
+      "name": "light_curve",
+      "version": "1.0.0",
+      "description": "Observation-time-series extraction and alignment for light curves.",
+      "archetypes": ["light_curve"],
+      "keyword_rules": [
+        {"term": "light curve", "weight": 1.4},
+        {"term": "light curves", "weight": 1.4},
+        {"term": "supernova", "weight": 0.8},
+        {"term": "photometry", "weight": 0.9},
+        {"term": "magnitude over time", "weight": 1.1},
+        {"term": "\u5149\u53d8\u66f2\u7ebf", "weight": 1.4},
+        {"term": "\u8d85\u65b0\u661f", "weight": 0.8},
+        {"term": "\u661f\u7b49", "weight": 0.7}
+      ],
+      "activate_with_any": [],
+      "required_capabilities": ["time_series_parser"],
+      "optional_capabilities": ["chart_digitization"]
+    },
+    {
+      "name": "data_integration",
+      "version": "1.0.0",
+      "description": "Schema-aligned integration of records from multiple scientific sources.",
+      "archetypes": ["data_integration"],
+      "keyword_rules": [
+        {"term": "integrate", "weight": 1.0},
+        {"term": "integration", "weight": 1.0},
+        {"term": "merge", "weight": 0.9},
+        {"term": "harmonize", "weight": 0.9},
+        {"term": "multiple sources", "weight": 0.9},
+        {"term": "multi-source", "weight": 0.9},
+        {"term": "csv", "weight": 0.5},
+        {"term": "\u6574\u5408", "weight": 1.0},
+        {"term": "\u5408\u5e76", "weight": 0.9},
+        {"term": "\u591a\u6e90", "weight": 0.9}
+      ],
+      "activate_with_any": [
+        "light_curve",
+        "property_aggregation",
+        "experiment_condition_extraction",
+        "spatiotemporal_alignment"
+      ],
+      "required_capabilities": ["table_extraction"],
+      "optional_capabilities": []
+    },
+    {
+      "name": "property_aggregation",
+      "version": "1.0.0",
+      "description": "Aggregate measured or computed material and chemical properties.",
+      "archetypes": ["property_aggregation"],
+      "keyword_rules": [
+        {"term": "properties", "weight": 0.8},
+        {"term": "property dataset", "weight": 1.0},
+        {"term": "band gap", "weight": 1.0},
+        {"term": "reaction yield", "weight": 0.9},
+        {"term": "\u6027\u8d28\u6570\u636e", "weight": 1.0},
+        {"term": "\u5e26\u9699", "weight": 1.0}
+      ],
+      "activate_with_any": [],
+      "required_capabilities": ["table_extraction"],
+      "optional_capabilities": ["chemistry_parser"]
+    },
+    {
+      "name": "experiment_condition_extraction",
+      "version": "1.0.0",
+      "description": "Extract experimental preparation, reaction, and measurement conditions.",
+      "archetypes": ["experiment_condition_extraction"],
+      "keyword_rules": [
+        {"term": "experimental conditions", "weight": 1.2},
+        {"term": "synthesis conditions", "weight": 1.2},
+        {"term": "temperature and pressure", "weight": 0.9},
+        {"term": "\u5b9e\u9a8c\u6761\u4ef6", "weight": 1.2},
+        {"term": "\u5236\u5907\u6761\u4ef6", "weight": 1.2}
+      ],
+      "activate_with_any": [],
+      "required_capabilities": ["table_extraction"],
+      "optional_capabilities": ["chemistry_parser"]
+    },
+    {
+      "name": "spatiotemporal_alignment",
+      "version": "1.0.0",
+      "description": "Align observations across spatial reference systems and time axes.",
+      "archetypes": ["spatiotemporal_alignment"],
+      "keyword_rules": [
+        {"term": "spatiotemporal", "weight": 1.2},
+        {"term": "spatial and temporal", "weight": 1.1},
+        {"term": "station observations", "weight": 0.9},
+        {"term": "geospatial", "weight": 0.9},
+        {"term": "\u65f6\u7a7a\u5bf9\u9f50", "weight": 1.2},
+        {"term": "\u7ad9\u70b9\u89c2\u6d4b", "weight": 0.9}
+      ],
+      "activate_with_any": [],
+      "required_capabilities": ["geospatial_parser"],
+      "optional_capabilities": []
+    },
+    {
+      "name": "generic_data_integration",
+      "version": "1.0.0",
+      "description": "Restricted generic integration path requiring explicit downstream review.",
+      "archetypes": ["generic_data_integration"],
+      "keyword_rules": [],
+      "activate_with_any": [],
+      "required_capabilities": ["table_extraction"],
+      "optional_capabilities": []
+    }
+  ]
+}
