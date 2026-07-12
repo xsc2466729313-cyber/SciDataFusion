@@ -380,3 +380,80 @@ def test_phase3_parse_plan_demo_routes_every_object_without_parsing_values(
         "12.3",
     ):
         assert secret_or_content not in captured.out
+
+
+def test_phase3_document_demo_produces_safe_partial_ir_summary(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m09-reviewer@example.org"
+
+    exit_code = main(
+        [
+            "phase3-document-demo",
+            "--goal",
+            goal,
+            "--confirmed-by",
+            reviewer,
+        ]
+    )
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "partial"
+    assert report["execution_mode"] == "offline"
+    assert report["network_performed"] is False
+    assert report["model_performed"] is False
+    assert report["bronze_writes"] == 0
+    assert report["m10_table_executions"] == 0
+    assert report["m11_chart_executions"] == 0
+    assert report["m13_field_extractions"] == 0
+    assert report["metrics"] == {
+        "eligible_route_count": 3,
+        "succeeded_route_count": 2,
+        "partial_route_count": 0,
+        "review_route_count": 1,
+        "unsupported_route_count": 0,
+        "failed_route_count": 0,
+        "attempt_count": 4,
+        "fallback_attempt_count": 1,
+        "candidate_count": 2,
+        "document_ir_count": 2,
+        "page_count": 2,
+        "block_count": 2,
+        "text_character_count": 37,
+        "gap_count": 2,
+        "model_attempt_count": 0,
+        "network_attempt_count": 0,
+        "actual_cost_micro_usd": 0,
+    }
+    assert report["route_statuses"] == {"needs_review": 1, "succeeded": 2}
+    assert report["attempt_statuses"] == {"blocked": 1, "failed": 1, "succeeded": 2}
+    assert report["parser_attempts"] == {
+        "m09.html": 1,
+        "m09.pdf_ocr": 1,
+        "m09.pdf_text": 1,
+        "m09.text": 1,
+    }
+    assert report["blocked_parsers"] == ["m09.pdf_ocr"]
+    assert report["quality_checks"] == {
+        "output_schema": {"failed": 0, "passed": 2},
+        "reading_order": {"failed": 0, "passed": 1},
+        "text_coverage": {"failed": 0, "passed": 2},
+    }
+    assert report["event_type"] == "document.parsed"
+    assert report["event_count"] == 1
+    for secret_or_content in (
+        goal,
+        reviewer,
+        "evil.example",
+        "malware.exe",
+        "offline-fixture:",
+        "https://",
+        "Paper PDF",
+        "Observed magnitude",
+        "59000.1",
+        "12.3",
+    ):
+        assert secret_or_content not in captured.out

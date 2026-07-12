@@ -34,6 +34,11 @@ from scidatafusion.contracts.connectors import (
     ConnectorExecutionRequest,
     ConnectorExecutionResult,
 )
+from scidatafusion.contracts.documents import (
+    DocumentParsingRequest,
+    DocumentParsingResult,
+    DocumentParsingStatus,
+)
 from scidatafusion.contracts.parsing import (
     ParsePlanningRequest,
     ParsePlanningResult,
@@ -52,6 +57,8 @@ from scidatafusion.contracts.selection import (
 )
 from scidatafusion.contracts.task import TaskIntakeRequest
 from scidatafusion.contracts.workflow import Phase1Status, Phase1WorkflowResult
+from scidatafusion.documents.fixtures import build_offline_document_parsing_bundle
+from scidatafusion.documents.service import DocumentParsingService
 from scidatafusion.domain.registry import RegistryLoadError
 from scidatafusion.errors import AppError
 from scidatafusion.parsing import ParsePlanningService
@@ -135,6 +142,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     parse_plan.add_argument("--goal", required=True, help="scientific research goal")
     parse_plan.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    documents = subparsers.add_parser(
+        "phase3-document-demo",
+        help="run M00-M09 and produce document IR with deterministic offline parsers",
+    )
+    documents.add_argument("--goal", required=True, help="scientific research goal")
+    documents.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -451,6 +468,49 @@ def build_parse_plan_summary(result: ParsePlanningResult) -> dict[str, object]:
     }
 
 
+def build_document_summary(result: DocumentParsingResult) -> dict[str, object]:
+    """Render M09 audit facts without document text, URLs, filenames, or scientific values."""
+
+    route_statuses = Counter(item.status.value for item in result.route_results)
+    attempt_statuses = Counter(item.status.value for item in result.attempts)
+    parser_attempts = Counter(item.parser_id for item in result.attempts)
+    quality_checks: dict[str, dict[str, int]] = {}
+    for attempt in result.attempts:
+        for quality in attempt.quality_results:
+            counts = quality_checks.setdefault(quality.kind.value, {"passed": 0, "failed": 0})
+            counts["passed" if quality.passed else "failed"] += 1
+    return {
+        "status": result.status.value,
+        "execution_mode": result.runtime.execution_mode.value,
+        "network_performed": result.metrics.network_attempt_count > 0,
+        "model_performed": result.metrics.model_attempt_count > 0,
+        "bronze_writes": 0,
+        "m10_table_executions": 0,
+        "m11_chart_executions": 0,
+        "m13_field_extractions": 0,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "upstream_plan_id": result.upstream_plan_id,
+        "upstream_plan_hash": result.upstream_plan_hash,
+        "route_result_set_hash": result.route_result_set_hash,
+        "ir_set_hash": result.ir_set_hash,
+        "policy_hash": result.policy_hash,
+        "runtime_hash": result.runtime.runtime_hash,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "route_statuses": dict(sorted(route_statuses.items())),
+        "attempt_statuses": dict(sorted(attempt_statuses.items())),
+        "parser_attempts": dict(sorted(parser_attempts.items())),
+        "blocked_parsers": sorted(
+            item.parser_id for item in result.attempts if item.status.value == "blocked"
+        ),
+        "quality_checks": dict(sorted(quality_checks.items())),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "input_hash": result.input_hash,
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -738,6 +798,63 @@ def main(argv: Sequence[str] | None = None) -> int:
                 0
                 if parse_result.status
                 in {ParsePlanningStatus.SUCCEEDED, ParsePlanningStatus.PARTIAL}
+                else 3
+            )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase3-document-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            selection = asyncio.run(
+                _execute_offline_selection(phase1.confirmation.contract, planning)
+            )
+            store = MemoryBronzeStore()
+            download_request, download_result = asyncio.run(
+                _execute_offline_artifacts_with_request(selection, store=store)
+            )
+            parse_bundle = build_offline_parse_planning_bundle()
+            parse_request = ParsePlanningRequest(
+                contract=phase1.confirmation.contract,
+                download_request=download_request,
+                download_result=download_result,
+                capability_registry=parse_bundle.registry,
+                policy=parse_bundle.policy,
+                runtime=parse_bundle.runtime,
+                requested_at=parse_bundle.runtime.checked_at,
+            )
+            parse_result = asyncio.run(ParsePlanningService(store=store).execute(parse_request))
+            document_bundle = build_offline_document_parsing_bundle(
+                parse_result.plan.capability_registry,
+                parse_result.plan.runtime,
+            )
+            document_request = DocumentParsingRequest(
+                parse_planning_request=parse_request,
+                parse_planning_result=parse_result,
+                policy=document_bundle.policy,
+                runtime=document_bundle.runtime,
+                requested_at=document_bundle.runtime.checked_at,
+            )
+            document_result = asyncio.run(
+                DocumentParsingService(bronze_store=store).execute(document_request)
+            )
+            print(json.dumps(build_document_summary(document_result), ensure_ascii=True, indent=2))
+            return (
+                0
+                if document_result.status
+                in {DocumentParsingStatus.SUCCEEDED, DocumentParsingStatus.PARTIAL}
                 else 3
             )
         except (AppError, RegistryLoadError, ValidationError) as exc:

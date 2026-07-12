@@ -7,7 +7,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 0 | repository, contracts, configuration, quality gates | locked clean build and doctor | complete |
 | 1 | M00-M03 | research goal to confirmed data contract | complete |
 | 2 | M04-M06 | federated discovery, coverage, selected sources | complete |
-| 3 | M07-M10 | immutable download, document and table IR | in progress (M07-M08 complete; M09 next) |
+| 3 | M07-M10 | immutable download, document and table IR | in progress (M07-M09 complete; M10 next) |
 | 4 | M13-M15 | field evidence, mapping, unit/time normalization | pending |
 | 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | pending |
 | 6 | M19 | hybrid retrieval and evidence graph | pending |
@@ -41,8 +41,16 @@ M08 verifies the exact M07 request/result and Bronze hashes, classifies each uni
 bounded inert samples, and creates one content-addressed aggregate plan from a separately verified
 parser registry and runtime snapshot. The offline Ia slice accounts for all five objects with four
 executable routes and one archive metadata-only disposition; one PDF OCR fallback is planned but
-not executed. M09 next executes document routes and produces validated document IR. M08 does not
-claim parser success, recovered scientific values, or benchmark-backed page-routing accuracy.
+not executed. M08 does not claim parser success, recovered scientific values, or benchmark-backed
+page-routing accuracy.
+
+M09 verifies the exact M07-M08 chain and executes only its three eligible document routes through
+bounded local pypdf, HTML, and plain-text adapters. It produces two content-addressed document IRs
+and keeps the malformed page-less PDF as an explicit review outcome with an unavailable OCR
+fallback, so the offline Ia aggregate is partial without inventing content. Quality decisions,
+candidate selection, gaps, parser/runtime identities, checkpoint replay, and one privacy-reduced
+completion event remain independently verifiable. M10 next converts supported tables into table
+IR; M09 does not extract scientific fields or establish representative-corpus accuracy targets.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

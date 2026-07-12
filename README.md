@@ -12,8 +12,9 @@ The source package is being built phase by phase from the
 
 Phase 2 is complete and Phase 3 is in progress. Phase 1 turns an accepted research goal into a
 confirmed scientific data contract; M04-M06 discover and select evidence-backed sources; M07
-preserves authorized bytes in immutable Bronze storage; and the M08 checkpoint now creates an
-explainable, registry-bound downstream parse plan without executing a parser:
+preserves authorized bytes in immutable Bronze storage; M08 creates an explainable,
+registry-bound downstream parse plan; and M09 executes the eligible document routes into a
+provenance-preserving unified document IR:
 
 - M00 security, privacy, upload, and finite-budget intake gates;
 - M01 evidence-grounded problem compilation with deterministic fallback and a validated Qwen
@@ -60,7 +61,18 @@ explainable, registry-bound downstream parse plan without executing a parser:
   immutable complete-result checkpoints and single-flight execution;
 - an offline Ia M08 fixture result with five classifications and five plan entries: four executable
   routes, one archive metadata-only disposition, one conditional PDF OCR fallback, and zero
-  network, model-classification, downstream-parser, or Bronze-write operations.
+  network, model-classification, downstream-parser, or Bronze-write operations;
+- M09 strict document request, runtime, parser-attempt, quality, candidate, comparison, gap,
+  `DocumentIR`, `PageIR`, `BlockIR`, result, checkpoint, and `document.parsed` event contracts;
+- deterministic local pypdf, HTML, and plain-text adapters that preserve source-byte lineage,
+  retain exact source spans where available, label pypdf coordinates as approximate, and annotate
+  repeated PDF headers and footers without discarding their text;
+- content-addressed document IR storage, complete-result checkpoints, exact upstream and output
+  integrity verification, single-flight execution, cancellation isolation, and quality-triggered
+  fallback controls;
+- an offline Ia M09 result with three eligible document routes, two successful document IRs, one
+  honest PDF review outcome, a blocked unavailable OCR fallback, and zero network, model, M10,
+  M11, M13, or Bronze-write operations.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -68,8 +80,8 @@ credentials or external-source calls. M06 adds no network or model call. In the 
 selects three source categories with full Required/entity/source-type candidate coverage, then
 correctly remains partial because record-level scope and reuse permission are not yet proven. M07
 retains controlled source bytes but does not parse scientific values. M08 classifies and plans only;
-M09-M10 parser execution and IR generation, later evidence/normalization/fusion, and the web
-workbench remain future checkpoints.
+M09 parses supported documents into document IR but does not extract scientific fields. M10 table
+IR, later evidence/normalization/fusion, and the web workbench remain future checkpoints.
 
 ## Quick start
 
@@ -83,6 +95,7 @@ uv run scidatafusion phase2-connect-demo --goal "Study Type Ia supernova light c
 uv run scidatafusion phase2-select-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase3-download-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase3-parse-plan-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase3-document-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -116,6 +129,16 @@ downstream module families, parser identifiers, costs, gaps, and hashes. M08 per
 OCR, VLM, network, or model call and writes no Bronze bytes. The packaged Ia PDF is intentionally
 minimal, so this checkpoint does not claim the specification's file/page accuracy or latency
 targets; those require a versioned judged routing corpus and representative mixed-page PDFs.
+
+`phase3-document-demo` carries that exact chain into M09 and executes only `m09.pdf_text`,
+`m09.html`, and `m09.text`. The HTML and text artifacts produce validated content-addressed IR;
+the page-less packaged PDF fails honestly and its unavailable OCR fallback is recorded as blocked,
+so the aggregate result is `partial`. The summary contains only hashes, statuses, parser IDs,
+quality counts, and aggregate metrics. It exposes no document body, URL, reviewer identity, or
+scientific value and performs no network or model call. A separate valid two-page PDF fixture
+checks local pypdf extraction, approximate normalized coordinates, and non-destructive repeated
+header/footer annotation. This slice does not establish the representative-corpus fidelity,
+reading-order, heading, bbox, failure-rate, or latency targets.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported
