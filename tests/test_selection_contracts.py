@@ -6,15 +6,20 @@ import pytest
 from pydantic import ValidationError
 
 from scidatafusion.contracts.connectors import (
+    AccessStatus,
     CandidateIdentifier,
+    CoverageAssessment,
+    CoverageBasis,
     IdentifierKind,
     SourceRecordType,
 )
 from scidatafusion.contracts.events import EventEnvelope, EventType, ProducerRef
 from scidatafusion.contracts.scientific import FieldRequirement
 from scidatafusion.contracts.search import (
+    SearchProgressSnapshot,
     SearchStopDecision,
     SearchStopOutcome,
+    SearchStopPolicySpec,
     SearchStopReason,
     SourceCategory,
 )
@@ -25,10 +30,11 @@ from scidatafusion.contracts.selection import (
     DownloadReadiness,
     FieldCoverage,
     LicenseDecision,
-    SearchCompletedPayload,
     SearchGapSet,
+    SelectedCoverageClaim,
     SelectedSource,
     SelectedSourceSet,
+    SelectionCompletedPayload,
     SelectionReason,
     SelectionReasonCode,
     SelectionRoundContext,
@@ -59,6 +65,18 @@ def _selected_source() -> SelectedSource:
                 contract_source_types=("open_database",),
             ),
         ),
+        coverage_claims=(
+            SelectedCoverageClaim(
+                field_name="object_id",
+                state=CandidateCoverageState.CANDIDATE_COVERED,
+                assessment=CoverageAssessment.EXPLICIT,
+                confidence=0.8,
+                basis=CoverageBasis.STRUCTURED_METADATA,
+                evidence_ids=("sev_1111111111111111",),
+                contract_source_types=("open_database",),
+                source_ids=("vizier_tap",),
+            ),
+        ),
         covered_fields=("object_id",),
         covered_contract_source_types=("open_database",),
         source_ids=("vizier_tap",),
@@ -72,13 +90,16 @@ def _selected_source() -> SelectedSource:
             ),
         ),
         evidence_ids=("sev_1111111111111111",),
+        access_statuses=(AccessStatus.OPEN,),
+        license_labels=("CC-BY-4.0",),
         primary_source=True,
         assessment_score=0.8,
         marginal_required_coverage=1.0,
         cumulative_required_coverage=1.0,
         budget_reservation_bytes=1_000_000,
         download_readiness=DownloadReadiness.IDENTIFIER_RESOLUTION,
-        license_decision=LicenseDecision.NEEDS_REVIEW,
+        license_decision=LicenseDecision.ALLOWED,
+        license_rationale="The source has an explicit recognized open license.",
     )
 
 
@@ -98,6 +119,8 @@ def _selected_set() -> SelectedSourceSet:
         policy=SourceSelectionPolicy(),
         candidate_count=1,
         duplicate_replica_count=0,
+        applicable_source_category_count=1,
+        applicable_contract_source_type_count=1,
         available_download_bytes=5_000_000,
         reserved_download_bytes=1_000_000,
         sources=(_selected_source(),),
@@ -198,7 +221,7 @@ def _result() -> SourceSelectionResult:
         reserved_download_bytes=1_000_000,
         continue_search=True,
     )
-    payload = SearchCompletedPayload(
+    payload = SelectionCompletedPayload(
         status=SourceSelectionStatus.SUCCEEDED,
         selection_id="sel_11111111111111111111111111111111",
         selected_source_set_hash=OTHER_HASH,
@@ -225,6 +248,27 @@ def _result() -> SourceSelectionResult:
         selected_source_set=_selected_set(),
         coverage_report=_coverage_report(),
         search_gap_set=_gap_set(),
+        round_context=SelectionRoundContext(),
+        stop_policy=SearchStopPolicySpec(
+            max_cost_micro_usd=1_000_000,
+            max_duration_seconds=600,
+            max_search_rounds=4,
+            max_download_bytes=5_000_000,
+            max_model_tokens=10_000,
+        ),
+        progress_snapshot=SearchProgressSnapshot(
+            completed_rounds=1,
+            consumed_cost_micro_usd=0,
+            elapsed_seconds=0,
+            downloaded_bytes=0,
+            model_tokens=0,
+            required_field_coverage=1.0,
+            source_category_coverage=1.0,
+            has_primary_source=True,
+            critical_gap_count=0,
+            recent_marginal_gains=(1.0,),
+            recent_new_source_counts=(1,),
+        ),
         stop_decision=SearchStopDecision(
             should_stop=False,
             reason=SearchStopReason.CONTINUE_SEARCH,
@@ -232,8 +276,8 @@ def _result() -> SourceSelectionResult:
             detail="A second low-gain round is required before saturation can stop search.",
         ),
         metrics=metrics,
-        event=EventEnvelope[SearchCompletedPayload](
-            event_type=EventType.SEARCH_COMPLETED,
+        event=EventEnvelope[SelectionCompletedPayload](
+            event_type=EventType.SELECTION_COMPLETED,
             task_id="tsk_11111111111111111111111111111111",
             run_id="run_11111111111111111111111111111111",
             occurred_at=NOW,
@@ -263,7 +307,7 @@ def test_selection_policy_round_history_and_url_locators_fail_closed() -> None:
             minimum_claim_confidence=0.2,
             uncertain_claim_confidence=0.3,
         )
-    with pytest.raises(ValidationError, match="current round"):
+    with pytest.raises(ValidationError, match="every completed prior round"):
         SelectionRoundContext(completed_rounds=1, prior_marginal_gains=(0.1,))
     with pytest.raises(ValidationError, match="absolute HTTPS"):
         CandidateIdentifier(kind=IdentifierKind.URL, value="http://example.org/data")
@@ -279,6 +323,12 @@ def test_selected_set_and_coverage_ratios_are_derived() -> None:
     report["required_candidate_coverage"] = 0.5
     with pytest.raises(ValidationError, match="coverage ratios"):
         CoverageReport.model_validate(report)
+
+    field = _coverage_report().fields[0].model_dump(mode="python")
+    field["maximum_confidence"] = 0.0
+    field["evidence_ids"] = ()
+    with pytest.raises(ValidationError, match="require evidence"):
+        FieldCoverage.model_validate(field)
 
 
 def test_result_rejects_tampered_metrics_status_warnings_and_event() -> None:
@@ -296,5 +346,15 @@ def test_result_rejects_tampered_metrics_status_warnings_and_event() -> None:
 
     payload = result.model_dump(mode="python")
     payload["event"]["payload"]["selected_source_count"] = 2
-    with pytest.raises(ValidationError, match=r"search\.completed"):
+    with pytest.raises(ValidationError, match=r"selection\.completed"):
+        SourceSelectionResult.model_validate(payload)
+
+    payload = result.model_dump(mode="python")
+    payload["coverage_report"]["has_primary_source"] = False
+    with pytest.raises(ValidationError, match="primary-source flags"):
+        SourceSelectionResult.model_validate(payload)
+
+    payload = result.model_dump(mode="python")
+    payload["progress_snapshot"]["required_field_coverage"] = 0.5
+    with pytest.raises(ValidationError, match="search progress"):
         SourceSelectionResult.model_validate(payload)
