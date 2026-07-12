@@ -15,7 +15,7 @@ from scidatafusion.contracts.base import ContentHash, NonEmptyStr, SemanticVersi
 from scidatafusion.contracts.routing import CapabilityName, PackName, PackReference
 
 _MAX_REGISTRY_BYTES = 2 * 1024 * 1024
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PACKAGE_REGISTRY_ROOT = Path(__file__).resolve().parents[1] / "registries"
 
 
 def canonical_hash(value: object) -> str:
@@ -242,9 +242,9 @@ class DomainPackRegistry(StrictContract):
 
     @classmethod
     def load_default(cls) -> DomainPackRegistry:
-        """Load the repository's version-pinned domain registry."""
+        """Load the installed package's version-pinned domain registry."""
 
-        return cls.from_file(_PROJECT_ROOT / "domain_packs" / "registry.json")
+        return cls.from_file(_PACKAGE_REGISTRY_ROOT / "domain_packs.json")
 
     def get(self, name: str) -> DomainPackManifest | None:
         """Return a pack by exact stable name."""
@@ -314,9 +314,9 @@ class TaskPackRegistry(StrictContract):
 
     @classmethod
     def load_default(cls) -> TaskPackRegistry:
-        """Load the repository's version-pinned task registry."""
+        """Load the installed package's version-pinned task registry."""
 
-        return cls.from_file(_PROJECT_ROOT / "task_packs" / "registry.json")
+        return cls.from_file(_PACKAGE_REGISTRY_ROOT / "task_packs.json")
 
     def get(self, name: str) -> TaskPackManifest | None:
         """Return a task pack by exact stable name."""

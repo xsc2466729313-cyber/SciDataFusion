@@ -11,7 +11,8 @@ The source package is being built phase by phase from the
 ## Current checkpoint
 
 Phase 2 is in progress. Phase 1 turns an accepted research goal into a confirmed scientific data
-contract, and M04 now compiles that contract into a bounded, replayable search plan:
+contract; M04 compiles that contract into a bounded search plan, and M05 executes it through
+controlled, replayable Connector boundaries:
 
 - M00 security, privacy, upload, and finite-budget intake gates;
 - M01 evidence-grounded problem compilation with deterministic fallback and a validated Qwen
@@ -24,12 +25,23 @@ contract, and M04 now compiles that contract into a bounded, replayable search p
 - M04 strict search contracts, evidence-grounded research concepts, deterministic query families,
   field/source coverage templates, budget allocation, and unit-testable stop decisions;
 - a content-addressed source-capability registry whose declarations are kept separate from the
-  runtime health snapshot. The runtime default supplies zero capabilities and fails closed.
+  runtime health snapshot. The runtime default supplies zero capabilities and fails closed;
+- M05 strict Connector contracts, a content-addressed registry, fixed HTTPS endpoints, credential
+  environment references, bounded HTTP execution with identity-only responses, cross-call circuit
+  recovery, deterministic batch byte allocation, raw-page manifests, and structured run logs;
+- VizieR TAP, OpenAlex, Zenodo, and Crossref-backed supplement adapters that are fully exercised
+  with Mock transport, plus deterministic candidate normalization, provenance, conflict retention,
+  parser-version-bound cache replay and origin tracking, initial coverage claims, and source
+  assessment;
+- an offline Ia acceptance fixture that executes eight planned queries over nine pages and reduces
+  eight raw hits to five provenance-rich candidates with zero confirmed-live and zero
+  unknown-network attempts.
 
-M04 does not access the network. Its Ia fixture emits a `tap_adql_discovery` adapter request for
-VizieR alongside literature, repository, and supplement/web requests. M05 is the next checkpoint
-and will implement Connector execution and real source assessment; parsing, extraction,
-integration, and the web workbench follow in later phases.
+M04 does not access the network. M05 implements a live-capable but default-offline transport
+boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
+credentials or external-source calls. M06 is the next checkpoint and will evaluate aggregate
+coverage, select sources for download, report gaps, and decide whether search should continue.
+Parsing, extraction, integration, and the web workbench follow in later phases.
 
 ## Quick start
 
@@ -39,7 +51,9 @@ Copy-Item .env.example .env
 uv run scidatafusion doctor
 uv run scidatafusion phase1-demo --goal "Integrate multi-source Type Ia supernova light curves into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase2-plan-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase2-connect-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
+uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
@@ -47,7 +61,19 @@ uv run powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 Alibaba Cloud or any external data source. `phase1-demo` also stays offline and labels its
 capability snapshot as `simulated_demo`; it is an engineering demonstration, not a production
 Connector health claim. `phase2-plan-demo` similarly selects `simulated_demo` explicitly for its
-fixture capabilities; loading the M04 static registry alone never marks a source healthy.
+fixture capabilities; loading either static registry alone never marks a source healthy. M05 tests
+and `phase2-connect-demo` inject `offline_fixture` or Mock runtime state and never treat those
+results as live-source proof. The Connector demo drives the real four adapter parsers using
+packaged response bytes; its summary omits research text, reviewer identity, candidate content,
+URLs, and untrusted excerpts.
+
+Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
+not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported
+separately and never counted as confirmed live. Credential values are used only to construct the
+outbound authentication request; M05 does not proactively persist them in application artifacts or
+logs. Responses reflecting a credential in common direct or encoded forms are quarantined before
+hashing or storage, but this is a bounded safeguard rather than an absolute leak-detection
+guarantee.
 
 ## Quality commands
 

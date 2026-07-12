@@ -12,7 +12,7 @@ from scidatafusion.contracts.search import SourceCapabilityRegistry, SourceId
 from scidatafusion.domain.registry import RegistryErrorCode, RegistryLoadError, canonical_hash
 
 _MAX_REGISTRY_BYTES = 2 * 1024 * 1024
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PACKAGE_REGISTRY_ROOT = Path(__file__).resolve().parents[1] / "registries"
 
 
 class SourceCapabilityRegistryLoader:
@@ -67,9 +67,9 @@ class SourceCapabilityRegistryLoader:
 
     @classmethod
     def load_default(cls) -> SourceCapabilityRegistry:
-        """Load the repository's pinned source-capability registry."""
+        """Load the installed package's pinned source-capability registry."""
 
-        return cls.from_file(_PROJECT_ROOT / "search_capabilities" / "registry.json")
+        return cls.from_file(_PACKAGE_REGISTRY_ROOT / "search_capabilities.json")
 
 
 def load_source_capability_registry(path: Path | str) -> SourceCapabilityRegistry:

@@ -600,7 +600,7 @@ def test_result_linkage_rejects_tampered_metrics(
 
 
 def test_source_capability_registry_is_content_addressed_and_strict(tmp_path: Path) -> None:
-    path = Path("search_capabilities/registry.json")
+    path = Path("src/scidatafusion/registries/search_capabilities.json")
     raw = cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
     capabilities = cast(list[dict[str, Any]], raw["capabilities"])
     capabilities[0]["display_name"] = "tampered"

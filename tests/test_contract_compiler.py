@@ -598,7 +598,9 @@ def test_schema_registry_is_content_addressed_and_rejects_tampering(tmp_path: Pa
     assert registry.get(valid_reference) is astronomy
     assert registry.get(forged_reference) is None
 
-    raw = json.loads(Path("schema_packs/registry.json").read_text(encoding="utf-8"))
+    raw = json.loads(
+        Path("src/scidatafusion/registries/schema_packs.json").read_text(encoding="utf-8")
+    )
     raw["packs"][0]["fields"][0]["description"] = "tampered"
     tampered_path = tmp_path / "tampered.json"
     tampered_path.write_text(json.dumps(raw), encoding="utf-8")
@@ -606,7 +608,9 @@ def test_schema_registry_is_content_addressed_and_rejects_tampering(tmp_path: Pa
         SchemaPackRegistry.from_file(tampered_path)
     assert mismatch.value.code is RegistryErrorCode.HASH_MISMATCH
 
-    raw = json.loads(Path("schema_packs/registry.json").read_text(encoding="utf-8"))
+    raw = json.loads(
+        Path("src/scidatafusion/registries/schema_packs.json").read_text(encoding="utf-8")
+    )
     raw["packs"][0]["unexpected"] = True
     raw["content_hash"] = canonical_hash(
         {"packs": raw["packs"], "registry_version": raw["registry_version"]}

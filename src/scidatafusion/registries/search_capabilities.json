@@ -1,6 +1,6 @@
 {
   "registry_version": "1.0.0",
-  "content_hash": "e07819ec6ca63cf21b2af882abbb05834427bcf3952dd07cc0112e6c89257627",
+  "content_hash": "129d4f88156abdb6bb1f799d436ed50f7efeafec23469acde7b207750a7b730a",
   "capabilities": [
     {
       "source_id": "vizier_tap",
@@ -16,7 +16,7 @@
           "dialect": "tap_adql_discovery",
           "max_query_length": 4096,
           "default_result_limit": 200,
-          "supports_pagination": true
+          "supports_pagination": false
         }
       ],
       "primary_source": true,

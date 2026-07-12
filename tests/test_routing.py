@@ -248,7 +248,7 @@ def test_registry_versions_and_content_hashes_are_verified(tmp_path: Path) -> No
         "generic",
     }
 
-    source = Path("domain_packs/registry.json")
+    source = Path("src/scidatafusion/registries/domain_packs.json")
     tampered = json.loads(source.read_text(encoding="utf-8"))
     tampered["packs"][0]["description"] = "tampered"
     target = tmp_path / "tampered.json"

@@ -21,7 +21,7 @@ from scidatafusion.contracts.scientific import (
 )
 from scidatafusion.domain.registry import RegistryErrorCode, RegistryLoadError, canonical_hash
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PACKAGE_REGISTRY_ROOT = Path(__file__).resolve().parents[1] / "registries"
 _MAX_REGISTRY_BYTES = 2 * 1024 * 1024
 
 
@@ -176,7 +176,7 @@ class SchemaPackRegistry(StrictContract):
 
     @classmethod
     def load_default(cls) -> SchemaPackRegistry:
-        return cls.from_file(_PROJECT_ROOT / "schema_packs" / "registry.json")
+        return cls.from_file(_PACKAGE_REGISTRY_ROOT / "schema_packs.json")
 
     def get(self, reference: PackReference) -> SchemaPack | None:
         return next(

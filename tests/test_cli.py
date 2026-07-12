@@ -143,3 +143,48 @@ def test_phase2_plan_demo_is_multisource_safe_and_offline(
     assert report["coverage"]["observed_candidates"] == 0
     assert goal not in captured.out
     assert reviewer not in captured.out
+
+
+def test_phase2_connector_demo_executes_packaged_fixture_without_network(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m05-reviewer@example.org"
+
+    exit_code = main(
+        [
+            "phase2-connect-demo",
+            "--goal",
+            goal,
+            "--confirmed-by",
+            reviewer,
+        ]
+    )
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "succeeded"
+    assert report["execution_mode"] == "offline_fixture"
+    assert report["network_performed"] is False
+    assert report["network_status"] == "not_performed"
+    assert report["event_type"] == "connector.batch.completed"
+    assert report["metrics"] == {
+        "query_run_count": 8,
+        "successful_query_count": 8,
+        "failed_query_count": 0,
+        "skipped_query_count": 0,
+        "page_count": 9,
+        "raw_hit_count": 8,
+        "candidate_count": 5,
+        "duplicate_hit_count": 3,
+        "evidence_count": 8,
+        "retry_count": 0,
+        "cache_hit_count": 0,
+        "live_network_attempt_count": 0,
+        "unknown_network_attempt_count": 0,
+    }
+    assert report["assessment"]["source_category_count"] == 4
+    assert goal not in captured.out
+    assert reviewer not in captured.out
+    assert "evil.example" not in captured.out

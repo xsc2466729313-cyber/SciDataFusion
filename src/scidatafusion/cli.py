@@ -13,6 +13,14 @@ from pydantic import ValidationError
 
 from scidatafusion import __version__
 from scidatafusion.config import Settings
+from scidatafusion.connectors.executor import ConnectorBatchExecutor
+from scidatafusion.connectors.fixtures import build_offline_ia_connector_bundle
+from scidatafusion.connectors.registry import load_default_connector_registry
+from scidatafusion.contracts.connectors import (
+    ConnectorBatchStatus,
+    ConnectorExecutionRequest,
+    ConnectorExecutionResult,
+)
 from scidatafusion.contracts.search import (
     SearchCapabilityMode,
     SearchPlanningRequest,
@@ -59,6 +67,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     phase2.add_argument("--goal", required=True, help="scientific research goal")
     phase2.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    connectors = subparsers.add_parser(
+        "phase2-connect-demo",
+        help="run M00-M05 against packaged Connector responses without network access",
+    )
+    connectors.add_argument("--goal", required=True, help="scientific research goal")
+    connectors.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -181,6 +199,107 @@ def build_search_plan_summary(result: SearchPlanningResult) -> dict[str, object]
     }
 
 
+def build_connector_summary(result: ConnectorExecutionResult) -> dict[str, object]:
+    """Render M05 counts and hashes without candidate content or untrusted source text."""
+
+    candidates = result.candidate_set.candidates
+    return {
+        "status": result.status.value,
+        "execution_mode": "offline_fixture",
+        "network_performed": (
+            None
+            if result.metrics.unknown_network_attempt_count
+            else result.metrics.live_network_attempt_count > 0
+        ),
+        "network_status": (
+            "unknown"
+            if result.metrics.unknown_network_attempt_count
+            else "performed"
+            if result.metrics.live_network_attempt_count
+            else "not_performed"
+        ),
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "plan_id": result.candidate_set.search_plan_id,
+        "plan_hash": result.candidate_set.search_plan_hash,
+        "connector_registry_hash": result.candidate_set.connector_registry_hash,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "assessment": {
+            "primary_candidate_count": sum(item.primary_source for item in candidates),
+            "source_category_count": len(
+                {category for item in candidates for category in item.categories}
+            ),
+            "coverage_claim_count": sum(len(item.coverage_claims) for item in candidates),
+            "metadata_conflict_count": sum(len(item.conflicts) for item in candidates),
+        },
+        "event_type": result.event.event_type.value,
+        "output_hash": result.output_hash,
+    }
+
+
+def _build_search_planning(
+    goal: str, confirmed_by: str
+) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
+    workflow = build_offline_demo_workflow()
+    phase1 = asyncio.run(
+        workflow.execute(
+            TaskIntakeRequest(
+                research_goal=goal,
+                allow_external_models=False,
+            )
+        )
+    )
+    if phase1.status is not Phase1Status.READY_FOR_CONFIRMATION or phase1.compilation is None:
+        return phase1, None
+    confirmed = workflow.confirm(
+        contract_id=phase1.compilation.contract.contract_id,
+        expected_contract_hash=phase1.compilation.contract.contract_hash,
+        confirmed_by=confirmed_by,
+    )
+    if (
+        confirmed.confirmation is None
+        or confirmed.routing is None
+        or confirmed.intake.envelope is None
+    ):
+        return confirmed, None
+    registry = SourceCapabilityRegistryLoader.load_default()
+    planning = SearchPlanner(
+        registry=registry,
+        available_source_ids=source_ids(registry),
+    ).plan(
+        SearchPlanningRequest(
+            contract=confirmed.confirmation.contract,
+            routing=confirmed.routing,
+            budget_policy=confirmed.intake.envelope.budget_policy,
+            capability_mode=SearchCapabilityMode.SIMULATED_DEMO,
+        )
+    )
+    return confirmed, planning
+
+
+async def _execute_offline_connectors(
+    planning: SearchPlanningResult,
+) -> ConnectorExecutionResult:
+    connector_registry = load_default_connector_registry()
+    capability_registry = SourceCapabilityRegistryLoader.load_default()
+    bundle = build_offline_ia_connector_bundle(connector_registry)
+    try:
+        executor = ConnectorBatchExecutor(
+            bundle.connectors,
+            artifacts=bundle.artifacts,
+            connector_registry=connector_registry,
+            capability_registry=capability_registry,
+        )
+        return await executor.execute(
+            ConnectorExecutionRequest(
+                search_plan=planning.plan,
+                runtime_snapshot=bundle.runtime_snapshot,
+            )
+        )
+    finally:
+        await bundle.aclose()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "doctor":
@@ -244,47 +363,30 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
     if args.command == "phase2-plan-demo":
         try:
-            workflow = build_offline_demo_workflow()
-            phase1 = asyncio.run(
-                workflow.execute(
-                    TaskIntakeRequest(
-                        research_goal=args.goal,
-                        allow_external_models=False,
-                    )
-                )
-            )
-            if (
-                phase1.status is not Phase1Status.READY_FOR_CONFIRMATION
-                or phase1.compilation is None
-            ):
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None:
                 print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
                 return 3
-            confirmed = workflow.confirm(
-                contract_id=phase1.compilation.contract.contract_id,
-                expected_contract_hash=phase1.compilation.contract.contract_hash,
-                confirmed_by=args.confirmed_by,
-            )
-            if (
-                confirmed.confirmation is None
-                or confirmed.routing is None
-                or confirmed.intake.envelope is None
-            ):
-                print(json.dumps(build_phase1_summary(confirmed), ensure_ascii=True, indent=2))
-                return 3
-            registry = SourceCapabilityRegistryLoader.load_default()
-            planning = SearchPlanner(
-                registry=registry,
-                available_source_ids=source_ids(registry),
-            ).plan(
-                SearchPlanningRequest(
-                    contract=confirmed.confirmation.contract,
-                    routing=confirmed.routing,
-                    budget_policy=confirmed.intake.envelope.budget_policy,
-                    capability_mode=SearchCapabilityMode.SIMULATED_DEMO,
-                )
-            )
             print(json.dumps(build_search_plan_summary(planning), ensure_ascii=True, indent=2))
             return 0 if planning.status.value == "succeeded" else 3
+        except (AppError, ValidationError) as exc:
+            code = exc.code.value if isinstance(exc, AppError) else "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase2-connect-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            connector_result = asyncio.run(_execute_offline_connectors(planning))
+            print(
+                json.dumps(build_connector_summary(connector_result), ensure_ascii=True, indent=2)
+            )
+            return 0 if connector_result.status is ConnectorBatchStatus.SUCCEEDED else 3
         except (AppError, ValidationError) as exc:
             code = exc.code.value if isinstance(exc, AppError) else "validation_failed"
             print(
