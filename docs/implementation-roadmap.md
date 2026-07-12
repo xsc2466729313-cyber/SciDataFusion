@@ -5,7 +5,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | Phase | Scope | Demonstrable exit | Status |
 |---:|---|---|---|
 | 0 | repository, contracts, configuration, quality gates | locked clean build and doctor | complete |
-| 1 | M00-M03 | research goal to confirmed data contract | next |
+| 1 | M00-M03 | research goal to confirmed data contract | integration pending |
 | 2 | M04-M06 | federated discovery, coverage, selected sources | pending |
 | 3 | M07-M10 | immutable download, document and table IR | pending |
 | 4 | M13-M15 | field evidence, mapping, unit/time normalization | pending |

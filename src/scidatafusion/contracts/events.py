@@ -25,6 +25,7 @@ class EventType(StrEnum):
 
     TASK_CREATED = "task.created"
     PROBLEM_COMPILED = "problem.compiled"
+    CONTRACT_COMPILED = "contract.compiled"
     CONTRACT_CONFIRMED = "contract.confirmed"
     SEARCH_COMPLETED = "search.completed"
     ARTIFACT_STORED = "artifact.stored"

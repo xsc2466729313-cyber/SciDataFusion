@@ -1,0 +1,306 @@
+{
+  "registry_version": "1.0.0",
+  "content_hash": "5721d99f51bfd22d7aee49b3472fc720cfa9126caab3ac39e3cb87b2479288c6",
+  "packs": [
+    {
+      "pack_type": "domain",
+      "name": "astronomy",
+      "version": "1.0.0",
+      "source_pack_hash": "a68d2ae550fabb59a94912ea5835488434f5811665707bf9a5c0f8c1a0b78d1f",
+      "entity_keys": ["object_id"],
+      "source_types": ["open_database", "paper_table", "supplement", "figure"],
+      "fields": [
+        {
+          "name": "object_id",
+          "description": "Stable source identifier or canonical name of the astronomical object.",
+          "requirement": "required",
+          "data_type": "string",
+          "semantic_type": "astronomical_object_identifier",
+          "aliases": ["object", "name", "source_id", "transient_id"],
+          "nullable": false,
+          "source_preference": ["open_database", "paper_table"],
+          "quality_threshold": 0.98
+        }
+      ]
+    },
+    {
+      "pack_type": "domain",
+      "name": "materials_chemistry",
+      "version": "1.0.0",
+      "source_pack_hash": "4720d2b7e6538fe6a1ad13dd396f36191519e25685325312554328ed0aa27ded",
+      "entity_keys": ["sample_id"],
+      "source_types": ["open_database", "paper_table", "supplement"],
+      "fields": [
+        {
+          "name": "sample_id",
+          "description": "Identifier assigned to the material, composition, or experimental sample.",
+          "requirement": "required",
+          "data_type": "string",
+          "semantic_type": "material_sample_identifier",
+          "aliases": ["material_id", "composition_id"],
+          "nullable": false,
+          "source_preference": ["paper_table", "open_database"],
+          "quality_threshold": 0.98
+        }
+      ]
+    },
+    {
+      "pack_type": "domain",
+      "name": "environment_life",
+      "version": "1.0.0",
+      "source_pack_hash": "3a1e5c5fa0802b391c1346cca2e71bdadc8563c09218bebb4d5e3519a51761af",
+      "entity_keys": ["location_id"],
+      "source_types": ["open_database", "paper_table", "supplement"],
+      "fields": [
+        {
+          "name": "location_id",
+          "description": "Stable identifier of a sampling site, station, organism, or cohort.",
+          "requirement": "required",
+          "data_type": "string",
+          "semantic_type": "observation_entity_identifier",
+          "aliases": ["station_id", "site_id", "sample_id"],
+          "nullable": false,
+          "source_preference": ["open_database", "paper_table"],
+          "quality_threshold": 0.98
+        }
+      ]
+    },
+    {
+      "pack_type": "domain",
+      "name": "generic",
+      "version": "1.0.0",
+      "source_pack_hash": "588fa1f79ee05af107cb22187ba07ea5ba5ca67c70a02ad8f31fd212102e831f",
+      "entity_keys": ["record_id"],
+      "source_types": ["open_database", "paper_table", "supplement"],
+      "fields": [
+        {
+          "name": "record_id",
+          "description": "Source-stable identifier for an unresolved-domain record.",
+          "requirement": "required",
+          "data_type": "string",
+          "semantic_type": "generic_record_identifier",
+          "aliases": ["id"],
+          "nullable": false,
+          "source_preference": ["open_database", "paper_table"],
+          "quality_threshold": 0.98
+        }
+      ]
+    },
+    {
+      "pack_type": "task",
+      "name": "light_curve",
+      "version": "1.0.0",
+      "source_pack_hash": "cb02b1a6943c06d84f5307cd5ca877bca1e6bae6239c17a8b4b960425d855ba5",
+      "entity_keys": [],
+      "source_types": ["open_database", "paper_table", "supplement", "figure"],
+      "fields": [
+        {
+          "name": "observation_time",
+          "description": "Timestamp of the photometric observation.",
+          "requirement": "required",
+          "data_type": "number",
+          "semantic_type": "astronomical_time",
+          "aliases": ["time", "mjd", "jd"],
+          "unit_dimension": "time",
+          "allowed_units": ["MJD", "JD"],
+          "target_unit": "MJD",
+          "nullable": false,
+          "source_preference": ["open_database", "paper_table", "supplement"],
+          "quality_threshold": 0.99
+        },
+        {
+          "name": "band",
+          "description": "Photometric passband or filter name.",
+          "requirement": "required",
+          "data_type": "string",
+          "semantic_type": "photometric_band",
+          "aliases": ["filter", "passband"],
+          "nullable": false,
+          "source_preference": ["open_database", "paper_table", "figure"],
+          "quality_threshold": 0.97
+        },
+        {
+          "name": "magnitude",
+          "description": "Reported apparent magnitude when the source uses magnitude photometry.",
+          "requirement": "optional",
+          "data_type": "number",
+          "semantic_type": "apparent_magnitude",
+          "aliases": ["mag"],
+          "unit_dimension": "magnitude",
+          "allowed_units": ["mag"],
+          "target_unit": "mag",
+          "nullable": true,
+          "source_preference": ["open_database", "paper_table", "figure"],
+          "quality_threshold": 0.95
+        },
+        {
+          "name": "flux",
+          "description": "Reported flux density when the source uses flux photometry.",
+          "requirement": "optional",
+          "data_type": "number",
+          "semantic_type": "spectral_flux_density",
+          "aliases": ["flux_density"],
+          "unit_dimension": "spectral_flux_density",
+          "allowed_units": ["Jy", "mJy", "uJy"],
+          "target_unit": "Jy",
+          "nullable": true,
+          "source_preference": ["open_database", "paper_table", "figure"],
+          "quality_threshold": 0.95
+        }
+      ],
+      "quality_gates": [
+        {
+          "gate_id": "photometric_value_present",
+          "kind": "any_of_fields",
+          "fields": ["magnitude", "flux"],
+          "threshold": 1.0,
+          "blocking": true,
+          "description": "Each observation must include magnitude or flux."
+        }
+      ]
+    },
+    {
+      "pack_type": "task",
+      "name": "data_integration",
+      "version": "1.0.0",
+      "source_pack_hash": "09f73bbea22b088ebe39e9bccda426a9f7704fa3f6901df11aad917f8888c5b1",
+      "entity_keys": [],
+      "source_types": ["open_database", "paper_table", "supplement", "figure"],
+      "fields": [
+        {
+          "name": "source_record_id",
+          "description": "Identifier of the record in its original source.",
+          "requirement": "required",
+          "data_type": "string",
+          "semantic_type": "source_record_identifier",
+          "aliases": ["original_id"],
+          "nullable": false,
+          "source_preference": ["open_database", "paper_table", "supplement"],
+          "quality_threshold": 0.98
+        }
+      ]
+    },
+    {
+      "pack_type": "task",
+      "name": "property_aggregation",
+      "version": "1.0.0",
+      "source_pack_hash": "6edeee6285bb497e3c24b29b51a34b68c9b7c3f06250c068f0290607fa318d48",
+      "entity_keys": [],
+      "source_types": ["open_database", "paper_table", "supplement"],
+      "fields": [
+        {
+          "name": "property_name",
+          "description": "Name of the measured or computed property.",
+          "requirement": "required",
+          "data_type": "string",
+          "semantic_type": "material_property_name",
+          "aliases": ["property"],
+          "nullable": false,
+          "source_preference": ["paper_table", "open_database"],
+          "quality_threshold": 0.97
+        },
+        {
+          "name": "property_value",
+          "description": "Raw property value retained without guessing a unit dimension.",
+          "requirement": "required",
+          "data_type": "number",
+          "semantic_type": "material_property_value",
+          "aliases": ["value"],
+          "nullable": false,
+          "source_preference": ["paper_table", "open_database"],
+          "quality_threshold": 0.95
+        }
+      ]
+    },
+    {
+      "pack_type": "task",
+      "name": "experiment_condition_extraction",
+      "version": "1.0.0",
+      "source_pack_hash": "5bd491259540544f4c15200795aaa9349b1af0cb43f52b31761e78ed18977d73",
+      "entity_keys": [],
+      "source_types": ["paper_text", "paper_table", "supplement"],
+      "fields": [
+        {
+          "name": "condition_name",
+          "description": "Name of an explicitly reported experimental condition.",
+          "requirement": "required",
+          "data_type": "string",
+          "semantic_type": "experimental_condition_name",
+          "aliases": ["condition"],
+          "nullable": false,
+          "source_preference": ["paper_table", "paper_text"],
+          "quality_threshold": 0.95
+        },
+        {
+          "name": "condition_raw_value",
+          "description": "Condition value exactly as reported before unit interpretation.",
+          "requirement": "required",
+          "data_type": "string",
+          "semantic_type": "raw_experimental_condition",
+          "aliases": ["raw_value"],
+          "nullable": false,
+          "source_preference": ["paper_table", "paper_text"],
+          "quality_threshold": 0.95
+        }
+      ]
+    },
+    {
+      "pack_type": "task",
+      "name": "spatiotemporal_alignment",
+      "version": "1.0.0",
+      "source_pack_hash": "9d15ab71cfe8f071d17b306281c3accc019f6c9df687695d899714e7f69ed286",
+      "entity_keys": [],
+      "source_types": ["open_database", "paper_table", "supplement"],
+      "fields": [
+        {
+          "name": "observation_time",
+          "description": "Observation timestamp retained in its declared time standard.",
+          "requirement": "required",
+          "data_type": "datetime",
+          "semantic_type": "observation_datetime",
+          "aliases": ["timestamp", "datetime"],
+          "nullable": false,
+          "source_preference": ["open_database", "paper_table"],
+          "quality_threshold": 0.98
+        },
+        {
+          "name": "latitude",
+          "description": "Latitude in the source coordinate reference system.",
+          "requirement": "required",
+          "data_type": "number",
+          "semantic_type": "latitude",
+          "aliases": ["lat"],
+          "unit_dimension": "angle",
+          "allowed_units": ["degree"],
+          "target_unit": "degree",
+          "nullable": false,
+          "source_preference": ["open_database", "paper_table"],
+          "quality_threshold": 0.99
+        },
+        {
+          "name": "longitude",
+          "description": "Longitude in the source coordinate reference system.",
+          "requirement": "required",
+          "data_type": "number",
+          "semantic_type": "longitude",
+          "aliases": ["lon", "lng"],
+          "unit_dimension": "angle",
+          "allowed_units": ["degree"],
+          "target_unit": "degree",
+          "nullable": false,
+          "source_preference": ["open_database", "paper_table"],
+          "quality_threshold": 0.99
+        }
+      ]
+    },
+    {
+      "pack_type": "task",
+      "name": "generic_data_integration",
+      "version": "1.0.0",
+      "source_pack_hash": "26086d54e2c34f1745b8e01908278a6a4f879c415f157186a0c6c72901b18a04",
+      "entity_keys": [],
+      "source_types": ["open_database", "paper_table", "supplement"],
+      "fields": []
+    }
+  ]
+}
