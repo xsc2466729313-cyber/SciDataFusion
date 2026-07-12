@@ -21,15 +21,22 @@ from scidatafusion.contracts.connectors import (
     ConnectorExecutionRequest,
     ConnectorExecutionResult,
 )
+from scidatafusion.contracts.scientific import ScientificDataContract
 from scidatafusion.contracts.search import (
     SearchCapabilityMode,
     SearchPlanningRequest,
     SearchPlanningResult,
 )
+from scidatafusion.contracts.selection import (
+    SourceSelectionRequest,
+    SourceSelectionResult,
+    SourceSelectionStatus,
+)
 from scidatafusion.contracts.task import TaskIntakeRequest
 from scidatafusion.contracts.workflow import Phase1Status, Phase1WorkflowResult
 from scidatafusion.errors import AppError
 from scidatafusion.search import SearchPlanner, SourceCapabilityRegistryLoader, source_ids
+from scidatafusion.selection import SourceSelectionService
 from scidatafusion.workflow import build_offline_demo_workflow
 
 
@@ -77,6 +84,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     connectors.add_argument("--goal", required=True, help="scientific research goal")
     connectors.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    selection = subparsers.add_parser(
+        "phase2-select-demo",
+        help="run M00-M06 with candidate-only coverage and source selection offline",
+    )
+    selection.add_argument("--goal", required=True, help="scientific research goal")
+    selection.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -237,6 +254,76 @@ def build_connector_summary(result: ConnectorExecutionResult) -> dict[str, objec
     }
 
 
+def build_selection_summary(result: SourceSelectionResult) -> dict[str, object]:
+    """Render M06 decisions without source text, URLs, excerpts, or reviewer identity."""
+
+    report = result.coverage_report
+    return {
+        "status": result.status.value,
+        "execution_mode": "offline_fixture",
+        "network_performed": False,
+        "network_status": "not_performed",
+        "candidate_only": report.candidate_only,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "selection_id": result.selected_source_set.selection_id,
+        "selected_source_set_hash": result.selected_source_set.selected_source_set_hash,
+        "coverage_report_hash": report.coverage_report_hash,
+        "search_gap_set_hash": result.search_gap_set.search_gap_set_hash,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "coverage": {
+            "required_fields": report.required_candidate_coverage,
+            "entity_keys": report.entity_key_candidate_coverage,
+            "contract_source_types": report.source_type_candidate_coverage,
+            "selected_source_categories": len(report.selected_categories),
+            "has_primary_source": report.has_primary_source,
+            "fields": [
+                {
+                    "name": item.field_name,
+                    "requirement": item.requirement.value,
+                    "state": item.state.value,
+                    "candidate_count": len(item.candidate_ids),
+                }
+                for item in report.fields
+            ],
+        },
+        "selected_sources": [
+            {
+                "rank": item.selection_rank,
+                "candidate_id": item.candidate_id,
+                "assigned_category": item.assigned_diversity_category.value,
+                "primary_source": item.primary_source,
+                "covered_fields": list(item.covered_fields),
+                "contract_source_types": list(item.covered_contract_source_types),
+                "download_readiness": item.download_readiness.value,
+                "license_decision": item.license_decision.value,
+                "reason_codes": [reason.code.value for reason in item.reasons],
+                "candidate_only": item.candidate_only,
+            }
+            for item in result.selected_source_set.sources
+        ],
+        "gaps": [
+            {
+                "code": item.code.value,
+                "blocking": item.blocking,
+                "target_fields": list(item.target_fields),
+                "contract_source_types": list(item.contract_source_types),
+                "categories": [category.value for category in item.categories],
+            }
+            for item in result.search_gap_set.gaps
+        ],
+        "stop": {
+            "should_stop": result.stop_decision.should_stop,
+            "reason": result.stop_decision.reason.value,
+            "outcome": result.stop_decision.outcome.value,
+            "completed_rounds": result.progress_snapshot.completed_rounds,
+            "recent_marginal_gains": list(result.progress_snapshot.recent_marginal_gains),
+        },
+        "event_type": result.event.event_type.value,
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -298,6 +385,20 @@ async def _execute_offline_connectors(
         )
     finally:
         await bundle.aclose()
+
+
+async def _execute_offline_selection(
+    contract: ScientificDataContract,
+    planning: SearchPlanningResult,
+) -> SourceSelectionResult:
+    connector_result = await _execute_offline_connectors(planning)
+    return SourceSelectionService().select(
+        SourceSelectionRequest(
+            contract=contract,
+            search_plan=planning.plan,
+            connector_result=connector_result,
+        )
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -387,6 +488,29 @@ def main(argv: Sequence[str] | None = None) -> int:
                 json.dumps(build_connector_summary(connector_result), ensure_ascii=True, indent=2)
             )
             return 0 if connector_result.status is ConnectorBatchStatus.SUCCEEDED else 3
+        except (AppError, ValidationError) as exc:
+            code = exc.code.value if isinstance(exc, AppError) else "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase2-select-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            selection = asyncio.run(
+                _execute_offline_selection(phase1.confirmation.contract, planning)
+            )
+            print(json.dumps(build_selection_summary(selection), ensure_ascii=True, indent=2))
+            return (
+                0
+                if selection.status
+                in {SourceSelectionStatus.SUCCEEDED, SourceSelectionStatus.PARTIAL}
+                else 3
+            )
         except (AppError, ValidationError) as exc:
             code = exc.code.value if isinstance(exc, AppError) else "validation_failed"
             print(

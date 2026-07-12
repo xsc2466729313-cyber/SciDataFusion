@@ -1,6 +1,6 @@
 # Competition requirement trace
 
-Source checked on 2026-07-11:
+Source checked on 2026-07-12:
 <https://university.aliyun.com/action/tzbjbgs2026>
 
 ## Official constraints
@@ -9,6 +9,9 @@ Source checked on 2026-07-11:
   (Bailian) or an officially recommended competition tool. Evidence of the call is required.
 - The application should find and combine papers, open databases, tables, supplementary files,
   and image or chart data from a research goal.
+- Track 2 prioritizes multi-source heterogeneous data, traceable sources and processing,
+  analyzable/reusable output, and correction after errors or feedback. Direction 1A initial review
+  also considers completeness, traceability, reliable integration, and analytical output.
 - It must clean data, align fields, label sources, and emit structured output.
 - Chart extraction must explain recognition, extraction, and validation methods.
 - Missing values, duplicates, inconsistent units, and axis or legend errors should be detected;
@@ -24,7 +27,7 @@ Source checked on 2026-07-11:
 |---|---:|---|
 | Qwen/Bailian invocation | 1 | Mock audit trace complete; credentialed redacted invocation proof pending deployment |
 | Research goal to data contract | 1 | contract API and golden cases |
-| Multi-source discovery | 2 | coverage matrix and replay log |
+| Multi-source discovery and selection | 2 | coverage matrix, replay log, candidate coverage, selected sources, and gap set |
 | Documents, tables, supplements | 3 | Bronze manifest and Silver IR |
 | Field evidence and normalization | 4 | EvidenceAtom and transformations |
 | Duplicates, conflicts, repair, HITL | 5 | quality and review records |

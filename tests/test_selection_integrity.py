@@ -6,12 +6,15 @@ import pytest
 from pydantic import ValidationError
 
 from scidatafusion.cli import _build_search_planning, _execute_offline_connectors
+from scidatafusion.contracts.connectors import AccessStatus, CoverageAssessment
 from scidatafusion.contracts.search import (
     SearchStopDecision,
     SearchStopOutcome,
     SearchStopReason,
 )
 from scidatafusion.contracts.selection import (
+    CandidateCoverageState,
+    LicenseDecision,
     SelectionGapCode,
     SelectionRoundContext,
     SourceSelectionRequest,
@@ -20,12 +23,14 @@ from scidatafusion.contracts.selection import (
 from scidatafusion.errors import AppError, ErrorCode
 from scidatafusion.selection import (
     SourceSelectionService,
+    assess_license,
     calculate_selection_input_hash,
     calculate_source_selection_output_hash,
     candidate_claims,
     verify_selection_request_integrity,
     verify_source_selection_integrity,
 )
+from scidatafusion.selection.service import _representative_candidates
 
 _GOAL = "Study Type Ia supernova light curves using multi-source integration into CSV."
 
@@ -163,3 +168,98 @@ def test_selection_integrity_rejects_body_and_stop_decision_tampering(
     )
     with pytest.raises(AppError, match="not reproducible"):
         verify_source_selection_integrity(altered_result, ia_request)
+
+
+def test_replica_groups_and_low_confidence_claims_fail_closed(
+    ia_request: SourceSelectionRequest,
+) -> None:
+    candidate = ia_request.connector_result.candidate_set.candidates[0]
+    projection = candidate_claims(candidate, ia_request.search_plan, ia_request.policy)
+    replica = candidate.model_copy(update={"candidate_id": f"src_{'f' * 32}"})
+    representatives = _representative_candidates(
+        (candidate, replica),
+        {
+            candidate.candidate_id: projection,
+            replica.candidate_id: projection,
+        },
+        ia_request,
+    )
+    assert representatives == (candidate,)
+
+    original_claim = candidate.coverage_claims[0]
+    unknown_claim = original_claim.model_copy(update={"assessment": CoverageAssessment.UNKNOWN})
+    unknown_candidate = candidate.model_copy(update={"coverage_claims": (unknown_claim,)})
+    assert (
+        candidate_claims(
+            unknown_candidate,
+            ia_request.search_plan,
+            ia_request.policy,
+        )
+        == ()
+    )
+
+    uncertain_claim = original_claim.model_copy(update={"confidence": 0.1})
+    uncertain_candidate = candidate.model_copy(update={"coverage_claims": (uncertain_claim,)})
+    uncertain = candidate_claims(
+        uncertain_candidate,
+        ia_request.search_plan,
+        ia_request.policy,
+    )
+    assert uncertain[0].state is CandidateCoverageState.UNCERTAIN
+
+    below_threshold = original_claim.model_copy(update={"confidence": 0.01})
+    below_candidate = candidate.model_copy(update={"coverage_claims": (below_threshold,)})
+    assert (
+        candidate_claims(
+            below_candidate,
+            ia_request.search_plan,
+            ia_request.policy,
+        )
+        == ()
+    )
+
+
+def test_license_decisions_are_conservative_and_critical_gaps_prevent_saturation(
+    ia_request: SourceSelectionRequest,
+) -> None:
+    candidate = ia_request.connector_result.candidate_set.candidates[0]
+    components = tuple(
+        component.model_copy(update={"value": 1.0})
+        if component.name == "license_clarity"
+        else component
+        for component in candidate.assessment.components
+    )
+    open_candidate = candidate.model_copy(
+        update={
+            "access_statuses": (AccessStatus.OPEN,),
+            "license_labels": ("CC-BY-4.0",),
+            "assessment": candidate.assessment.model_copy(update={"components": components}),
+        }
+    )
+    assert assess_license(open_candidate)[0] is LicenseDecision.ALLOWED
+    restricted_candidate = candidate.model_copy(
+        update={
+            "access_statuses": (AccessStatus.RESTRICTED,),
+            "license_labels": (),
+        }
+    )
+    assert assess_license(restricted_candidate)[0] is LicenseDecision.RESTRICTED
+
+    second_low_gain_round = SourceSelectionRequest(
+        contract=ia_request.contract,
+        search_plan=ia_request.search_plan,
+        connector_result=ia_request.connector_result,
+        policy=ia_request.policy,
+        round_context=SelectionRoundContext(
+            completed_rounds=2,
+            previous_required_field_coverage=1.0,
+            previous_selected_source_count=3,
+            prior_marginal_gains=(0.0,),
+            prior_new_source_counts=(0,),
+        ),
+    )
+    result = SourceSelectionService().select(second_low_gain_round)
+    assert result.progress_snapshot.recent_marginal_gains == (0.0, 0.0)
+    assert result.progress_snapshot.recent_new_source_counts == (0, 0)
+    assert result.progress_snapshot.critical_gap_count > 0
+    assert result.stop_decision.reason is SearchStopReason.CONTINUE_SEARCH

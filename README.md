@@ -10,9 +10,9 @@ The source package is being built phase by phase from the
 
 ## Current checkpoint
 
-Phase 2 is in progress. Phase 1 turns an accepted research goal into a confirmed scientific data
-contract; M04 compiles that contract into a bounded search plan, and M05 executes it through
-controlled, replayable Connector boundaries:
+Phase 2 is complete. Phase 1 turns an accepted research goal into a confirmed scientific data
+contract; M04 compiles that contract into a bounded search plan, M05 executes it through
+controlled, replayable Connector boundaries, and M06 selects an evidence-backed source set:
 
 - M00 security, privacy, upload, and finite-budget intake gates;
 - M01 evidence-grounded problem compilation with deterministic fallback and a validated Qwen
@@ -35,13 +35,21 @@ controlled, replayable Connector boundaries:
   assessment;
 - an offline Ia acceptance fixture that executes eight planned queries over nine pages and reduces
   eight raw hits to five provenance-rich candidates with zero confirmed-live and zero
-  unknown-network attempts.
+  unknown-network attempts;
+- M06 strict candidate-coverage, selected-source, gap, progress, metric, and event contracts with
+  canonical upstream/output integrity verification;
+- deterministic replica-aware selection that balances Required/optional fields, primary sources,
+  source categories/types, locator readiness, conservative license decisions, and explicit
+  unknown-size byte reservations;
+- a complete candidate-only report over contract fields, entity keys, quality gates, selection
+  constraints, M04 cells, and source types, plus reproducible gap directives and stop decisions.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
-credentials or external-source calls. M06 is the next checkpoint and will evaluate aggregate
-coverage, select sources for download, report gaps, and decide whether search should continue.
-Parsing, extraction, integration, and the web workbench follow in later phases.
+credentials or external-source calls. M06 adds no network or model call. In the Ia fixture it
+selects three source categories with full Required/entity/source-type candidate coverage, then
+correctly remains partial because record-level scope and reuse permission are not yet proven.
+Controlled download, parsing, extraction, integration, and the web workbench follow in later phases.
 
 ## Quick start
 
@@ -52,8 +60,10 @@ uv run scidatafusion doctor
 uv run scidatafusion phase1-demo --goal "Integrate multi-source Type Ia supernova light curves into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase2-plan-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase2-connect-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase2-select-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
+uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
 uv run powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
@@ -66,6 +76,11 @@ and `phase2-connect-demo` inject `offline_fixture` or Mock runtime state and nev
 results as live-source proof. The Connector demo drives the real four adapter parsers using
 packaged response bytes; its summary omits research text, reviewer identity, candidate content,
 URLs, and untrusted excerpts.
+
+`phase2-select-demo` carries the same offline proof through M06. It exposes only opaque candidate
+IDs, aggregate candidate coverage, reason codes, license/readiness states, gap codes, and immutable
+hashes. `candidate_covered` is a discovery claim, not parsed-field or scientific-value proof; M07
+and later stages must re-evaluate coverage from retained source bytes.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported

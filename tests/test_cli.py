@@ -188,3 +188,56 @@ def test_phase2_connector_demo_executes_packaged_fixture_without_network(
     assert goal not in captured.out
     assert reviewer not in captured.out
     assert "evil.example" not in captured.out
+
+
+def test_phase2_selection_demo_reports_candidate_coverage_and_gaps_safely(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m06-reviewer@example.org"
+
+    exit_code = main(
+        [
+            "phase2-select-demo",
+            "--goal",
+            goal,
+            "--confirmed-by",
+            reviewer,
+        ]
+    )
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "partial"
+    assert report["execution_mode"] == "offline_fixture"
+    assert report["network_performed"] is False
+    assert report["candidate_only"] is True
+    assert report["metrics"]["candidate_count"] == 5
+    assert report["metrics"]["selected_source_count"] == 3
+    assert report["coverage"]["required_fields"] == 1.0
+    assert report["coverage"]["entity_keys"] == 1.0
+    assert report["coverage"]["contract_source_types"] == 1.0
+    assert report["coverage"]["selected_source_categories"] == 3
+    assert report["coverage"]["has_primary_source"] is True
+    assert {item["assigned_category"] for item in report["selected_sources"]} == {
+        "literature_metadata",
+        "data_repository",
+        "domain_database",
+    }
+    assert {item["code"] for item in report["gaps"]} == {
+        "scope_unverified",
+        "license_review_required",
+    }
+    assert report["stop"] == {
+        "should_stop": False,
+        "reason": "continue_search",
+        "outcome": "continue",
+        "completed_rounds": 1,
+        "recent_marginal_gains": [1.0],
+    }
+    assert report["event_type"] == "selection.completed"
+    assert goal not in captured.out
+    assert reviewer not in captured.out
+    assert "evil.example" not in captured.out
+    assert "https://" not in captured.out
