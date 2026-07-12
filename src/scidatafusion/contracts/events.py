@@ -24,7 +24,10 @@ class EventType(StrEnum):
     """Event names reserved by the V4 state model."""
 
     TASK_CREATED = "task.created"
+    TASK_ACCEPTED = "task.accepted"
+    TASK_REJECTED = "task.rejected"
     PROBLEM_COMPILED = "problem.compiled"
+    ROUTING_COMPLETED = "routing.completed"
     CONTRACT_COMPILED = "contract.compiled"
     CONTRACT_CONFIRMED = "contract.confirmed"
     SEARCH_COMPLETED = "search.completed"

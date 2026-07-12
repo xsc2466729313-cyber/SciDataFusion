@@ -10,16 +10,20 @@ The source package is being built phase by phase from the V4 specification in
 
 ## Current checkpoint
 
-Phase 0 establishes the repository and contract baseline only:
+Phase 1 now turns an accepted research goal into a reviewable and confirmable scientific data
+contract:
 
-- Python 3.11 project and reproducible dependency lock;
-- strict settings and secret-safe diagnostics;
-- typed IDs, content hashes, artifact references, and immutable event envelopes;
-- structured JSON logging and stable application error codes;
-- local quality checks and CI.
+- M00 security, privacy, upload, and finite-budget intake gates;
+- M01 evidence-grounded problem compilation with deterministic fallback and a validated Qwen
+  provider boundary;
+- M02 replayable domain/task routing with fail-closed runtime capabilities;
+- M03 content-addressed Schema Packs, conflict-preserving field composition, JSON Schema, and
+  immutable contract confirmation;
+- an idempotent M00-M03 workflow with ordered causal checkpoints and a no-network Ia supernova
+  demonstration command.
 
-Search, document parsing, scientific value extraction, and the web application deliberately
-start in later phases after their contracts are accepted.
+Federated source discovery starts in Phase 2; parsing, extraction, integration, and the web
+workbench follow their accepted contracts in later phases.
 
 ## Quick start
 
@@ -27,11 +31,14 @@ start in later phases after their contracts are accepted.
 uv sync --python 3.11 --group dev
 Copy-Item .env.example .env
 uv run scidatafusion doctor
+uv run scidatafusion phase1-demo --goal "Integrate multi-source Type Ia supernova light curves into CSV." --confirmed-by "demo-reviewer"
 uv run powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
 `doctor` never prints secret values. The default configuration is offline and does not call
-Alibaba Cloud or any external data source.
+Alibaba Cloud or any external data source. `phase1-demo` also stays offline and labels its
+capability snapshot as `simulated_demo`; it is an engineering demonstration, not a production
+Connector health claim.
 
 ## Quality commands
 
@@ -44,6 +51,8 @@ uv run bandit -c pyproject.toml -r src
 uv run python scripts/scan_secrets.py
 ```
 
-The official competition requires the final application to use Qwen through Alibaba Cloud
-Model Studio or an approved competition tool. The integration is configured through
-environment variables and will be implemented behind a provider boundary in Phase 1.
+The official competition requires the final application to use Qwen through Alibaba Cloud Model
+Studio or an approved competition tool. The regional provider boundary, timeout/retry/cache
+controls, strict output validation, and audit record are implemented and Mock-tested. No real
+credential was used in repository tests; a credentialed competition-environment proof remains a
+separate deployment acceptance item.

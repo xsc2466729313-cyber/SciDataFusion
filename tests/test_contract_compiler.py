@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Barrier
 from typing import cast
 
 import pytest
@@ -288,6 +290,32 @@ def test_confirmation_is_immutable_integrity_checked_and_idempotent(
             confirmed_by="reviewer@example.org",
         )
     assert integrity_error.value.code is ErrorCode.ARTIFACT_INTEGRITY_ERROR
+
+
+def test_contract_compiler_confirmation_compare_and_set_is_thread_safe(
+    ia_result: ContractCompilationResult,
+) -> None:
+    compiler = ContractCompiler(clock=lambda: _CREATED_AT)
+    contract = ia_result.contract
+    barrier = Barrier(2)
+
+    def attempt(reviewer: str) -> tuple[str, str]:
+        barrier.wait()
+        try:
+            result = compiler.confirm(
+                contract,
+                expected_contract_hash=contract.contract_hash,
+                confirmed_by=reviewer,
+            )
+        except AppError as exc:
+            return "error", exc.code.value
+        return "ok", result.event.event_id
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = tuple(pool.map(attempt, ("reviewer-a", "reviewer-b")))
+
+    assert sum(status == "ok" for status, _ in outcomes) == 1
+    assert sum(status == "error" for status, _ in outcomes) == 1
 
 
 def test_unresolved_variable_stays_string_and_blocks_confirmation() -> None:
@@ -847,6 +875,7 @@ def test_schema_template_and_pack_negative_invariants() -> None:
             {"source_types": ("paper_table", "paper_table")},
             "source types must be unique",
         ),
+        ({"intent_aliases": ("Light Curve", "light curve")}, "aliases must be unique"),
         ({"quality_gates": (unknown_gate,)}, "must reference local fields"),
     )
     for update, message in invalid_pack_updates:

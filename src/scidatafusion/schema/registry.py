@@ -75,6 +75,7 @@ class SchemaPack(StrictContract):
     name: NonEmptyStr
     version: SemanticVersion
     source_pack_hash: ContentHash
+    intent_aliases: tuple[NonEmptyStr, ...] = ()
     entity_keys: tuple[FieldName, ...] = ()
     source_types: tuple[NonEmptyStr, ...] = ()
     fields: tuple[FieldTemplate, ...]
@@ -101,6 +102,9 @@ class SchemaPack(StrictContract):
             raise ValueError(msg)
         if len(self.source_types) != len(set(self.source_types)):
             msg = "schema pack source types must be unique"
+            raise ValueError(msg)
+        if len(self.intent_aliases) != len({alias.casefold() for alias in self.intent_aliases}):
+            msg = "schema pack intent aliases must be unique"
             raise ValueError(msg)
         gate_ids = tuple(gate.gate_id for gate in self.quality_gates)
         if len(gate_ids) != len(set(gate_ids)):

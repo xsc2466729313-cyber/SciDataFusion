@@ -22,7 +22,7 @@ Source checked on 2026-07-11:
 
 | Requirement | Planned phase | Verification artifact |
 |---|---:|---|
-| Qwen/Bailian invocation | 1 | redacted invocation trace and model snapshot |
+| Qwen/Bailian invocation | 1 | Mock audit trace complete; credentialed redacted invocation proof pending deployment |
 | Research goal to data contract | 1 | contract API and golden cases |
 | Multi-source discovery | 2 | coverage matrix and replay log |
 | Documents, tables, supplements | 3 | Bronze manifest and Silver IR |

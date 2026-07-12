@@ -339,6 +339,7 @@ def test_validated_problem_spec_adapter_routes_context(router: DeterministicRout
 
     assert decision.domain_profile.primary_domain == "astronomy"
     assert "light_curve" in decision.task_archetypes.archetypes
+    assert decision.input_hash == router.problem_input_hash(problem)
 
 
 def test_metrics_are_computed_from_decisions(router: DeterministicRouter) -> None:

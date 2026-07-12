@@ -1,6 +1,6 @@
 {
   "registry_version": "1.0.0",
-  "content_hash": "5721d99f51bfd22d7aee49b3472fc720cfa9126caab3ac39e3cb87b2479288c6",
+  "content_hash": "f3efcc3e5586028e118d7ed4245d546f2972d81a0c664df907629b6b1a6594ad",
   "packs": [
     {
       "pack_type": "domain",
@@ -91,6 +91,7 @@
       "name": "light_curve",
       "version": "1.0.0",
       "source_pack_hash": "cb02b1a6943c06d84f5307cd5ca877bca1e6bae6239c17a8b4b960425d855ba5",
+      "intent_aliases": ["light curve", "light curves", "\u5149\u53d8\u66f2\u7ebf"],
       "entity_keys": [],
       "source_types": ["open_database", "paper_table", "supplement", "figure"],
       "fields": [
@@ -164,6 +165,7 @@
       "name": "data_integration",
       "version": "1.0.0",
       "source_pack_hash": "09f73bbea22b088ebe39e9bccda426a9f7704fa3f6901df11aad917f8888c5b1",
+      "intent_aliases": ["data integration", "multi-source integration", "\u591a\u6e90\u6574\u5408", "\u6574\u5408"],
       "entity_keys": [],
       "source_types": ["open_database", "paper_table", "supplement", "figure"],
       "fields": [
@@ -185,6 +187,7 @@
       "name": "property_aggregation",
       "version": "1.0.0",
       "source_pack_hash": "6edeee6285bb497e3c24b29b51a34b68c9b7c3f06250c068f0290607fa318d48",
+      "intent_aliases": ["property aggregation", "property dataset", "\u6027\u8d28\u6570\u636e"],
       "entity_keys": [],
       "source_types": ["open_database", "paper_table", "supplement"],
       "fields": [
@@ -217,6 +220,7 @@
       "name": "experiment_condition_extraction",
       "version": "1.0.0",
       "source_pack_hash": "5bd491259540544f4c15200795aaa9349b1af0cb43f52b31761e78ed18977d73",
+      "intent_aliases": ["experimental conditions", "synthesis conditions", "\u5b9e\u9a8c\u6761\u4ef6"],
       "entity_keys": [],
       "source_types": ["paper_text", "paper_table", "supplement"],
       "fields": [
@@ -249,6 +253,7 @@
       "name": "spatiotemporal_alignment",
       "version": "1.0.0",
       "source_pack_hash": "9d15ab71cfe8f071d17b306281c3accc019f6c9df687695d899714e7f69ed286",
+      "intent_aliases": ["spatiotemporal alignment", "spatial and temporal", "\u65f6\u7a7a\u5bf9\u9f50"],
       "entity_keys": [],
       "source_types": ["open_database", "paper_table", "supplement"],
       "fields": [
@@ -298,6 +303,7 @@
       "name": "generic_data_integration",
       "version": "1.0.0",
       "source_pack_hash": "26086d54e2c34f1745b8e01908278a6a4f879c415f157186a0c6c72901b18a04",
+      "intent_aliases": ["generic data integration"],
       "entity_keys": [],
       "source_types": ["open_database", "paper_table", "supplement"],
       "fields": []

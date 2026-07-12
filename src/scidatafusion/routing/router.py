@@ -195,12 +195,7 @@ class DeterministicRouter:
     ) -> RoutingDecision:
         """Adapt a validated M01 Pydantic contract without importing its concrete class."""
 
-        data = problem_spec.model_dump(mode="json")
-        goal = data.get("research_goal")
-        if not isinstance(goal, str):
-            msg = "problem_spec must expose a validated research_goal string"
-            raise TypeError(msg)
-        context = self._problem_context(data)
+        goal, context = self._validated_problem_input(problem_spec)
         request = RoutingRequest(
             task_id=task_id,
             run_id=run_id,
@@ -209,6 +204,21 @@ class DeterministicRouter:
             created_at=created_at or datetime.now(UTC),
         )
         return self.route(request, available_capabilities=available_capabilities)
+
+    def problem_input_hash(self, problem_spec: BaseModel) -> str:
+        """Hash the exact M01 projection consumed by deterministic routing."""
+
+        goal, context = self._validated_problem_input(problem_spec)
+        return canonical_hash({"context": list(context), "research_goal": goal})
+
+    @classmethod
+    def _validated_problem_input(cls, problem_spec: BaseModel) -> tuple[str, tuple[str, ...]]:
+        data = problem_spec.model_dump(mode="json")
+        goal = data.get("research_goal")
+        if not isinstance(goal, str):
+            msg = "problem_spec must expose a validated research_goal string"
+            raise TypeError(msg)
+        return goal, cls._problem_context(data)
 
     def _coerce_request(self, request: RoutingRequest | str) -> RoutingRequest:
         if isinstance(request, RoutingRequest):

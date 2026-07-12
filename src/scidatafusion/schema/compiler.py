@@ -8,6 +8,7 @@ import json
 import re
 from collections.abc import Callable
 from datetime import datetime
+from threading import RLock
 from typing import Literal
 
 from scidatafusion.contracts.base import StrictContract, utc_now
@@ -177,6 +178,7 @@ class ContractCompiler:
         self._cache: dict[str, ContractCompilationResult] = {}
         self._confirmations: dict[str, ContractConfirmationResult] = {}
         self._confirmed_hash_by_id: dict[str, str] = {}
+        self._confirmation_lock = RLock()
 
     def compile(
         self,
@@ -447,6 +449,22 @@ class ContractCompiler:
         confirmed_by: str,
     ) -> ContractConfirmationResult:
         """Confirm an unchanged draft using optimistic hash matching."""
+
+        with self._confirmation_lock:
+            return self._confirm_locked(
+                contract,
+                expected_contract_hash=expected_contract_hash,
+                confirmed_by=confirmed_by,
+            )
+
+    def _confirm_locked(
+        self,
+        contract: ScientificDataContract,
+        *,
+        expected_contract_hash: str,
+        confirmed_by: str,
+    ) -> ContractConfirmationResult:
+        """Execute confirmation while the process-local compare-and-set lock is held."""
 
         integrity_seed = _contract_seed(
             task_id=contract.task_id,
@@ -813,9 +831,8 @@ class ContractCompiler:
             )
         return warnings
 
-    @staticmethod
     def _match_variable(
-        fields: dict[str, FieldContract], variable: VariableIntent
+        self, fields: dict[str, FieldContract], variable: VariableIntent
     ) -> tuple[tuple[str, ...], Literal["exact", "ambiguous", "product", "none"]]:
         normalized = ContractCompiler._normalize_concept(variable.name)
         exact_matches: list[str] = []
@@ -830,13 +847,22 @@ class ContractCompiler:
                 "exact" if len(exact_matches) == 1 else "ambiguous"
             )
             return tuple(exact_matches), match_kind
+        matching_packs = {
+            pack.name
+            for pack in self._registry.packs
+            if pack.pack_type == "task"
+            and normalized
+            in {
+                self._normalize_concept(pack.name),
+                *(self._normalize_concept(alias) for alias in pack.intent_aliases),
+            }
+        }
         product_fields = tuple(
             name
             for name, field in fields.items()
             if any(
                 origin.kind is FieldOriginKind.TASK_PACK
-                and ContractCompiler._normalize_concept(origin.reference.split("@", 1)[0])
-                == normalized
+                and origin.reference.split("@", 1)[0] in matching_packs
                 for origin in field.origins
             )
         )

@@ -62,3 +62,49 @@ def test_configuration_error_does_not_echo_credentials(
 
     assert exit_code == 2
     assert sentinel not in captured.err
+
+
+def test_phase1_demo_prints_confirmed_safe_summary(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Integrate multi-source Type Ia supernova light curves into CSV."
+    reviewer = "private-reviewer@example.org"
+
+    exit_code = main(
+        [
+            "phase1-demo",
+            "--goal",
+            goal,
+            "--confirmed-by",
+            reviewer,
+        ]
+    )
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "confirmed"
+    assert report["simulated_capabilities"] is True
+    assert report["routing"]["primary_domain"] == "astronomy"
+    assert set(report["routing"]["task_packs"]) == {"data_integration", "light_curve"}
+    assert report["contract"]["status"] == "confirmed"
+    assert report["contract"]["output_formats"] == ["csv"]
+    assert goal not in captured.out
+    assert reviewer not in captured.out
+
+
+def test_phase1_demo_review_exit_and_validation_error_are_structured(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    review_exit = main(["phase1-demo", "--goal", "data"])
+    review_output = json.loads(capsys.readouterr().out)
+
+    assert review_exit == 3
+    assert review_output["status"] == "needs_review"
+    assert review_output["issues"][0]["blocking"] is True
+
+    invalid_exit = main(["phase1-demo", "--goal", ""])
+    invalid_output = json.loads(capsys.readouterr().err)
+
+    assert invalid_exit == 2
+    assert invalid_output == {"status": "error", "error": "validation_failed"}
