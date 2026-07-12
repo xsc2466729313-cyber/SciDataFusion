@@ -108,3 +108,38 @@ def test_phase1_demo_review_exit_and_validation_error_are_structured(
 
     assert invalid_exit == 2
     assert invalid_output == {"status": "error", "error": "validation_failed"}
+
+
+def test_phase2_plan_demo_is_multisource_safe_and_offline(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-phase2-reviewer@example.org"
+
+    exit_code = main(
+        [
+            "phase2-plan-demo",
+            "--goal",
+            goal,
+            "--confirmed-by",
+            reviewer,
+        ]
+    )
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "succeeded"
+    assert report["simulated_capabilities"] is True
+    assert report["event_type"] == "search.plan.created"
+    assert {item["category"] for item in report["families"]} == {
+        "literature_metadata",
+        "data_repository",
+        "domain_database",
+        "supplement_web",
+    }
+    vizier = next(item for item in report["families"] if item["source_id"] == "vizier_tap")
+    assert vizier["dialects"] == ["tap_adql_discovery"]
+    assert report["coverage"]["observed_candidates"] == 0
+    assert goal not in captured.out
+    assert reviewer not in captured.out

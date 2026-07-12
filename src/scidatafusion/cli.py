@@ -13,9 +13,15 @@ from pydantic import ValidationError
 
 from scidatafusion import __version__
 from scidatafusion.config import Settings
+from scidatafusion.contracts.search import (
+    SearchCapabilityMode,
+    SearchPlanningRequest,
+    SearchPlanningResult,
+)
 from scidatafusion.contracts.task import TaskIntakeRequest
 from scidatafusion.contracts.workflow import Phase1Status, Phase1WorkflowResult
 from scidatafusion.errors import AppError
+from scidatafusion.search import SearchPlanner, SourceCapabilityRegistryLoader, source_ids
 from scidatafusion.workflow import build_offline_demo_workflow
 
 
@@ -46,6 +52,16 @@ def _parser() -> argparse.ArgumentParser:
     phase1.add_argument(
         "--confirmed-by",
         help="explicit reviewer identity; omitted leaves the contract as a draft",
+    )
+    phase2 = subparsers.add_parser(
+        "phase2-plan-demo",
+        help="run offline Phase 1 and M04 with explicitly simulated source capabilities",
+    )
+    phase2.add_argument("--goal", required=True, help="scientific research goal")
+    phase2.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
     )
     return parser
 
@@ -110,6 +126,61 @@ def build_phase1_summary(result: Phase1WorkflowResult) -> dict[str, object]:
     }
 
 
+def build_search_plan_summary(result: SearchPlanningResult) -> dict[str, object]:
+    """Render a safe M04 demo summary without query text or reviewer identity."""
+
+    return {
+        "status": result.status.value,
+        "capability_mode": result.plan.capability_mode.value,
+        "simulated_capabilities": (
+            result.plan.capability_mode is SearchCapabilityMode.SIMULATED_DEMO
+        ),
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "plan_id": result.plan.plan_id,
+        "plan_hash": result.plan.plan_hash,
+        "registry_hash": result.plan.capability_registry_hash,
+        "families": [
+            {
+                "source_id": family.source_id,
+                "category": family.category.value,
+                "state": family.state.value,
+                "query_count": len(family.queries),
+                "dialects": sorted({query.dialect.value for query in family.queries}),
+                "languages": sorted({query.language for query in family.queries}),
+                "target_fields": list(family.target_fields),
+            }
+            for family in result.plan.query_family_set.families
+        ],
+        "coverage": {
+            "cell_count": len(result.plan.coverage_matrix.cells),
+            "planned_cells": sum(
+                item.state.value == "planned" for item in result.plan.coverage_matrix.cells
+            ),
+            "observed_candidates": sum(
+                item.observed_candidate_count for item in result.plan.coverage_matrix.cells
+            ),
+        },
+        "budget": {
+            "allocated_query_count": result.plan.budget_allocation.allocated_query_count,
+            "allocated_cost_micro_usd": (result.plan.budget_allocation.allocated_cost_micro_usd),
+            "allocated_duration_seconds": (
+                result.plan.budget_allocation.allocated_duration_seconds
+            ),
+        },
+        "gaps": [
+            {
+                "code": item.code.value,
+                "source_id": item.source_id,
+                "blocking": item.blocking,
+            }
+            for item in result.plan.gaps
+        ],
+        "event_type": result.event.event_type.value,
+        "output_hash": result.output_hash,
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "doctor":
@@ -168,6 +239,56 @@ def main(argv: Sequence[str] | None = None) -> int:
                     {"status": "error", "error": code},
                     ensure_ascii=True,
                 ),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase2-plan-demo":
+        try:
+            workflow = build_offline_demo_workflow()
+            phase1 = asyncio.run(
+                workflow.execute(
+                    TaskIntakeRequest(
+                        research_goal=args.goal,
+                        allow_external_models=False,
+                    )
+                )
+            )
+            if (
+                phase1.status is not Phase1Status.READY_FOR_CONFIRMATION
+                or phase1.compilation is None
+            ):
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            confirmed = workflow.confirm(
+                contract_id=phase1.compilation.contract.contract_id,
+                expected_contract_hash=phase1.compilation.contract.contract_hash,
+                confirmed_by=args.confirmed_by,
+            )
+            if (
+                confirmed.confirmation is None
+                or confirmed.routing is None
+                or confirmed.intake.envelope is None
+            ):
+                print(json.dumps(build_phase1_summary(confirmed), ensure_ascii=True, indent=2))
+                return 3
+            registry = SourceCapabilityRegistryLoader.load_default()
+            planning = SearchPlanner(
+                registry=registry,
+                available_source_ids=source_ids(registry),
+            ).plan(
+                SearchPlanningRequest(
+                    contract=confirmed.confirmation.contract,
+                    routing=confirmed.routing,
+                    budget_policy=confirmed.intake.envelope.budget_policy,
+                    capability_mode=SearchCapabilityMode.SIMULATED_DEMO,
+                )
+            )
+            print(json.dumps(build_search_plan_summary(planning), ensure_ascii=True, indent=2))
+            return 0 if planning.status.value == "succeeded" else 3
+        except (AppError, ValidationError) as exc:
+            code = exc.code.value if isinstance(exc, AppError) else "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
                 file=sys.stderr,
             )
             return 2

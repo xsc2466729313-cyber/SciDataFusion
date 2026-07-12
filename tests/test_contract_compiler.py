@@ -11,6 +11,7 @@ import pytest
 from pydantic import ValidationError
 
 from scidatafusion.contracts.problem import (
+    EntityIntent,
     ExtractionMethod,
     OutputFormat,
     OutputPreference,
@@ -210,6 +211,36 @@ def test_compile_ia_golden_contract_and_views(ia_result: ContractCompilationResu
         "source_record_id",
     }
     assert "magnitude" in ContractCompiler.render_markdown(contract)
+
+
+def test_compile_freezes_evidence_grounded_research_concepts() -> None:
+    goal = "Study Type Ia supernova light curves."
+    problem = _problem(goal)
+    entity_span = _span(goal, "Type Ia supernova")
+    problem = ScientificProblemSpec.model_validate(
+        {
+            **problem.model_dump(),
+            "target_entities": (
+                EntityIntent(
+                    name="Type Ia supernova",
+                    entity_type="astronomical transient",
+                    confidence=1.0,
+                    evidence=(entity_span,),
+                    method=ExtractionMethod.USER_EXPLICIT,
+                    basis="Explicit research entity in the test goal.",
+                ),
+            ),
+            "source_spans": (*problem.source_spans, entity_span),
+        }
+    )
+
+    result = ContractCompiler(clock=lambda: _CREATED_AT).compile(problem, _route(problem))
+
+    assert [(item.kind.value, item.term) for item in result.contract.research_concepts] == [
+        ("entity", "Type Ia supernova"),
+        ("variable", "light curves"),
+    ]
+    assert all(item.evidence_refs for item in result.contract.research_concepts)
 
 
 def test_output_preference_and_temporal_scope_are_frozen_in_contract() -> None:

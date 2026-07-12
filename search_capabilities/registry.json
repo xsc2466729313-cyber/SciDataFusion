@@ -1,0 +1,140 @@
+{
+  "registry_version": "1.0.0",
+  "content_hash": "e07819ec6ca63cf21b2af882abbb05834427bcf3952dd07cc0112e6c89257627",
+  "capabilities": [
+    {
+      "source_id": "vizier_tap",
+      "connector_id": "vizier_tap_connector",
+      "display_name": "VizieR TAP catalog discovery",
+      "category": "domain_database",
+      "protocol": "tap_adql",
+      "domains": ["astronomy"],
+      "contract_source_types": ["open_database"],
+      "operations": [
+        {
+          "operation_id": "catalog_discovery",
+          "dialect": "tap_adql_discovery",
+          "max_query_length": 4096,
+          "default_result_limit": 200,
+          "supports_pagination": true
+        }
+      ],
+      "primary_source": true,
+      "priority": 100,
+      "estimated_query_cost_micro_usd": 100,
+      "estimated_query_duration_seconds": 8,
+      "expected_artifact_types": ["catalog_metadata", "tabular_catalog"],
+      "query_hints": [
+        {"language": "en", "text": "photometry time-series catalog"},
+        {"language": "zh", "text": "\u6d4b\u5149\u65f6\u95f4\u5e8f\u5217 \u661f\u8868"}
+      ]
+    },
+    {
+      "source_id": "openalex_literature",
+      "connector_id": "openalex_connector",
+      "display_name": "OpenAlex literature metadata",
+      "category": "literature_metadata",
+      "protocol": "rest",
+      "domains": ["generic", "astronomy", "materials_chemistry", "environment_life"],
+      "contract_source_types": ["paper_table", "paper_text"],
+      "operations": [
+        {
+          "operation_id": "keyword_search",
+          "dialect": "keyword",
+          "max_query_length": 1024,
+          "default_result_limit": 100,
+          "supports_pagination": true
+        }
+      ],
+      "primary_source": false,
+      "priority": 90,
+      "estimated_query_cost_micro_usd": 250,
+      "estimated_query_duration_seconds": 5,
+      "expected_artifact_types": ["literature_metadata", "work_identifier", "full_text_link"],
+      "query_hints": [
+        {"language": "en", "text": "light curve photometry table"},
+        {"language": "zh", "text": "\u5149\u53d8\u66f2\u7ebf \u6d4b\u5149 \u8868\u683c"}
+      ]
+    },
+    {
+      "source_id": "zenodo_repository",
+      "connector_id": "zenodo_connector",
+      "display_name": "Zenodo research-data repository",
+      "category": "data_repository",
+      "protocol": "rest",
+      "domains": ["generic", "astronomy", "materials_chemistry", "environment_life"],
+      "contract_source_types": ["open_database", "supplement"],
+      "operations": [
+        {
+          "operation_id": "keyword_search",
+          "dialect": "keyword",
+          "max_query_length": 1024,
+          "default_result_limit": 100,
+          "supports_pagination": true
+        }
+      ],
+      "primary_source": true,
+      "priority": 80,
+      "estimated_query_cost_micro_usd": 150,
+      "estimated_query_duration_seconds": 6,
+      "expected_artifact_types": ["dataset_metadata", "tabular_data", "supplement"],
+      "query_hints": [
+        {"language": "en", "text": "light curve photometry dataset"},
+        {"language": "zh", "text": "\u5149\u53d8\u66f2\u7ebf \u6d4b\u5149 \u6570\u636e\u96c6"}
+      ]
+    },
+    {
+      "source_id": "supplement_web",
+      "connector_id": "supplement_web_connector",
+      "display_name": "Publisher supplement and web discovery",
+      "category": "supplement_web",
+      "protocol": "web_discovery",
+      "domains": ["generic", "astronomy", "materials_chemistry", "environment_life"],
+      "contract_source_types": ["supplement", "figure", "paper_table"],
+      "operations": [
+        {
+          "operation_id": "keyword_search",
+          "dialect": "keyword",
+          "max_query_length": 1024,
+          "default_result_limit": 50,
+          "supports_pagination": false
+        }
+      ],
+      "primary_source": false,
+      "priority": 70,
+      "estimated_query_cost_micro_usd": 300,
+      "estimated_query_duration_seconds": 10,
+      "expected_artifact_types": ["supplement", "table", "figure"],
+      "query_hints": [
+        {"language": "en", "text": "supplementary data light curve table"},
+        {"language": "zh", "text": "\u8865\u5145\u6570\u636e \u5149\u53d8\u66f2\u7ebf \u8868\u683c"}
+      ]
+    }
+  ],
+  "term_expansions": [
+    {
+      "expansion_id": "type_ia_supernova",
+      "domains": ["astronomy"],
+      "terms": [
+        {"language": "en", "term": "Type Ia supernova"},
+        {"language": "en", "term": "SN Ia"},
+        {"language": "en", "term": "SNIa"},
+        {"language": "en", "term": "Ia supernova"},
+        {"language": "zh", "term": "Ia \u578b\u8d85\u65b0\u661f"},
+        {"language": "zh", "term": "Ia\u578b\u8d85\u65b0\u661f"}
+      ]
+    },
+    {
+      "expansion_id": "light_curve_photometry",
+      "domains": ["astronomy"],
+      "terms": [
+        {"language": "en", "term": "light curve"},
+        {"language": "en", "term": "photometric time series"},
+        {"language": "en", "term": "photometry"},
+        {"language": "zh", "term": "\u5149\u53d8\u66f2\u7ebf"},
+        {"language": "zh", "term": "\u6d4b\u5149\u65f6\u95f4\u5e8f\u5217"},
+        {"language": "zh", "term": "\u6d4b\u5149"}
+      ]
+    }
+  ]
+}

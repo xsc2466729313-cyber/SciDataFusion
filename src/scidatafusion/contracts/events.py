@@ -30,6 +30,7 @@ class EventType(StrEnum):
     ROUTING_COMPLETED = "routing.completed"
     CONTRACT_COMPILED = "contract.compiled"
     CONTRACT_CONFIRMED = "contract.confirmed"
+    SEARCH_PLAN_CREATED = "search.plan.created"
     SEARCH_COMPLETED = "search.completed"
     ARTIFACT_STORED = "artifact.stored"
     DOCUMENT_PARSED = "document.parsed"

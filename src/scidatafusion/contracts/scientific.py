@@ -23,6 +23,7 @@ ContractId = Annotated[str, StringConstraints(pattern=r"^ctr_[0-9a-f]{32}$")]
 SchemaId = Annotated[str, StringConstraints(pattern=r"^sch_[0-9a-f]{32}$")]
 ConflictId = Annotated[str, StringConstraints(pattern=r"^cnf_[0-9a-f]{16}$")]
 ConstraintId = Annotated[str, StringConstraints(pattern=r"^cst_[0-9a-f]{16}$")]
+ResearchConceptId = Annotated[str, StringConstraints(pattern=r"^rcp_[0-9a-f]{16}$")]
 
 
 class ContractStatus(StrEnum):
@@ -184,6 +185,21 @@ class SelectionConstraint(StrictContract):
     evidence_refs: tuple[NonEmptyStr, ...] = Field(min_length=1)
 
 
+class ResearchConceptKind(StrEnum):
+    ENTITY = "entity"
+    VARIABLE = "variable"
+
+
+class ResearchConcept(StrictContract):
+    """Evidence-grounded search subject retained from the compiled research problem."""
+
+    concept_id: ResearchConceptId
+    kind: ResearchConceptKind
+    term: NonEmptyStr
+    qualifier: NonEmptyStr | None = None
+    evidence_refs: tuple[NonEmptyStr, ...] = Field(min_length=1)
+
+
 class ContractAssumption(StrictContract):
     assumption_id: Annotated[str, StringConstraints(pattern=r"^asm_[0-9a-f]{16}$")]
     statement: NonEmptyStr
@@ -213,6 +229,7 @@ class ScientificDataContract(StrictContract):
     entity_keys: tuple[FieldName, ...] = ()
     acceptable_source_types: tuple[NonEmptyStr, ...] = Field(min_length=1)
     quality_gates: tuple[QualityGate, ...] = Field(min_length=1)
+    research_concepts: tuple[ResearchConcept, ...] = ()
     selection_constraints: tuple[SelectionConstraint, ...] = ()
     assumptions: tuple[ContractAssumption, ...] = ()
     provenance_level: Literal["field"] = "field"
@@ -275,6 +292,17 @@ class ScientificDataContract(StrictContract):
         constraint_ids = tuple(item.constraint_id for item in self.selection_constraints)
         if len(constraint_ids) != len(set(constraint_ids)):
             msg = "selection constraint ids must be unique"
+            raise ValueError(msg)
+        concept_ids = tuple(item.concept_id for item in self.research_concepts)
+        if len(concept_ids) != len(set(concept_ids)):
+            msg = "research concept ids must be unique"
+            raise ValueError(msg)
+        concept_keys = tuple(
+            (item.kind, item.term.casefold(), (item.qualifier or "").casefold())
+            for item in self.research_concepts
+        )
+        if len(concept_keys) != len(set(concept_keys)):
+            msg = "research concepts must be semantically unique"
             raise ValueError(msg)
         assumption_ids = tuple(item.assumption_id for item in self.assumptions)
         if len(assumption_ids) != len(set(assumption_ids)):
@@ -545,6 +573,7 @@ class ContractMetadataChange(StrictContract):
         "entity_keys",
         "acceptable_source_types",
         "quality_gates",
+        "research_concepts",
         "selection_constraints",
         "assumptions",
         "output_formats",

@@ -46,6 +46,8 @@ from scidatafusion.contracts.scientific import (
     LicensePolicy,
     QualityGate,
     QualityGateKind,
+    ResearchConcept,
+    ResearchConceptKind,
     SchemaConflict,
     ScientificDataContract,
     SelectionConstraint,
@@ -59,6 +61,7 @@ MetadataArea = Literal[
     "entity_keys",
     "acceptable_source_types",
     "quality_gates",
+    "research_concepts",
     "selection_constraints",
     "assumptions",
     "output_formats",
@@ -135,6 +138,7 @@ def _contract_content_hash(
     entity_keys: tuple[str, ...],
     source_types: tuple[str, ...],
     quality_gates: tuple[QualityGate, ...],
+    research_concepts: tuple[ResearchConcept, ...],
     selection_constraints: tuple[SelectionConstraint, ...],
     assumptions: tuple[ContractAssumption, ...],
     provenance_level: str,
@@ -150,6 +154,7 @@ def _contract_content_hash(
             "entity_keys": entity_keys,
             "source_types": source_types,
             "quality_gates": [gate.model_dump(mode="json") for gate in quality_gates],
+            "research_concepts": [item.model_dump(mode="json") for item in research_concepts],
             "selection_constraints": [
                 item.model_dump(mode="json") for item in selection_constraints
             ],
@@ -327,6 +332,7 @@ class ContractCompiler:
         resolved_entity_keys = _unique(entity_keys)
         resolved_source_types = _unique(source_types) or ("paper_table",)
         resolved_quality_gates = tuple(quality_gates.values())
+        research_concepts = self._research_concepts(problem)
         selection_constraints = self._selection_constraints(problem)
         contract_assumptions = tuple(
             ContractAssumption(
@@ -356,6 +362,7 @@ class ContractCompiler:
             entity_keys=resolved_entity_keys,
             source_types=resolved_source_types,
             quality_gates=resolved_quality_gates,
+            research_concepts=research_concepts,
             selection_constraints=selection_constraints,
             assumptions=contract_assumptions,
             provenance_level="field",
@@ -383,6 +390,7 @@ class ContractCompiler:
             entity_keys=resolved_entity_keys,
             acceptable_source_types=resolved_source_types,
             quality_gates=resolved_quality_gates,
+            research_concepts=research_concepts,
             selection_constraints=selection_constraints,
             assumptions=contract_assumptions,
             output_formats=output_formats,
@@ -457,14 +465,9 @@ class ContractCompiler:
                 confirmed_by=confirmed_by,
             )
 
-    def _confirm_locked(
-        self,
-        contract: ScientificDataContract,
-        *,
-        expected_contract_hash: str,
-        confirmed_by: str,
-    ) -> ContractConfirmationResult:
-        """Execute confirmation while the process-local compare-and-set lock is held."""
+    @staticmethod
+    def verify_integrity(contract: ScientificDataContract) -> None:
+        """Reject a contract whose semantic content no longer matches its hashes."""
 
         integrity_seed = _contract_seed(
             task_id=contract.task_id,
@@ -476,7 +479,9 @@ class ContractCompiler:
             producer_version=contract.producer_version,
             fields=contract.fields,
         )
-        calculated_schema = self._canonical_schema(contract.contract_id, contract.fields)
+        calculated_schema = ContractCompiler._canonical_schema(
+            contract.contract_id, contract.fields
+        )
         calculated_contract_hash = _contract_content_hash(
             integrity_seed,
             domain_profile=contract.domain_profile,
@@ -484,6 +489,7 @@ class ContractCompiler:
             entity_keys=contract.entity_keys,
             source_types=contract.acceptable_source_types,
             quality_gates=contract.quality_gates,
+            research_concepts=contract.research_concepts,
             selection_constraints=contract.selection_constraints,
             assumptions=contract.assumptions,
             provenance_level=contract.provenance_level,
@@ -501,6 +507,17 @@ class ContractCompiler:
                 ErrorCode.ARTIFACT_INTEGRITY_ERROR,
                 "contract content does not match its immutable identifiers",
             )
+
+    def _confirm_locked(
+        self,
+        contract: ScientificDataContract,
+        *,
+        expected_contract_hash: str,
+        confirmed_by: str,
+    ) -> ContractConfirmationResult:
+        """Execute confirmation while the process-local compare-and-set lock is held."""
+
+        self.verify_integrity(contract)
         if not hmac.compare_digest(contract.contract_hash, expected_contract_hash):
             raise AppError(ErrorCode.VALIDATION_FAILED, "contract hash changed before confirmation")
         if contract.status is ContractStatus.NEEDS_REVIEW:
@@ -563,6 +580,12 @@ class ContractCompiler:
             f"Status: {contract.status.value}",
             f"Contract hash: `{contract.contract_hash}`",
             "",
+            "Research concepts: "
+            + (
+                ", ".join(f"{item.kind.value}={item.term}" for item in contract.research_concepts)
+                or "none"
+            ),
+            "",
             "| Field | Requirement | Type | Unit | Origins |",
             "|---|---|---|---|---|",
         ]
@@ -608,6 +631,45 @@ class ContractCompiler:
             *routing.pack_selection.proposed_domain_packs,
             *routing.pack_selection.proposed_task_packs,
         )
+
+    @staticmethod
+    def _research_concepts(problem: ScientificProblemSpec) -> tuple[ResearchConcept, ...]:
+        concepts: list[ResearchConcept] = []
+        for entity in problem.target_entities:
+            evidence_refs = tuple(
+                f"{problem.problem_id}:{span.start}-{span.end}" for span in entity.evidence
+            )
+            concepts.append(
+                ResearchConcept(
+                    concept_id=_stable_id(
+                        "rcp",
+                        ("entity", entity.name, entity.entity_type, evidence_refs),
+                        length=16,
+                    ),
+                    kind=ResearchConceptKind.ENTITY,
+                    term=entity.name,
+                    qualifier=entity.entity_type,
+                    evidence_refs=evidence_refs,
+                )
+            )
+        for variable in problem.target_variables:
+            evidence_refs = tuple(
+                f"{problem.problem_id}:{span.start}-{span.end}" for span in variable.evidence
+            )
+            concepts.append(
+                ResearchConcept(
+                    concept_id=_stable_id(
+                        "rcp",
+                        ("variable", variable.name, variable.role.value, evidence_refs),
+                        length=16,
+                    ),
+                    kind=ResearchConceptKind.VARIABLE,
+                    term=variable.name,
+                    qualifier=variable.role.value,
+                    evidence_refs=evidence_refs,
+                )
+            )
+        return tuple(concepts)
 
     @staticmethod
     def _selection_constraints(
@@ -953,6 +1015,7 @@ class ContractDiffService:
                 False,
             ),
             ("quality_gates", old.quality_gates, new.quality_gates, True),
+            ("research_concepts", old.research_concepts, new.research_concepts, True),
             (
                 "selection_constraints",
                 old.selection_constraints,
