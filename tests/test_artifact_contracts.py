@@ -87,7 +87,7 @@ def _object() -> BronzeObject:
         size_bytes=128,
         storage_uri=f"bronze://sha256/{BYTE_HASH}",
         media=_media(),
-        first_stored_at=NOW,
+        recorded_at=NOW,
         object_metadata_hash=HASH_A,
     )
 
@@ -112,6 +112,7 @@ def _acquisition() -> ArtifactAcquisition:
         response=DownloadResponseMetadata(
             status_code=200,
             final_url="https://example.org/paper.pdf",
+            final_locator_hash=HASH_A,
             declared_content_type="application/pdf",
             declared_content_length=128,
             content_disposition_filename="paper.pdf",
@@ -205,6 +206,7 @@ def _result() -> ArtifactDownloadResult:
         failed_download_count=0,
         quarantined_download_count=0,
         acquisition_count=1,
+        archive_member_count=0,
         bronze_object_count=1,
         received_bytes=128,
         persisted_unique_bytes=128,
@@ -240,6 +242,7 @@ def _result() -> ArtifactDownloadResult:
                 run_id="run_11111111111111111111111111111111",
                 occurred_at=NOW,
                 producer=ProducerRef(component="artifact_download_service", version="1.0.0"),
+                correlation_id=HASH_A,
                 payload=payload,
             ),
         ),
@@ -303,6 +306,7 @@ def test_urls_archive_paths_runtime_and_response_names_fail_closed() -> None:
         DownloadResponseMetadata(
             status_code=200,
             final_url="https://example.org/file",
+            final_locator_hash=HASH_A,
             content_disposition_filename="../escape.csv",
         )
     acquisition = _acquisition().model_dump(mode="python")

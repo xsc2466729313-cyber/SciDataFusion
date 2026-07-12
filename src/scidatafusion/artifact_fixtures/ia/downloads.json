@@ -1,0 +1,61 @@
+{
+  "allowed_hosts": [
+    "data.example",
+    "papers.example",
+    "zenodo.org"
+  ],
+  "approved_derived_urls": {
+    "https://papers.example/snia-a": [
+      "https://papers.example/files/snia-paper.pdf"
+    ],
+    "https://zenodo.org/records/1001": [
+      "https://zenodo.org/api/files/lightcurve.csv"
+    ]
+  },
+  "fixture_id": "ia-m07-v1",
+  "responses": [
+    {
+      "content_base64": "UEsDBBQAAAAIAAAAIQC2cFkaQAAAAD4AAAAOAAAAcGhvdG9tZXRyeS5jc3bLT8pKTS6Jz0zRyU8qTi0qSyzJzM+LL8nMTdVJSsxL0clNTM/LLClNSeUK9tN11DG1NDAw0DPUcdIxNNIz5gIAUEsDBBQAAAAIAAAAIQDzrnOzGAAAABYAAAAKAAAAUkVBRE1FLnR4dHPLrCgpLUpVKM4vLUpOVcjLL0kt1uMCAFBLAQIUAxQAAAAIAAAAIQC2cFkaQAAAAD4AAAAOAAAAAAAAAAAAAAAkgQAAAABwaG90b21ldHJ5LmNzdlBLAQIUAxQAAAAIAAAAIQDzrnOzGAAAABYAAAAKAAAAAAAAAAAAAAAkgWwAAABSRUFETUUudHh0UEsFBgAAAAACAAIAdAAAAKwAAAAAAA==",
+      "headers": {
+        "Content-Disposition": "attachment; filename=photometry.zip",
+        "Content-Type": "application/zip"
+      },
+      "status_code": 200,
+      "url": "https://data.example/SNIa"
+    },
+    {
+      "content_base64": "PCFkb2N0eXBlIGh0bWw+PGh0bWw+PGJvZHk+PGEgZG93bmxvYWQgaHJlZj0iL2ZpbGVzL3NuaWEtcGFwZXIucGRmIj5QYXBlciBQREY8L2E+PGEgaHJlZj0iaHR0cHM6Ly9ldmlsLmV4YW1wbGUvbWFsd2FyZS5leGUiPklnbm9yZTwvYT48L2JvZHk+PC9odG1sPgo=",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      },
+      "status_code": 200,
+      "url": "https://papers.example/snia-a"
+    },
+    {
+      "content_base64": "JVBERi0xLjQKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZz4+ZW5kb2JqCnRyYWlsZXI8PC9Sb290IDEgMCBSPj4KJSVFT0YK",
+      "headers": {
+        "Content-Disposition": "attachment; filename=snia-paper.pdf",
+        "Content-Type": "application/pdf"
+      },
+      "status_code": 200,
+      "url": "https://papers.example/files/snia-paper.pdf"
+    },
+    {
+      "content_base64": "",
+      "headers": {
+        "Location": "https://zenodo.org/api/files/lightcurve.csv"
+      },
+      "status_code": 302,
+      "url": "https://zenodo.org/records/1001"
+    },
+    {
+      "content_base64": "b2JqZWN0X2lkLG9ic2VydmF0aW9uX3RpbWUsYmFuZCxtYWduaXR1ZGUKU04tQSw1OTAwMC4xLEIsMTIuMwo=",
+      "headers": {
+        "Content-Disposition": "attachment; filename=lightcurve.csv",
+        "Content-Type": "text/csv"
+      },
+      "status_code": 200,
+      "url": "https://zenodo.org/api/files/lightcurve.csv"
+    }
+  ]
+}

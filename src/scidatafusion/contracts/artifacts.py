@@ -80,11 +80,15 @@ class DownloadErrorCode(StrEnum):
     LICENSE_APPROVAL_REQUIRED = "license_approval_required"
     LOCATOR_UNSUPPORTED = "locator_unsupported"
     HOST_NOT_ALLOWED = "host_not_allowed"
+    DNS_NOT_PUBLIC = "dns_not_public"
     REDIRECT_BLOCKED = "redirect_blocked"
+    REDIRECT_LIMIT = "redirect_limit"
     TIMEOUT = "timeout"
     HTTP_ERROR = "http_error"
     RESPONSE_TOO_LARGE = "response_too_large"
     INCOMPLETE_RESPONSE = "incomplete_response"
+    EMPTY_RESPONSE = "empty_response"
+    CONTENT_ENCODING_UNSUPPORTED = "content_encoding_unsupported"
     CONTENT_TYPE_MISMATCH = "content_type_mismatch"
     UNSUPPORTED_MEDIA_TYPE = "unsupported_media_type"
     ARCHIVE_REJECTED = "archive_rejected"
@@ -145,6 +149,8 @@ class DownloadPolicy(StrictContract):
     connect_timeout_seconds: float = Field(default=5.0, gt=0.0, le=60.0)
     read_timeout_seconds: float = Field(default=30.0, gt=0.0, le=300.0)
     max_attempts: int = Field(default=2, ge=1, le=5)
+    max_root_locators_per_source: int = Field(default=2, ge=1, le=20)
+    max_attachments_per_landing: int = Field(default=10, ge=0, le=100)
     max_archive_entries: int = Field(default=1000, ge=1, le=100_000)
     max_archive_uncompressed_bytes: int = Field(
         default=100_000_000,
@@ -304,6 +310,7 @@ class DownloadLocatorRecord(StrictContract):
 class DownloadResponseMetadata(StrictContract):
     status_code: int = Field(ge=100, le=599)
     final_url: SafeHttpsUrl
+    final_locator_hash: ContentHash
     declared_content_type: NonEmptyStr | None = None
     declared_content_length: int | None = Field(default=None, ge=0)
     content_disposition_filename: NonEmptyStr | None = None
@@ -357,15 +364,15 @@ class BronzeObject(StrictContract):
     size_bytes: int = Field(gt=0)
     storage_uri: BronzeStorageUri
     media: ContentInspection
-    first_stored_at: datetime
+    recorded_at: datetime
     immutable: Literal[True] = True
     object_metadata_hash: ContentHash
 
-    @field_validator("first_stored_at")
+    @field_validator("recorded_at")
     @classmethod
     def require_aware_timestamp(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("Bronze storage timestamp must include a timezone")
+            raise ValueError("Bronze manifest timestamp must include a timezone")
         return value.astimezone(UTC)
 
     @model_validator(mode="after")
@@ -411,15 +418,17 @@ class ArtifactAcquisition(StrictContract):
 
     @model_validator(mode="after")
     def validate_acquisition(self) -> Self:
-        archive_member = self.relationship is ArtifactRelationship.ARCHIVE_MEMBER
-        if archive_member != (
-            self.parent_object_id is not None and self.archive_member_path is not None
-        ):
-            raise ValueError("archive members require a parent object and safe member path")
-        if not archive_member and (
+        if self.relationship is ArtifactRelationship.ROOT_DOWNLOAD and (
             self.parent_object_id is not None or self.archive_member_path is not None
         ):
-            raise ValueError("root and landing acquisitions cannot claim an archive parent")
+            raise ValueError("root acquisitions cannot claim a parent object or member path")
+        if self.relationship is ArtifactRelationship.LANDING_ATTACHMENT and (
+            self.parent_object_id is None or self.archive_member_path is not None
+        ):
+            raise ValueError("landing attachments require a parent object and no member path")
+        archive_member = self.relationship is ArtifactRelationship.ARCHIVE_MEMBER
+        if archive_member and (self.parent_object_id is None or self.archive_member_path is None):
+            raise ValueError("archive members require a parent object and safe member path")
         if archive_member == (self.response is not None):
             raise ValueError(
                 "root acquisitions require response metadata; archive members inherit it"
@@ -563,6 +572,7 @@ class ArtifactDownloadMetrics(StrictContract):
     failed_download_count: int = Field(ge=0)
     quarantined_download_count: int = Field(ge=0)
     acquisition_count: int = Field(ge=0)
+    archive_member_count: int = Field(ge=0)
     bronze_object_count: int = Field(ge=0)
     received_bytes: int = Field(ge=0)
     persisted_unique_bytes: int = Field(ge=0)
@@ -639,10 +649,21 @@ class ArtifactDownloadResult(DownloadArtifact):
             for item in run_log.attempts
             if item.status in {DownloadAttemptStatus.STORED, DownloadAttemptStatus.DEDUPLICATED}
         )
+        network_acquisitions = tuple(
+            item
+            for item in manifest.acquisitions
+            if item.relationship is not ArtifactRelationship.ARCHIVE_MEMBER
+        )
         if {item.acquisition_id for item in successful_attempts} != {
-            item.acquisition_id for item in manifest.acquisitions
+            item.acquisition_id for item in network_acquisitions
         }:
-            raise ValueError("successful attempts and manifest acquisitions must match exactly")
+            raise ValueError("successful attempts and non-archive acquisitions must match exactly")
+        if any(
+            item.parent_object_id not in objects_by_id
+            for item in manifest.acquisitions
+            if item.parent_object_id is not None
+        ):
+            raise ValueError("derived acquisitions must resolve to a parent Bronze object")
         acquisitions_by_id = {item.acquisition_id: item for item in manifest.acquisitions}
         for attempt in successful_attempts:
             acquisition_id = attempt.acquisition_id
@@ -683,6 +704,10 @@ class ArtifactDownloadResult(DownloadArtifact):
                 item.status is DownloadAttemptStatus.QUARANTINED for item in run_log.attempts
             ),
             acquisition_count=len(manifest.acquisitions),
+            archive_member_count=sum(
+                item.relationship is ArtifactRelationship.ARCHIVE_MEMBER
+                for item in manifest.acquisitions
+            ),
             bronze_object_count=len(artifact_set.objects),
             received_bytes=sum(item.bytes_received for item in run_log.attempts),
             persisted_unique_bytes=sum(item.size_bytes for item in artifact_set.objects),
@@ -730,6 +755,11 @@ class ArtifactDownloadResult(DownloadArtifact):
                 or event.task_id != self.task_id
                 or event.run_id != self.run_id
                 or event.occurred_at != self.created_at
+                or event.schema_version != self.contract_version
+                or event.producer.component != "artifact_download_service"
+                or event.producer.version != self.producer_version
+                or event.correlation_id != self.input_hash
+                or event.causation_event_id is not None
                 or event_object is None
                 or payload.byte_sha256 != event_object.byte_sha256
                 or payload.artifact_set_hash != artifact_set.artifact_set_hash
