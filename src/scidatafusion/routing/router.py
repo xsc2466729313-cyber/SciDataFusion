@@ -102,6 +102,7 @@ class DeterministicRouter:
         input_hash = canonical_hash(input_payload)
         replay_key = deterministic_hex(
             validated_request.task_id,
+            validated_request.run_id,
             "M02",
             self.contract_version,
             input_hash,

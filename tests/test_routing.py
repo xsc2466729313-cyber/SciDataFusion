@@ -213,6 +213,26 @@ def test_same_input_and_registry_snapshot_is_exactly_replayable() -> None:
     assert first.registry_hash == first_router.registry_hash
 
 
+def test_same_task_new_run_never_reuses_an_old_routing_decision() -> None:
+    capabilities = _all_capabilities()
+    router = DeterministicRouter(available_capabilities=capabilities)
+    first_request = fixed_request("Study Type Ia supernova light curves.")
+    second_request = RoutingRequest(
+        task_id=first_request.task_id,
+        run_id="run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        research_goal=first_request.research_goal,
+        created_at=first_request.created_at,
+    )
+
+    first = router.route(first_request)
+    second = router.route(second_request)
+
+    assert second is not first
+    assert first.run_id == first_request.run_id
+    assert second.run_id == second_request.run_id
+    assert second.replay_key != first.replay_key
+
+
 def test_registry_versions_and_content_hashes_are_verified(tmp_path: Path) -> None:
     domain_registry = DomainPackRegistry.load_default()
     task_registry = TaskPackRegistry.load_default()
