@@ -156,7 +156,9 @@ class SecurityPreflight:
 
         raw_hostname = parsed.hostname
         if raw_hostname is None:
-            problems.append(self._problem(IntakeProblemCode.URL_INVALID, "URL has no hostname", url))
+            problems.append(
+                self._problem(IntakeProblemCode.URL_INVALID, "URL has no hostname", url)
+            )
             return self._check(url, hostname, resolved, problems)
         try:
             hostname = raw_hostname.rstrip(".").encode("idna").decode("ascii").lower()
@@ -333,9 +335,7 @@ class SecurityPreflight:
                 [
                     (
                         key,
-                        "[REDACTED]"
-                        if key.casefold() in SENSITIVE_QUERY_KEYS
-                        else value,
+                        "[REDACTED]" if key.casefold() in SENSITIVE_QUERY_KEYS else value,
                     )
                     for key, value in parse_qsl(parsed.query, keep_blank_values=True)
                 ]

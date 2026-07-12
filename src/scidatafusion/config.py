@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     planner_model_id: str = "qwen-plus"
     fast_model_id: str = "qwen-turbo"
     critic_model_id: str = "qwen-plus"
+    model_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    model_max_retries: int = Field(default=2, ge=0, le=8)
+    model_max_concurrency: int = Field(default=4, ge=1, le=64)
 
     default_max_sources: int = Field(default=50, ge=1, le=1000)
     default_max_download_bytes: int = Field(default=500 * 1024 * 1024, ge=1)

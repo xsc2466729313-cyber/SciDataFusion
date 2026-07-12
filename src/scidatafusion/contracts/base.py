@@ -17,9 +17,10 @@ TaskId = Annotated[str, StringConstraints(pattern=r"^tsk_[0-9a-f]{32}$")]
 RunId = Annotated[str, StringConstraints(pattern=r"^run_[0-9a-f]{32}$")]
 EventId = Annotated[str, StringConstraints(pattern=r"^evt_[0-9a-f]{32}$")]
 ArtifactId = Annotated[str, StringConstraints(pattern=r"^art_[0-9a-f]{32}$")]
+ModelCallId = Annotated[str, StringConstraints(pattern=r"^mdl_[0-9a-f]{32}$")]
 ContentHash = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 
-IdPrefix = Literal["tsk", "run", "evt", "art"]
+IdPrefix = Literal["tsk", "run", "evt", "art", "mdl"]
 
 
 def generate_id(prefix: IdPrefix) -> str:

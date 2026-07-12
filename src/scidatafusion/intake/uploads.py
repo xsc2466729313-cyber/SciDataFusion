@@ -230,9 +230,7 @@ class UploadManifestBuilder:
         if upload.media_type.lower() not in ARCHIVE_MEDIA_TYPES:
             return upload.size_bytes, 1.0
         expanded_size = (
-            upload.size_bytes
-            if upload.expanded_size_bytes is None
-            else upload.expanded_size_bytes
+            upload.size_bytes if upload.expanded_size_bytes is None else upload.expanded_size_bytes
         )
         if upload.size_bytes == 0:
             ratio = 1.0 if expanded_size == 0 else 1e308

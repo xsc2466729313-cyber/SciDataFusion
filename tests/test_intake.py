@@ -129,9 +129,7 @@ def test_budget_allocator_enforces_the_exact_hard_boundary() -> None:
     )
     policy, problems = allocator.allocate(over_limit, **common)  # type: ignore[arg-type]
     assert policy is None
-    assert [problem.code for problem in problems] == [
-        IntakeProblemCode.BUDGET_LIMIT_EXCEEDED
-    ]
+    assert [problem.code for problem in problems] == [IntakeProblemCode.BUDGET_LIMIT_EXCEEDED]
 
 
 @pytest.mark.parametrize(
@@ -169,9 +167,7 @@ def test_security_preflight_blocks_ssrf_and_unsafe_schemes(
 
 
 def test_security_preflight_requires_allowlist_and_checks_every_dns_answer() -> None:
-    resolver = FakeResolver(
-        {"data.example.org": (PUBLIC_IP, "192.168.1.4")}
-    )
+    resolver = FakeResolver({"data.example.org": (PUBLIC_IP, "192.168.1.4")})
     preflight = SecurityPreflight(
         resolver=resolver,
         allowed_hosts=("data.example.org",),
@@ -207,9 +203,7 @@ def test_security_preflight_redacts_and_blocks_url_credentials() -> None:
     serialized = check.model_dump_json()
 
     assert not check.allowed
-    assert IntakeProblemCode.URL_CREDENTIALS_BLOCKED in {
-        problem.code for problem in check.problems
-    }
+    assert IntakeProblemCode.URL_CREDENTIALS_BLOCKED in {problem.code for problem in check.problems}
     assert "super-secret" not in serialized
     assert "also-secret" not in serialized
     assert "REDACTED" in serialized

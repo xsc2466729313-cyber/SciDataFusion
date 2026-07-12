@@ -9,6 +9,7 @@ description = "Evidence-first AI workflow for finding, parsing, and integrating 
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "httpx>=0.28,<1",
   "pydantic>=2.10,<3",
   "pydantic-settings>=2.7,<3",
 ]
