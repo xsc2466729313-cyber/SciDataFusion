@@ -168,11 +168,13 @@ def test_content_sniffer_detects_office_zip_spoofing_and_unknown_bytes() -> None
     assert spoofed.detected_media_type == "application/pdf"
     assert spoofed.declared_media_type == "text/html"
     assert spoofed.media_type_mismatch
+    assert spoofed.requires_review
 
     unknown = ContentSniffer.inspect(b"\x00\x01\x02\x03")
     assert unknown.detected_media_type == "application/octet-stream"
     assert unknown.basis is ContentDetectionBasis.UNKNOWN
     assert unknown.confidence == 0.0
+    assert unknown.requires_review
 
 
 def test_safe_archive_extracts_regular_members_without_writing(tmp_path: Path) -> None:

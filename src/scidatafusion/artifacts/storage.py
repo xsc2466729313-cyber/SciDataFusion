@@ -39,7 +39,14 @@ class BronzeByteStore(Protocol):
 class MemoryBronzeStore:
     """Thread-safe immutable store for tests and explicitly ephemeral workflows."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_total_bytes: int = 128_000_000) -> None:
+        if not 1 <= max_total_bytes <= 1_000_000_000:
+            raise AppError(
+                ErrorCode.CONFIGURATION_ERROR,
+                "Memory Bronze capacity must be between 1 byte and 1 GB",
+            )
+        self._max_total_bytes = max_total_bytes
+        self._stored_bytes = 0
         self._objects: dict[str, bytes] = {}
         self._lock = RLock()
 
@@ -55,7 +62,13 @@ class MemoryBronzeStore:
                 _integrity_error("SHA-256 collision detected in the Bronze byte store")
             newly_stored = existing is None
             if newly_stored:
+                if self._stored_bytes + len(immutable_content) > self._max_total_bytes:
+                    raise AppError(
+                        ErrorCode.BUDGET_EXCEEDED,
+                        "Memory Bronze capacity would be exceeded",
+                    )
                 self._objects[byte_sha256] = immutable_content
+                self._stored_bytes += len(immutable_content)
         return _receipt(byte_sha256, len(immutable_content), newly_stored)
 
     def read(self, byte_sha256: str) -> bytes:

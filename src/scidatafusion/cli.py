@@ -6,16 +6,27 @@ import argparse
 import asyncio
 import json
 import sys
+from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from scidatafusion import __version__
+from scidatafusion.artifacts import (
+    ArtifactDownloadService,
+    MemoryBronzeStore,
+    build_offline_ia_artifact_bundle,
+)
 from scidatafusion.config import Settings
 from scidatafusion.connectors.executor import ConnectorBatchExecutor
 from scidatafusion.connectors.fixtures import build_offline_ia_connector_bundle
 from scidatafusion.connectors.registry import load_default_connector_registry
+from scidatafusion.contracts.artifacts import (
+    ArtifactDownloadRequest,
+    ArtifactDownloadResult,
+    ArtifactDownloadStatus,
+)
 from scidatafusion.contracts.connectors import (
     ConnectorBatchStatus,
     ConnectorExecutionRequest,
@@ -94,6 +105,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     selection.add_argument("--goal", required=True, help="scientific research goal")
     selection.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    artifacts = subparsers.add_parser(
+        "phase3-download-demo",
+        help="run M00-M07 against packaged source bytes without external network access",
+    )
+    artifacts.add_argument("--goal", required=True, help="scientific research goal")
+    artifacts.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -324,6 +345,52 @@ def build_selection_summary(result: SourceSelectionResult) -> dict[str, object]:
     }
 
 
+def build_artifact_summary(result: ArtifactDownloadResult) -> dict[str, object]:
+    """Render M07 provenance without URLs, filenames, approvals, or source content."""
+
+    attempts = result.run_log.attempts
+    network_unknown = any(item.network_performed is None for item in attempts)
+    network_performed = any(item.network_performed is True for item in attempts)
+    relationships = Counter(item.relationship.value for item in result.manifest.acquisitions)
+    media_types = Counter(item.media.detected_media_type for item in result.artifact_set.objects)
+    return {
+        "status": result.status.value,
+        "execution_mode": (attempts[0].execution_mode.value if attempts else "offline_fixture"),
+        "network_performed": None if network_unknown else network_performed,
+        "network_status": (
+            "unknown" if network_unknown else "performed" if network_performed else "not_performed"
+        ),
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "selection_id": result.manifest.selection_id,
+        "artifact_set_id": result.artifact_set.artifact_set_id,
+        "artifact_set_hash": result.artifact_set.artifact_set_hash,
+        "manifest_id": result.manifest.manifest_id,
+        "manifest_hash": result.manifest.manifest_hash,
+        "run_log_hash": result.run_log.run_log_hash,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "relationships": dict(sorted(relationships.items())),
+        "detected_media_types": dict(sorted(media_types.items())),
+        "objects": [
+            {
+                "object_id": item.object_id,
+                "byte_sha256": item.byte_sha256,
+                "size_bytes": item.size_bytes,
+                "artifact_kind": item.media.artifact_kind.value,
+                "detected_media_type": item.media.detected_media_type,
+                "immutable": item.immutable,
+            }
+            for item in result.artifact_set.objects
+        ],
+        "event_type": "artifact.download.completed",
+        "stored_event_count": sum(
+            item.event_type.value == "artifact.stored" for item in result.events
+        ),
+        "event_count": len(result.events),
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -399,6 +466,27 @@ async def _execute_offline_selection(
             connector_result=connector_result,
         )
     )
+
+
+async def _execute_offline_artifacts(
+    selection: SourceSelectionResult,
+) -> ArtifactDownloadResult:
+    bundle = build_offline_ia_artifact_bundle(selection.selected_source_set)
+    request = ArtifactDownloadRequest(
+        selected_source_set=selection.selected_source_set,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        approvals=bundle.approvals,
+        requested_at=bundle.runtime.checked_at,
+    )
+    service = ArtifactDownloadService(
+        store=MemoryBronzeStore(),
+        transport=bundle.transport,
+    )
+    try:
+        return await service.execute(request)
+    finally:
+        await service.aclose()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -509,6 +597,30 @@ def main(argv: Sequence[str] | None = None) -> int:
                 0
                 if selection.status
                 in {SourceSelectionStatus.SUCCEEDED, SourceSelectionStatus.PARTIAL}
+                else 3
+            )
+        except (AppError, ValidationError) as exc:
+            code = exc.code.value if isinstance(exc, AppError) else "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase3-download-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            selection = asyncio.run(
+                _execute_offline_selection(phase1.confirmation.contract, planning)
+            )
+            artifacts = asyncio.run(_execute_offline_artifacts(selection))
+            print(json.dumps(build_artifact_summary(artifacts), ensure_ascii=True, indent=2))
+            return (
+                0
+                if artifacts.status
+                in {ArtifactDownloadStatus.SUCCEEDED, ArtifactDownloadStatus.PARTIAL}
                 else 3
             )
         except (AppError, ValidationError) as exc:

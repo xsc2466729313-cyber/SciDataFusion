@@ -10,9 +10,9 @@ The source package is being built phase by phase from the
 
 ## Current checkpoint
 
-Phase 2 is complete. Phase 1 turns an accepted research goal into a confirmed scientific data
-contract; M04 compiles that contract into a bounded search plan, M05 executes it through
-controlled, replayable Connector boundaries, and M06 selects an evidence-backed source set:
+Phase 2 is complete and Phase 3 is in progress. Phase 1 turns an accepted research goal into a
+confirmed scientific data contract; M04-M06 discover and select evidence-backed sources; the M07
+selected-source acquisition checkpoint now preserves authorized bytes in immutable Bronze storage:
 
 - M00 security, privacy, upload, and finite-budget intake gates;
 - M01 evidence-grounded problem compilation with deterministic fallback and a validated Qwen
@@ -42,14 +42,21 @@ controlled, replayable Connector boundaries, and M06 selects an evidence-backed 
   source categories/types, locator readiness, conservative license decisions, and explicit
   unknown-size byte reservations;
 - a complete candidate-only report over contract fields, entity keys, quality gates, selection
-  constraints, M04 cells, and source types, plus reproducible gap directives and stop decisions.
+  constraints, M04 cells, and source types, plus reproducible gap directives and stop decisions;
+- M07 per-hop locator authorization, controlled HTTPS/DNS-pinned downloads, bounded retries and
+  byte budgets, byte-based media inspection, safe ZIP extraction, and exact failure accounting;
+- SHA-256 Bronze storage, cross-source deduplication, root/attachment/archive provenance,
+  deterministic events, single-flight execution, and durable complete-result checkpoints;
+- an offline Ia acquisition fixture with five unique Bronze objects, six provenance acquisitions,
+  no external network, and a privacy-reduced `phase3-download-demo` summary.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
 credentials or external-source calls. M06 adds no network or model call. In the Ia fixture it
 selects three source categories with full Required/entity/source-type candidate coverage, then
-correctly remains partial because record-level scope and reuse permission are not yet proven.
-Controlled download, parsing, extraction, integration, and the web workbench follow in later phases.
+correctly remains partial because record-level scope and reuse permission are not yet proven. M07
+retains controlled source bytes but does not parse scientific values. M08-M10 parsing, later
+evidence/normalization/fusion, and the web workbench remain future checkpoints.
 
 ## Quick start
 
@@ -61,6 +68,7 @@ uv run scidatafusion phase1-demo --goal "Integrate multi-source Type Ia supernov
 uv run scidatafusion phase2-plan-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase2-connect-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase2-select-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase3-download-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -79,8 +87,14 @@ URLs, and untrusted excerpts.
 
 `phase2-select-demo` carries the same offline proof through M06. It exposes only opaque candidate
 IDs, aggregate candidate coverage, reason codes, license/readiness states, gap codes, and immutable
-hashes. `candidate_covered` is a discovery claim, not parsed-field or scientific-value proof; M07
-and later stages must re-evaluate coverage from retained source bytes.
+hashes. `candidate_covered` is a discovery claim, not parsed-field or scientific-value proof. M07
+retains immutable bytes; M08 and later parsing stages must re-evaluate coverage from those bytes.
+
+`phase3-download-demo` drives the same M07 contracts, downloader, archive inspection, Bronze store,
+manifest, run log, and event construction used by the service. Its output omits URLs, filenames,
+approval references, source content, the research goal, and reviewer identity. Acceptance is
+offline only: it does not claim real-source availability, legal approval, mid-download resume, M00
+upload ingestion, or parsed Silver/Gold data.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported

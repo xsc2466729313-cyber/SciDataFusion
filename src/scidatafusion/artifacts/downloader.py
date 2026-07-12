@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import socket
-from collections.abc import Callable
-from dataclasses import dataclass
+import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from email.message import Message
+from email.utils import parsedate_to_datetime
 from ipaddress import ip_address
 from typing import Protocol
 from urllib.parse import urljoin, urlsplit, urlunsplit
@@ -21,9 +24,11 @@ from scidatafusion.contracts.artifacts import (
     DownloadResponseMetadata,
     DownloadRuntimeSnapshot,
 )
+from scidatafusion.contracts.base import utc_now
 
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _RETRYABLE_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
+Sleep = Callable[[float], Awaitable[None]]
 
 
 class HostResolver(Protocol):
@@ -58,9 +63,11 @@ class DnsPinnedTransport(httpx.AsyncBaseTransport):
         allowed_hosts: tuple[str, ...],
         *,
         transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
+        resolution_timeout_seconds: float = 5.0,
     ) -> None:
         self._resolver = resolver
         self.allowed_hosts = allowed_hosts
+        self.resolution_timeout_seconds = resolution_timeout_seconds
         self._transport_factory = transport_factory or (
             lambda: httpx.AsyncHTTPTransport(trust_env=False, retries=0)
         )
@@ -72,8 +79,11 @@ class DnsPinnedTransport(httpx.AsyncBaseTransport):
         if host not in self.allowed_hosts:
             raise _DnsPinningFailure("live request host is outside the runtime allowlist")
         try:
-            raw_addresses = await asyncio.to_thread(self._resolver.resolve, host)
-        except OSError as exc:
+            raw_addresses = await asyncio.wait_for(
+                asyncio.to_thread(self._resolver.resolve, host),
+                timeout=self.resolution_timeout_seconds,
+            )
+        except (OSError, TimeoutError) as exc:
             raise _DnsPinningFailure(
                 "live host could not be resolved safely",
                 retryable=True,
@@ -82,7 +92,16 @@ class DnsPinnedTransport(httpx.AsyncBaseTransport):
             addresses = tuple(ip_address(value) for value in raw_addresses)
         except ValueError as exc:
             raise _DnsPinningFailure("live host returned an invalid IP address") from exc
-        if not addresses or any(not address.is_global for address in addresses):
+        if not addresses or any(
+            not address.is_global
+            or address.is_multicast
+            or address.is_private
+            or address.is_reserved
+            or address.is_unspecified
+            or address.is_link_local
+            or address.is_loopback
+            for address in addresses
+        ):
             raise _DnsPinningFailure("live host resolves to a non-public address")
         pinned_address = min(addresses, key=lambda item: (item.version, int(item)))
         pinned_url = request.url.copy_with(host=str(pinned_address))
@@ -109,6 +128,46 @@ class DnsPinnedTransport(httpx.AsyncBaseTransport):
         await asyncio.gather(*(item.aclose() for item in transports))
 
 
+class _BorrowedAsyncTransport(httpx.AsyncBaseTransport):
+    """Delegate requests while leaving transport lifetime with the caller."""
+
+    def __init__(self, delegate: httpx.AsyncBaseTransport) -> None:
+        self._delegate = delegate
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        return await self._delegate.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        return None
+
+
+class LiveHostRateLimiter:
+    """Reserve request slots independently for each reviewed live host."""
+
+    def __init__(
+        self,
+        *,
+        sleep: Sleep,
+        monotonic: Callable[[], float],
+    ) -> None:
+        self._sleep = sleep
+        self._monotonic = monotonic
+        self._next_allowed: dict[str, float] = {}
+        self._lock = asyncio.Lock()
+
+    async def wait(self, host: str, *, requests_per_second: float) -> None:
+        """Wait until this host's next request slot without blocking other hosts."""
+
+        interval = 1.0 / requests_per_second
+        async with self._lock:
+            now = self._monotonic()
+            reserved_at = max(now, self._next_allowed.get(host, now))
+            self._next_allowed[host] = reserved_at + interval
+        delay = reserved_at - now
+        if delay > 0.0:
+            await self._sleep(delay)
+
+
 @dataclass(frozen=True, slots=True)
 class DownloadFetchResult:
     """Bounded response bytes plus only safe response metadata."""
@@ -118,6 +177,7 @@ class DownloadFetchResult:
     final_request_url: str
     network_performed: bool
     redirect_count: int
+    cache_hit: bool = False
 
 
 class DownloadFailure(Exception):
@@ -132,6 +192,7 @@ class DownloadFailure(Exception):
         network_performed: bool | None = False,
         bytes_received: int = 0,
         http_status: int | None = None,
+        retry_after_seconds: float | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -139,6 +200,7 @@ class DownloadFailure(Exception):
         self.network_performed = network_performed
         self.bytes_received = bytes_received
         self.http_status = http_status
+        self.retry_after_seconds = retry_after_seconds
 
 
 class SafeDownloadClient:
@@ -151,21 +213,37 @@ class SafeDownloadClient:
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         resolver: HostResolver | None = None,
+        rate_limiter: LiveHostRateLimiter | None = None,
+        sleep: Sleep = asyncio.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], datetime] = utc_now,
     ) -> None:
+        owns_transport = False
         if runtime.execution_mode is DownloadExecutionMode.LIVE_NETWORK:
             if transport is None:
                 transport = DnsPinnedTransport(
                     resolver or SystemHostResolver(),
                     runtime.allowed_hosts,
+                    resolution_timeout_seconds=policy.connect_timeout_seconds,
                 )
+                owns_transport = True
             elif not isinstance(transport, DnsPinnedTransport):
                 raise ValueError("live download clients require a DNS-pinned transport")
             elif transport.allowed_hosts != runtime.allowed_hosts:
                 raise ValueError("DNS-pinned transport must match the runtime allowlist")
+            elif transport.resolution_timeout_seconds > policy.connect_timeout_seconds:
+                raise ValueError("DNS resolution timeout cannot exceed the connect timeout")
         elif transport is None:
             raise ValueError("offline and Mock download clients require an injected transport")
+        client_transport = transport if owns_transport else _BorrowedAsyncTransport(transport)
         self._runtime = runtime
         self._policy = policy
+        self._wall_clock = wall_clock
+        self._cache: dict[str, DownloadFetchResult] = {}
+        self._rate_limiter = rate_limiter or LiveHostRateLimiter(
+            sleep=sleep,
+            monotonic=monotonic,
+        )
         timeout = httpx.Timeout(
             connect=policy.connect_timeout_seconds,
             read=policy.read_timeout_seconds,
@@ -173,7 +251,7 @@ class SafeDownloadClient:
             pool=policy.connect_timeout_seconds,
         )
         self._client = httpx.AsyncClient(
-            transport=transport,
+            transport=client_transport,
             timeout=timeout,
             follow_redirects=False,
             trust_env=False,
@@ -201,9 +279,21 @@ class SafeDownloadClient:
         self._client.cookies.clear()
         await self._client.aclose()
 
-    async def fetch(self, url: str, *, byte_limit: int) -> DownloadFetchResult:
+    async def fetch(
+        self,
+        url: str,
+        *,
+        byte_limit: int,
+        approved_locator_hashes: frozenset[str] | None = None,
+    ) -> DownloadFetchResult:
         """Fetch one URL under host, redirect, encoding, and streaming byte limits."""
 
+        _validate_request_url(url, self._runtime.allowed_hosts)
+        _require_authorized_url(url, approved_locator_hashes)
+        cached = self._cache.get(url) if self._policy.cache_enabled else None
+        if cached is not None:
+            _require_authorized_url(cached.final_request_url, approved_locator_hashes)
+            return replace(cached, network_performed=False, cache_hit=True)
         if byte_limit <= 0:
             raise DownloadFailure(
                 DownloadErrorCode.RESPONSE_TOO_LARGE,
@@ -212,13 +302,20 @@ class SafeDownloadClient:
         current_url = url
         redirect_count = 0
         while True:
-            _validate_request_url(current_url, self._runtime.allowed_hosts)
+            host = _validate_request_url(current_url, self._runtime.allowed_hosts)
+            _require_authorized_url(current_url, approved_locator_hashes)
             network_state: bool | None = (
                 True
                 if self._runtime.execution_mode is DownloadExecutionMode.LIVE_NETWORK
                 else False
             )
+            received = 0
             try:
+                if self._runtime.execution_mode is DownloadExecutionMode.LIVE_NETWORK:
+                    await self._rate_limiter.wait(
+                        host,
+                        requests_per_second=self._policy.requests_per_second_per_host,
+                    )
                 async with self._client.stream("GET", current_url) as response:
                     self._client.cookies.clear()
                     if response.status_code in _REDIRECT_STATUSES:
@@ -239,16 +336,38 @@ class SafeDownloadClient:
                             )
                         next_url = urljoin(current_url, location)
                         _validate_request_url(next_url, self._runtime.allowed_hosts)
+                        _require_authorized_url(
+                            next_url,
+                            approved_locator_hashes,
+                            network_performed=network_state,
+                            http_status=response.status_code,
+                        )
                         current_url = next_url
                         redirect_count += 1
                         continue
-                    if not 200 <= response.status_code < 300:
+                    if response.status_code != 200:
+                        partial_content = response.status_code == 206
                         raise DownloadFailure(
-                            DownloadErrorCode.HTTP_ERROR,
-                            "Download response was not successful",
-                            retryable=response.status_code in _RETRYABLE_STATUSES,
+                            (
+                                DownloadErrorCode.INCOMPLETE_RESPONSE
+                                if partial_content
+                                else DownloadErrorCode.HTTP_ERROR
+                            ),
+                            (
+                                "Unsolicited partial content is not a complete artifact"
+                                if partial_content
+                                else "Download response was not successful"
+                            ),
+                            retryable=(
+                                not partial_content and response.status_code in _RETRYABLE_STATUSES
+                            ),
                             network_performed=network_state,
                             http_status=response.status_code,
+                            retry_after_seconds=_retry_after_seconds(
+                                response.headers.get("retry-after"),
+                                maximum=self._policy.max_retry_after_seconds,
+                                now=self._wall_clock(),
+                            ),
                         )
                     encoding = response.headers.get("content-encoding", "identity").casefold()
                     if encoding not in {"", "identity"}:
@@ -258,7 +377,11 @@ class SafeDownloadClient:
                             network_performed=network_state,
                             http_status=response.status_code,
                         )
-                    declared_length = _content_length(response.headers.get("content-length"))
+                    declared_length = _content_length(
+                        response.headers.get("content-length"),
+                        network_performed=network_state,
+                        http_status=response.status_code,
+                    )
                     if declared_length is not None and declared_length > byte_limit:
                         raise DownloadFailure(
                             DownloadErrorCode.RESPONSE_TOO_LARGE,
@@ -267,7 +390,6 @@ class SafeDownloadClient:
                             http_status=response.status_code,
                         )
                     chunks: list[bytes] = []
-                    received = 0
                     async for chunk in response.aiter_bytes(
                         chunk_size=self._policy.chunk_size_bytes
                     ):
@@ -292,19 +414,23 @@ class SafeDownloadClient:
                         raise DownloadFailure(
                             DownloadErrorCode.INCOMPLETE_RESPONSE,
                             "Received bytes differ from the declared response length",
+                            retryable=True,
                             network_performed=network_state,
                             bytes_received=received,
                             http_status=response.status_code,
                         )
                     content = b"".join(chunks)
                     metadata = _response_metadata(response, current_url, declared_length)
-                    return DownloadFetchResult(
+                    result = DownloadFetchResult(
                         content=content,
                         response=metadata,
                         final_request_url=current_url,
                         network_performed=bool(network_state),
                         redirect_count=redirect_count,
                     )
+                    if self._policy.cache_enabled:
+                        self._cache[url] = result
+                    return result
             except DownloadFailure:
                 raise
             except _DnsPinningFailure as exc:
@@ -314,7 +440,7 @@ class SafeDownloadClient:
                     retryable=exc.retryable,
                     network_performed=False,
                 ) from exc
-            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.ProtocolError) as exc:
                 raise DownloadFailure(
                     DownloadErrorCode.TIMEOUT,
                     "Download transport failed or timed out",
@@ -324,6 +450,7 @@ class SafeDownloadClient:
                         if self._runtime.execution_mode is DownloadExecutionMode.LIVE_NETWORK
                         else False
                     ),
+                    bytes_received=received,
                 ) from exc
             finally:
                 self._client.cookies.clear()
@@ -363,7 +490,54 @@ def _validate_request_url(url: str, allowed_hosts: tuple[str, ...]) -> str:
     return host
 
 
-def _content_length(value: str | None) -> int | None:
+def _require_authorized_url(
+    url: str,
+    approved_locator_hashes: frozenset[str] | None,
+    *,
+    network_performed: bool | None = False,
+    http_status: int | None = None,
+) -> None:
+    if (
+        approved_locator_hashes is not None
+        and calculate_url_locator_hash(url) not in approved_locator_hashes
+    ):
+        raise DownloadFailure(
+            DownloadErrorCode.LICENSE_APPROVAL_REQUIRED,
+            "Download URL lacks exact locator-bound approval",
+            network_performed=network_performed,
+            http_status=http_status,
+        )
+
+
+def _retry_after_seconds(
+    value: str | None,
+    *,
+    maximum: float,
+    now: datetime,
+) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value.strip())
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if retry_at.tzinfo is None or retry_at.utcoffset() is None:
+            return None
+        parsed = max(0.0, (retry_at.astimezone(UTC) - now.astimezone(UTC)).total_seconds())
+    if not 0.0 <= parsed < float("inf"):
+        return None
+    return min(parsed, maximum)
+
+
+def _content_length(
+    value: str | None,
+    *,
+    network_performed: bool | None,
+    http_status: int,
+) -> int | None:
     if value is None:
         return None
     try:
@@ -372,11 +546,15 @@ def _content_length(value: str | None) -> int | None:
         raise DownloadFailure(
             DownloadErrorCode.HTTP_ERROR,
             "Content-Length is not a valid non-negative integer",
+            network_performed=network_performed,
+            http_status=http_status,
         ) from exc
     if parsed < 0:
         raise DownloadFailure(
             DownloadErrorCode.HTTP_ERROR,
             "Content-Length is not a valid non-negative integer",
+            network_performed=network_performed,
+            http_status=http_status,
         )
     return parsed
 

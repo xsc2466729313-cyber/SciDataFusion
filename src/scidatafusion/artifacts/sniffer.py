@@ -18,6 +18,7 @@ _JPEG = b"\xff\xd8\xff"
 _TIFF_LE = b"II*\x00"
 _TIFF_BE = b"MM\x00*"
 _HDF5 = b"\x89HDF\r\n\x1a\n"
+_MAX_TEXT_PROBE_BYTES = 1_048_576
 
 
 class ContentSniffer:
@@ -42,6 +43,11 @@ class ContentSniffer:
                 normalized_declared is not None and normalized_declared != detected
             ),
             confidence=confidence,
+            requires_review=(
+                (normalized_declared is not None and normalized_declared != detected)
+                or basis is ContentDetectionBasis.UNKNOWN
+                or kind is ArtifactKind.UNKNOWN
+            ),
         )
 
 
@@ -81,12 +87,19 @@ def _detect(
         return "application/gzip", ContentDetectionBasis.MAGIC_BYTES, ArtifactKind.ARCHIVE, 1.0
     if content.startswith((b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")):
         return _detect_zip(content)
-    text = _decode_text(content)
+    text = _decode_text(content[:_MAX_TEXT_PROBE_BYTES])
     if text is not None:
         stripped = text.lstrip("\ufeff\t\r\n ")
         folded = stripped[:512].casefold()
         if folded.startswith(("<!doctype html", "<html", "<head", "<body")):
             return "text/html", ContentDetectionBasis.TEXT_PROBE, ArtifactKind.LANDING_PAGE, 0.98
+        if len(content) > _MAX_TEXT_PROBE_BYTES and stripped.startswith(("{", "[")):
+            return (
+                "application/octet-stream",
+                ContentDetectionBasis.UNKNOWN,
+                ArtifactKind.UNKNOWN,
+                0.0,
+            )
         if _is_json(stripped):
             return (
                 "application/json",

@@ -241,3 +241,68 @@ def test_phase2_selection_demo_reports_candidate_coverage_and_gaps_safely(
     assert reviewer not in captured.out
     assert "evil.example" not in captured.out
     assert "https://" not in captured.out
+
+
+def test_phase3_download_demo_builds_safe_replayable_bronze_summary(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m07-reviewer@example.org"
+
+    exit_code = main(
+        [
+            "phase3-download-demo",
+            "--goal",
+            goal,
+            "--confirmed-by",
+            reviewer,
+        ]
+    )
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "partial"
+    assert report["execution_mode"] == "offline_fixture"
+    assert report["network_performed"] is False
+    assert report["network_status"] == "not_performed"
+    assert report["event_type"] == "artifact.download.completed"
+    assert report["stored_event_count"] == 5
+    assert report["event_count"] == 6
+    assert report["metrics"] == {
+        "selected_source_count": 3,
+        "attempted_download_count": 5,
+        "stored_download_count": 3,
+        "deduplicated_download_count": 1,
+        "skipped_download_count": 1,
+        "failed_download_count": 0,
+        "quarantined_download_count": 0,
+        "cache_hit_count": 0,
+        "review_required_object_count": 0,
+        "acquisition_count": 6,
+        "archive_member_count": 2,
+        "bronze_object_count": 5,
+        "received_bytes": 590,
+        "persisted_unique_bytes": 612,
+    }
+    assert report["relationships"] == {
+        "archive_member": 2,
+        "landing_attachment": 1,
+        "root_download": 3,
+    }
+    assert set(report["detected_media_types"]) == {
+        "application/pdf",
+        "application/zip",
+        "text/csv",
+        "text/html",
+        "text/plain",
+    }
+    assert len(report["objects"]) == 5
+    assert all(item["immutable"] is True for item in report["objects"])
+    assert all(len(item["byte_sha256"]) == 64 for item in report["objects"])
+    assert goal not in captured.out
+    assert reviewer not in captured.out
+    assert "evil.example" not in captured.out
+    assert "malware.exe" not in captured.out
+    assert "offline-fixture:" not in captured.out
+    assert "https://" not in captured.out

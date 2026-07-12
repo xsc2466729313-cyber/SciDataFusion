@@ -3,25 +3,33 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Sequence
+import time
+from collections.abc import Awaitable, Callable, Sequence
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import datetime
 from html.parser import HTMLParser
 from threading import RLock
+from typing import Protocol
 from urllib.parse import urljoin, urlsplit
 
 import httpx
 
 from scidatafusion.artifacts.archive import ExtractedArchiveMember, SafeArchiveInspector
+from scidatafusion.artifacts.checkpoints import (
+    ArtifactCheckpointStore,
+    MemoryArtifactCheckpointStore,
+)
 from scidatafusion.artifacts.downloader import (
     DownloadFailure,
     HostResolver,
+    LiveHostRateLimiter,
     SafeDownloadClient,
     sanitize_url_for_manifest,
 )
 from scidatafusion.artifacts.integrity import (
     calculate_acquisition_hash,
+    calculate_artifact_download_idempotency_key,
     calculate_artifact_download_input_hash,
     calculate_artifact_download_output_hash,
     calculate_artifact_manifest_hash,
@@ -39,6 +47,7 @@ from scidatafusion.artifacts.storage import BronzeByteStore, MemoryBronzeStore
 from scidatafusion.contracts.artifacts import (
     AcquisitionStatus,
     ArtifactAcquisition,
+    ArtifactDownloadCompletedPayload,
     ArtifactDownloadMetrics,
     ArtifactDownloadRequest,
     ArtifactDownloadResult,
@@ -53,7 +62,9 @@ from scidatafusion.contracts.artifacts import (
     DownloadAttempt,
     DownloadAttemptStatus,
     DownloadErrorCode,
+    DownloadExecutionMode,
     DownloadLocatorRecord,
+    DownloadPolicy,
     DownloadResponseMetadata,
     DownloadRunLog,
     SourceDownloadApproval,
@@ -63,7 +74,7 @@ from scidatafusion.contracts.connectors import CandidateIdentifier, IdentifierKi
 from scidatafusion.contracts.events import EventEnvelope, EventType, ProducerRef
 from scidatafusion.contracts.selection import LicenseDecision, SelectedSource
 from scidatafusion.domain.registry import canonical_hash
-from scidatafusion.errors import AppError
+from scidatafusion.errors import AppError, ErrorCode
 
 _ZERO_HASH = "0" * 64
 _SECURITY_FAILURES = frozenset(
@@ -102,10 +113,19 @@ _ATTACHMENT_SUFFIXES = frozenset(
         ".zip",
     }
 )
+Sleep = Callable[[float], Awaitable[None]]
+
+
+class DownloadRequestAuthorizer(Protocol):
+    """Trusted deployment boundary for live allowlists and human approvals."""
+
+    def authorize(self, request: ArtifactDownloadRequest) -> None:
+        """Raise a structured error unless this exact live request is trusted."""
 
 
 @dataclass(slots=True)
 class _ExecutionState:
+    idempotency_key: str
     objects_by_hash: dict[str, BronzeObject] = field(default_factory=dict)
     acquisitions: list[ArtifactAcquisition] = field(default_factory=list)
     attempts: list[DownloadAttempt] = field(default_factory=list)
@@ -120,46 +140,109 @@ class ArtifactDownloadService:
         self,
         *,
         store: BronzeByteStore | None = None,
+        checkpoints: ArtifactCheckpointStore | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         resolver: HostResolver | None = None,
+        authorizer: DownloadRequestAuthorizer | None = None,
+        rate_limiter: LiveHostRateLimiter | None = None,
         clock: Callable[[], datetime] = utc_now,
+        sleep: Sleep = asyncio.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
         producer_version: str = "1.0.0",
     ) -> None:
         self._store = store or MemoryBronzeStore()
+        self._checkpoints = checkpoints or MemoryArtifactCheckpointStore()
         self._transport = transport
         self._resolver = resolver
+        self._authorizer = authorizer
         self._clock = clock
+        self._sleep = sleep
+        self._monotonic = monotonic
+        self._rate_limiter = rate_limiter or LiveHostRateLimiter(
+            sleep=sleep,
+            monotonic=monotonic,
+        )
         self._producer_version = producer_version
         self._cache: dict[str, ArtifactDownloadResult] = {}
         self._inflight: dict[str, Future[ArtifactDownloadResult]] = {}
         self._lock = RLock()
 
+    async def aclose(self) -> None:
+        """Close the caller-owned shared transport after all executions finish."""
+
+        if self._transport is not None:
+            await self._transport.aclose()
+
     async def execute(self, request: ArtifactDownloadRequest) -> ArtifactDownloadResult:
         """Return one idempotent result and coalesce concurrent identical requests."""
 
         verify_artifact_download_request_integrity(request)
+        if request.runtime.execution_mode is DownloadExecutionMode.LIVE_NETWORK:
+            if self._authorizer is None:
+                raise AppError(
+                    ErrorCode.SECURITY_POLICY_VIOLATION,
+                    "Live M07 requests require a trusted deployment authorizer",
+                )
+            try:
+                self._authorizer.authorize(request)
+            except AppError:
+                raise
+            except Exception as exc:
+                raise AppError(
+                    ErrorCode.SECURITY_POLICY_VIOLATION,
+                    "Live M07 request authorization failed closed",
+                ) from exc
+            if isinstance(self._store, MemoryBronzeStore) or isinstance(
+                self._checkpoints,
+                MemoryArtifactCheckpointStore,
+            ):
+                raise AppError(
+                    ErrorCode.CONFIGURATION_ERROR,
+                    "Live M07 execution requires durable Bronze and checkpoint stores",
+                )
         input_hash = calculate_artifact_download_input_hash(request)
+        idempotency_key = calculate_artifact_download_idempotency_key(
+            request,
+            self._producer_version,
+        )
         with self._lock:
-            cached = self._cache.get(input_hash)
+            cached = self._cache.get(idempotency_key)
             if cached is not None:
                 return cached
-            pending = self._inflight.get(input_hash)
+        checkpoint = self._checkpoints.load(idempotency_key)
+        if checkpoint is not None:
+            if checkpoint.producer_version != self._producer_version:
+                raise AppError(
+                    ErrorCode.ARTIFACT_INTEGRITY_ERROR,
+                    "M07 checkpoint producer does not match this service",
+                )
+            verify_artifact_download_integrity(checkpoint, request, self._store)
+            with self._lock:
+                return self._cache.setdefault(idempotency_key, checkpoint)
+        with self._lock:
+            pending = self._inflight.get(idempotency_key)
             is_owner = pending is None
             if pending is None:
                 pending = Future()
-                self._inflight[input_hash] = pending
+                self._inflight[idempotency_key] = pending
         if not is_owner:
             return await asyncio.shield(asyncio.wrap_future(pending))
         try:
-            result = await self._execute_once(request, input_hash=input_hash)
+            result = await self._execute_once(
+                request,
+                input_hash=input_hash,
+                idempotency_key=idempotency_key,
+            )
+            result = self._checkpoints.save(result)
+            verify_artifact_download_integrity(result, request, self._store)
         except BaseException as exc:
             with self._lock:
-                self._inflight.pop(input_hash, None)
+                self._inflight.pop(idempotency_key, None)
             pending.set_exception(exc)
             raise
         with self._lock:
-            existing = self._cache.setdefault(input_hash, result)
-            self._inflight.pop(input_hash, None)
+            existing = self._cache.setdefault(idempotency_key, result)
+            self._inflight.pop(idempotency_key, None)
         pending.set_result(existing)
         return existing
 
@@ -168,15 +251,20 @@ class ArtifactDownloadService:
         request: ArtifactDownloadRequest,
         *,
         input_hash: str,
+        idempotency_key: str,
     ) -> ArtifactDownloadResult:
         created_at = self._clock()
-        state = _ExecutionState()
+        state = _ExecutionState(idempotency_key=idempotency_key)
         approvals = {item.candidate_id: item for item in request.approvals}
         async with SafeDownloadClient(
             request.runtime,
             request.policy,
             transport=self._transport,
             resolver=self._resolver,
+            rate_limiter=self._rate_limiter,
+            sleep=self._sleep,
+            monotonic=self._monotonic,
+            wall_clock=self._clock,
         ) as client:
             for source in request.selected_source_set.sources:
                 url_locators = tuple(
@@ -208,6 +296,7 @@ class ArtifactDownloadService:
             request,
             state=state,
             input_hash=input_hash,
+            idempotency_key=idempotency_key,
             created_at=created_at,
         )
         verify_artifact_download_integrity(result, request, self._store)
@@ -251,7 +340,18 @@ class ArtifactDownloadService:
             remaining = request.policy.max_total_bytes - state.downloaded_bytes
             limit = min(request.policy.max_file_bytes, remaining)
             try:
-                fetched = await client.fetch(url, byte_limit=limit)
+                fetched = await client.fetch(
+                    url,
+                    byte_limit=limit,
+                    approved_locator_hashes=(
+                        None
+                        if source.license_decision is LicenseDecision.ALLOWED
+                        else frozenset(approval.locator_hashes)
+                        if approval is not None
+                        else frozenset()
+                    ),
+                )
+                received_bytes = 0 if fetched.cache_hit else len(fetched.content)
                 final_approval_ref = _approval_ref(
                     source,
                     fetched.response.final_locator_hash,
@@ -265,7 +365,7 @@ class ArtifactDownloadService:
                         DownloadErrorCode.LICENSE_APPROVAL_REQUIRED,
                         "Redirect target requires exact locator-bound approval",
                         network_performed=fetched.network_performed,
-                        bytes_received=len(fetched.content),
+                        bytes_received=received_bytes,
                         http_status=fetched.response.status_code,
                     )
                 inspection = ContentSniffer.inspect(
@@ -284,7 +384,7 @@ class ArtifactDownloadService:
                             DownloadErrorCode.ARCHIVE_REJECTED,
                             exc.message,
                             network_performed=fetched.network_performed,
-                            bytes_received=len(fetched.content),
+                            bytes_received=received_bytes,
                             http_status=fetched.response.status_code,
                         ) from exc
                 prior_object_hashes = set(state.objects_by_hash)
@@ -320,15 +420,20 @@ class ArtifactDownloadService:
                         DownloadErrorCode.STORAGE_ERROR,
                         "Failed to persist the immutable Bronze acquisition",
                         network_performed=fetched.network_performed,
-                        bytes_received=len(fetched.content),
+                        bytes_received=received_bytes,
                         http_status=fetched.response.status_code,
                     ) from exc
-                state.downloaded_bytes += len(fetched.content)
+                state.downloaded_bytes += received_bytes
                 state.attempts.append(
                     DownloadAttempt(
                         attempt_id=_stable_id(
                             "dat",
-                            (source.candidate_id, locator_hash, attempt_number),
+                            (
+                                state.idempotency_key,
+                                source.candidate_id,
+                                locator_hash,
+                                attempt_number,
+                            ),
                             length=16,
                         ),
                         candidate_id=source.candidate_id,
@@ -344,7 +449,8 @@ class ArtifactDownloadService:
                         retryable=False,
                         started_at=started_at,
                         finished_at=self._clock(),
-                        bytes_received=len(fetched.content),
+                        bytes_received=received_bytes,
+                        cache_hit=fetched.cache_hit,
                         http_status=fetched.response.status_code,
                         byte_sha256=obj.byte_sha256,
                         object_id=obj.object_id,
@@ -361,6 +467,7 @@ class ArtifactDownloadService:
                         base_url=fetched.final_request_url,
                         allowed_hosts=request.runtime.allowed_hosts,
                         maximum=request.policy.max_attachments_per_landing,
+                        byte_limit=request.policy.max_html_inspection_bytes,
                     )
                     for link in links:
                         await self._acquire_url(
@@ -382,11 +489,21 @@ class ArtifactDownloadService:
                     if failure.code in _SECURITY_FAILURES
                     else DownloadAttemptStatus.FAILED
                 )
+                will_retry = (
+                    failure.retryable
+                    and status is DownloadAttemptStatus.FAILED
+                    and attempt_number < request.policy.max_attempts
+                )
                 state.attempts.append(
                     DownloadAttempt(
                         attempt_id=_stable_id(
                             "dat",
-                            (source.candidate_id, locator_hash, attempt_number),
+                            (
+                                state.idempotency_key,
+                                source.candidate_id,
+                                locator_hash,
+                                attempt_number,
+                            ),
                             length=16,
                         ),
                         candidate_id=source.candidate_id,
@@ -396,15 +513,22 @@ class ArtifactDownloadService:
                         network_performed=failure.network_performed,
                         status=status,
                         error_code=failure.code,
-                        retryable=failure.retryable and status is DownloadAttemptStatus.FAILED,
+                        retryable=will_retry,
                         started_at=started_at,
                         finished_at=self._clock(),
                         bytes_received=failure.bytes_received,
                         http_status=failure.http_status,
                     )
                 )
-                if not failure.retryable or attempt_number == request.policy.max_attempts:
+                if not will_retry:
                     return
+                delay = _retry_delay(
+                    request.policy,
+                    attempt_number=attempt_number,
+                    retry_after_seconds=failure.retry_after_seconds,
+                )
+                if delay > 0.0:
+                    await self._sleep(delay)
 
     def _persist(
         self,
@@ -508,7 +632,7 @@ class ArtifactDownloadService:
             DownloadAttempt(
                 attempt_id=_stable_id(
                     "dat",
-                    (source.candidate_id, locator.locator_hash, 1),
+                    (state.idempotency_key, source.candidate_id, locator.locator_hash, 1),
                     length=16,
                 ),
                 candidate_id=source.candidate_id,
@@ -531,6 +655,7 @@ class ArtifactDownloadService:
         *,
         state: _ExecutionState,
         input_hash: str,
+        idempotency_key: str,
         created_at: datetime,
     ) -> ArtifactDownloadResult:
         selected = request.selected_source_set
@@ -600,19 +725,24 @@ class ArtifactDownloadService:
             }
         )
         metrics = _metrics(manifest, artifact_set, run_log)
-        status = _status(manifest, run_log)
+        status = _status(manifest, artifact_set, run_log)
         warnings = tuple(
             f"{item.error_code.value}:{item.attempt_id}"
             for item in run_log.attempts
             if item.error_code is not None
+        ) + tuple(
+            f"{(DownloadErrorCode.CONTENT_TYPE_MISMATCH if item.media.media_type_mismatch else DownloadErrorCode.UNSUPPORTED_MEDIA_TYPE).value}:{item.object_id}"
+            for item in artifact_set.objects
+            if item.media.requires_review
         )
-        events = tuple(
-            EventEnvelope[ArtifactStoredPayload](
-                event_id=_stable_id("evt", (input_hash, obj.object_id), length=32),
+        stored_events = tuple(
+            EventEnvelope[ArtifactStoredPayload | ArtifactDownloadCompletedPayload](
+                event_id=_stable_id("evt", (idempotency_key, obj.object_id), length=32),
                 event_type=EventType.ARTIFACT_STORED,
                 task_id=selected.task_id,
                 run_id=selected.run_id,
                 occurred_at=created_at,
+                schema_version=selected.contract_version,
                 producer=ProducerRef(
                     component="artifact_download_service",
                     version=self._producer_version,
@@ -628,11 +758,35 @@ class ArtifactDownloadService:
                     ),
                     input_hash=input_hash,
                     output_hash=_ZERO_HASH,
-                    idempotency_key=input_hash,
+                    idempotency_key=idempotency_key,
                 ),
             )
             for obj in artifact_set.objects
         )
+        completed_event = EventEnvelope[ArtifactStoredPayload | ArtifactDownloadCompletedPayload](
+            event_id=_stable_id("evt", (idempotency_key, "completed"), length=32),
+            event_type=EventType.ARTIFACT_DOWNLOAD_COMPLETED,
+            task_id=selected.task_id,
+            run_id=selected.run_id,
+            occurred_at=created_at,
+            schema_version=selected.contract_version,
+            producer=ProducerRef(
+                component="artifact_download_service",
+                version=self._producer_version,
+            ),
+            correlation_id=input_hash,
+            payload=ArtifactDownloadCompletedPayload(
+                status=status,
+                artifact_set_hash=artifact_set.artifact_set_hash,
+                manifest_hash=manifest.manifest_hash,
+                run_log_hash=run_log.run_log_hash,
+                bronze_object_count=len(artifact_set.objects),
+                input_hash=input_hash,
+                output_hash=_ZERO_HASH,
+                idempotency_key=idempotency_key,
+            ),
+        )
+        events = (*stored_events, completed_event)
         draft = ArtifactDownloadResult(
             task_id=selected.task_id,
             run_id=selected.run_id,
@@ -642,7 +796,7 @@ class ArtifactDownloadService:
             status=status,
             input_hash=input_hash,
             output_hash=_ZERO_HASH,
-            idempotency_key=input_hash,
+            idempotency_key=idempotency_key,
             artifact_set=artifact_set,
             manifest=manifest,
             run_log=run_log,
@@ -687,6 +841,10 @@ def _metrics(
         quarantined_download_count=sum(
             item.status is DownloadAttemptStatus.QUARANTINED for item in run_log.attempts
         ),
+        cache_hit_count=sum(item.cache_hit for item in run_log.attempts),
+        review_required_object_count=sum(
+            item.media.requires_review for item in artifact_set.objects
+        ),
         acquisition_count=len(manifest.acquisitions),
         archive_member_count=sum(
             item.relationship is ArtifactRelationship.ARCHIVE_MEMBER
@@ -700,29 +858,62 @@ def _metrics(
 
 def _status(
     manifest: ArtifactManifest,
+    artifact_set: BronzeArtifactSet,
     run_log: DownloadRunLog,
 ) -> ArtifactDownloadStatus:
-    successful = tuple(
-        item
-        for item in run_log.attempts
-        if item.status in {DownloadAttemptStatus.STORED, DownloadAttemptStatus.DEDUPLICATED}
-    )
+    terminal_attempts = _terminal_attempts(run_log)
     if not manifest.selected_candidate_ids:
         return ArtifactDownloadStatus.UNSUPPORTED
     if not manifest.acquisitions:
-        return (
-            ArtifactDownloadStatus.NEEDS_REVIEW
-            if any(
-                item.error_code is DownloadErrorCode.LICENSE_APPROVAL_REQUIRED
-                for item in run_log.attempts
-            )
-            else ArtifactDownloadStatus.UNSUPPORTED
+        if any(
+            item.error_code is DownloadErrorCode.LICENSE_APPROVAL_REQUIRED
+            or item.status is DownloadAttemptStatus.QUARANTINED
+            for item in run_log.attempts
+        ):
+            return ArtifactDownloadStatus.NEEDS_REVIEW
+        if any(item.status is DownloadAttemptStatus.FAILED for item in run_log.attempts):
+            return ArtifactDownloadStatus.FAILED
+        return ArtifactDownloadStatus.UNSUPPORTED
+    if (
+        any(
+            item.status not in {DownloadAttemptStatus.STORED, DownloadAttemptStatus.DEDUPLICATED}
+            for item in terminal_attempts
         )
-    if len(successful) != len(run_log.attempts) or {
-        item.candidate_id for item in manifest.acquisitions
-    } != set(manifest.selected_candidate_ids):
+        or {item.candidate_id for item in manifest.acquisitions}
+        != set(manifest.selected_candidate_ids)
+        or any(item.media.requires_review for item in artifact_set.objects)
+    ):
         return ArtifactDownloadStatus.PARTIAL
     return ArtifactDownloadStatus.SUCCEEDED
+
+
+def _terminal_attempts(run_log: DownloadRunLog) -> tuple[DownloadAttempt, ...]:
+    terminal_by_locator: dict[tuple[str, str], DownloadAttempt] = {}
+    for attempt in run_log.attempts:
+        key = (attempt.candidate_id, attempt.locator.locator_hash)
+        previous = terminal_by_locator.get(key)
+        if previous is None or attempt.attempt_number > previous.attempt_number:
+            terminal_by_locator[key] = attempt
+    return tuple(terminal_by_locator.values())
+
+
+def _retry_delay(
+    policy: DownloadPolicy,
+    *,
+    attempt_number: int,
+    retry_after_seconds: float | None,
+) -> float:
+    exponential = min(
+        policy.max_backoff_seconds,
+        policy.base_backoff_seconds * (2 ** (attempt_number - 1)),
+    )
+    if retry_after_seconds is None:
+        return float(exponential)
+    bounded_retry_after = min(
+        policy.max_retry_after_seconds,
+        retry_after_seconds,
+    )
+    return float(max(exponential, bounded_retry_after))
 
 
 def _locator_record(locator: CandidateIdentifier) -> DownloadLocatorRecord:
@@ -771,11 +962,9 @@ def _attachment_links(
     base_url: str,
     allowed_hosts: tuple[str, ...],
     maximum: int,
+    byte_limit: int,
 ) -> tuple[str, ...]:
-    try:
-        text = content.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        return ()
+    text = content[:byte_limit].decode("utf-8-sig", errors="replace")
     parser = _LinkParser()
     parser.feed(text)
     links: list[str] = []

@@ -35,6 +35,7 @@ class EventType(StrEnum):
     SELECTION_COMPLETED = "selection.completed"
     SEARCH_COMPLETED = "search.completed"
     ARTIFACT_STORED = "artifact.stored"
+    ARTIFACT_DOWNLOAD_COMPLETED = "artifact.download.completed"
     DOCUMENT_PARSED = "document.parsed"
     FIELD_EXTRACTED = "field.extracted"
     RECORD_NORMALIZED = "record.normalized"

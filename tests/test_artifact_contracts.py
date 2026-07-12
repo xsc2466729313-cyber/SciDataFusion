@@ -10,6 +10,7 @@ from scidatafusion.cli import _build_search_planning, _execute_offline_connector
 from scidatafusion.contracts.artifacts import (
     AcquisitionStatus,
     ArtifactAcquisition,
+    ArtifactDownloadCompletedPayload,
     ArtifactDownloadMetrics,
     ArtifactDownloadRequest,
     ArtifactDownloadResult,
@@ -205,6 +206,8 @@ def _result() -> ArtifactDownloadResult:
         skipped_download_count=0,
         failed_download_count=0,
         quarantined_download_count=0,
+        cache_hit_count=0,
+        review_required_object_count=0,
         acquisition_count=1,
         archive_member_count=0,
         bronze_object_count=1,
@@ -217,6 +220,16 @@ def _result() -> ArtifactDownloadResult:
         artifact_set_hash=HASH_B,
         manifest_hash=HASH_A,
         acquisition_count=1,
+        input_hash=HASH_A,
+        output_hash=HASH_B,
+        idempotency_key=HASH_A,
+    )
+    completed_payload = ArtifactDownloadCompletedPayload(
+        status=ArtifactDownloadStatus.SUCCEEDED,
+        artifact_set_hash=HASH_B,
+        manifest_hash=HASH_A,
+        run_log_hash=HASH_A,
+        bronze_object_count=1,
         input_hash=HASH_A,
         output_hash=HASH_B,
         idempotency_key=HASH_A,
@@ -236,7 +249,7 @@ def _result() -> ArtifactDownloadResult:
         run_log=_run_log(),
         metrics=metrics,
         events=(
-            EventEnvelope[ArtifactStoredPayload](
+            EventEnvelope[ArtifactStoredPayload | ArtifactDownloadCompletedPayload](
                 event_type=EventType.ARTIFACT_STORED,
                 task_id="tsk_11111111111111111111111111111111",
                 run_id="run_11111111111111111111111111111111",
@@ -244,6 +257,15 @@ def _result() -> ArtifactDownloadResult:
                 producer=ProducerRef(component="artifact_download_service", version="1.0.0"),
                 correlation_id=HASH_A,
                 payload=payload,
+            ),
+            EventEnvelope[ArtifactStoredPayload | ArtifactDownloadCompletedPayload](
+                event_type=EventType.ARTIFACT_DOWNLOAD_COMPLETED,
+                task_id="tsk_11111111111111111111111111111111",
+                run_id="run_11111111111111111111111111111111",
+                occurred_at=NOW,
+                producer=ProducerRef(component="artifact_download_service", version="1.0.0"),
+                correlation_id=HASH_A,
+                payload=completed_payload,
             ),
         ),
     )
@@ -295,6 +317,50 @@ def test_content_addresses_media_and_attempt_metrics_are_derived() -> None:
         ArtifactDownloadResult.model_validate(result)
 
 
+def test_download_run_log_requires_a_closed_contiguous_retry_sequence() -> None:
+    def failed_attempt(
+        number: int,
+        *,
+        retryable: bool,
+        suffix: str,
+    ) -> DownloadAttempt:
+        payload = _attempt().model_dump(mode="python")
+        payload.update(
+            {
+                "attempt_id": f"dat_{suffix * 16}",
+                "attempt_number": number,
+                "status": DownloadAttemptStatus.FAILED,
+                "error_code": DownloadErrorCode.TIMEOUT,
+                "retryable": retryable,
+                "bytes_received": 0,
+                "http_status": None,
+                "byte_sha256": None,
+                "object_id": None,
+                "acquisition_id": None,
+            }
+        )
+        return DownloadAttempt.model_validate(payload)
+
+    run_log = _run_log().model_dump(mode="python")
+    run_log["attempts"] = (failed_attempt(2, retryable=False, suffix="2"),)
+    with pytest.raises(ValidationError, match="contiguous and one-based"):
+        DownloadRunLog.model_validate(run_log)
+
+    run_log["attempts"] = (
+        failed_attempt(1, retryable=True, suffix="1"),
+        failed_attempt(2, retryable=True, suffix="2"),
+    )
+    with pytest.raises(ValidationError, match=r"terminal.*retryable"):
+        DownloadRunLog.model_validate(run_log)
+
+    run_log["attempts"] = (
+        failed_attempt(1, retryable=False, suffix="1"),
+        failed_attempt(2, retryable=False, suffix="2"),
+    )
+    with pytest.raises(ValidationError, match="precede another attempt"):
+        DownloadRunLog.model_validate(run_log)
+
+
 def test_urls_archive_paths_runtime_and_response_names_fail_closed() -> None:
     with pytest.raises(ValidationError, match="sanitized public HTTPS"):
         DownloadLocatorRecord(
@@ -337,6 +403,14 @@ def test_urls_archive_paths_runtime_and_response_names_fail_closed() -> None:
             execution_mode=DownloadExecutionMode.LIVE_NETWORK,
             network_enabled=True,
             allowed_hosts=("localhost",),
+            checked_at=NOW,
+            runtime_hash=HASH_A,
+        )
+    with pytest.raises(ValidationError, match="public DNS"):
+        DownloadRuntimeSnapshot(
+            execution_mode=DownloadExecutionMode.LIVE_NETWORK,
+            network_enabled=True,
+            allowed_hosts=("93.184.216.34",),
             checked_at=NOW,
             runtime_hash=HASH_A,
         )
@@ -406,6 +480,16 @@ def test_download_request_binds_budget_approvals_and_runtime(
             policy=request.policy,
             runtime=runtime,
             approvals=(expired,),
+            requested_at=NOW,
+        )
+
+    future = approval.model_copy(update={"approved_at": NOW + timedelta(seconds=1)})
+    with pytest.raises(ValidationError, match="future"):
+        ArtifactDownloadRequest(
+            selected_source_set=selected_source_set,
+            policy=request.policy,
+            runtime=runtime,
+            approvals=(future,),
             requested_at=NOW,
         )
 

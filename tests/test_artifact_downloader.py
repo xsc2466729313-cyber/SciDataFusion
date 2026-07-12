@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncIterator, Callable, Coroutine
 from datetime import UTC, datetime
 
@@ -11,8 +12,10 @@ from scidatafusion.artifacts.downloader import (
     DnsPinnedTransport,
     DownloadFailure,
     DownloadFetchResult,
+    LiveHostRateLimiter,
     SafeDownloadClient,
 )
+from scidatafusion.artifacts.integrity import calculate_url_locator_hash
 from scidatafusion.contracts.artifacts import (
     DownloadErrorCode,
     DownloadExecutionMode,
@@ -157,6 +160,109 @@ def test_redirects_are_manual_bounded_and_revalidated_per_hop() -> None:
     assert exhausted.value.code is DownloadErrorCode.REDIRECT_LIMIT
 
 
+def test_restricted_redirect_is_rejected_before_target_request() -> None:
+    requests: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(str(request.url))
+        if request.url.path == "/root":
+            return httpx.Response(302, headers={"Location": "/restricted.csv"})
+        raise AssertionError("an unapproved redirect target must never be requested")
+
+    async def execute() -> None:
+        async with SafeDownloadClient(
+            _runtime(),
+            _policy(),
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            await client.fetch(
+                "https://example.org/root",
+                byte_limit=1000,
+                approved_locator_hashes=frozenset(
+                    {calculate_url_locator_hash("https://example.org/root")}
+                ),
+            )
+
+    with pytest.raises(DownloadFailure) as failure:
+        asyncio.run(execute())
+    assert failure.value.code is DownloadErrorCode.LICENSE_APPROVAL_REQUIRED
+    assert requests == ["https://example.org/root"]
+
+
+def test_successful_response_cache_avoids_a_duplicate_transport_call() -> None:
+    calls = 0
+
+    async def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, content=b"cached immutable bytes")
+
+    async def execute() -> tuple[DownloadFetchResult, DownloadFetchResult]:
+        async with SafeDownloadClient(
+            _runtime(),
+            _policy(cache_enabled=True),
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            first = await client.fetch("https://example.org/data", byte_limit=1000)
+            second = await client.fetch("https://example.org/data", byte_limit=0)
+            return first, second
+
+    first, second = asyncio.run(execute())
+    assert calls == 1
+    assert not first.cache_hit
+    assert second.cache_hit
+    assert second.content == first.content
+    assert second.network_performed is False
+
+
+def test_live_requests_are_rate_limited_independently_per_host() -> None:
+    now = [0.0]
+    delays: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        delays.append(delay)
+        now[0] += delay
+
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"live fixture bytes")
+
+    async def execute() -> None:
+        hosts = ("example.org", "cdn.example.org")
+        limiter = LiveHostRateLimiter(sleep=sleep, monotonic=lambda: now[0])
+        first_transport = DnsPinnedTransport(
+            _Resolver("93.184.216.34"),
+            hosts,
+            transport_factory=lambda: httpx.MockTransport(handler),
+        )
+        second_transport = DnsPinnedTransport(
+            _Resolver("93.184.216.34"),
+            hosts,
+            transport_factory=lambda: httpx.MockTransport(handler),
+        )
+        runtime = _runtime(DownloadExecutionMode.LIVE_NETWORK, hosts=hosts)
+        policy = _policy(requests_per_second_per_host=2.0, cache_enabled=False)
+        async with (
+            SafeDownloadClient(
+                runtime,
+                policy,
+                transport=first_transport,
+                rate_limiter=limiter,
+            ) as first,
+            SafeDownloadClient(
+                runtime,
+                policy,
+                transport=second_transport,
+                rate_limiter=limiter,
+            ) as second,
+        ):
+            await first.fetch("https://example.org/one", byte_limit=1000)
+            await second.fetch("https://cdn.example.org/one", byte_limit=1000)
+            await second.fetch("https://example.org/two", byte_limit=1000)
+
+    asyncio.run(execute())
+    assert delays == [0.5]
+
+
 @pytest.mark.parametrize(
     ("response", "byte_limit", "expected"),
     [
@@ -212,6 +318,24 @@ def test_response_limits_fail_before_storage(
     assert failure.value.code is expected
 
 
+def test_unsolicited_partial_content_is_never_persisted_as_a_complete_file() -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            206,
+            content=b"%PDF-truncated",
+            headers={
+                "Content-Length": "14",
+                "Content-Range": "bytes 0-13/1000",
+            },
+        )
+
+    with pytest.raises(DownloadFailure) as failure:
+        asyncio.run(_fetch(handler))
+    assert failure.value.code is DownloadErrorCode.INCOMPLETE_RESPONSE
+    assert not failure.value.retryable
+    assert failure.value.http_status == 206
+
+
 def test_stream_overflow_is_detected_within_one_policy_chunk() -> None:
     async def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(200, stream=_Chunks(b"x" * 10_000))
@@ -258,6 +382,22 @@ def test_http_and_transport_failures_retain_retry_and_network_audit() -> None:
         )
     assert live_failure.value.network_performed is None
 
+    async def invalid_length(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"bytes", headers={"Content-Length": "invalid"})
+
+    with pytest.raises(DownloadFailure) as length_failure:
+        asyncio.run(_fetch(invalid_length))
+    assert length_failure.value.network_performed is False
+    assert length_failure.value.http_status == 200
+
+    async def broken_protocol(request: httpx.Request) -> httpx.Response:
+        raise httpx.RemoteProtocolError("injected truncated response", request=request)
+
+    with pytest.raises(DownloadFailure) as protocol_failure:
+        asyncio.run(_fetch(broken_protocol))
+    assert protocol_failure.value.code is DownloadErrorCode.TIMEOUT
+    assert protocol_failure.value.retryable
+
 
 def test_live_dns_must_resolve_only_public_addresses_before_request() -> None:
     calls = 0
@@ -279,6 +419,44 @@ def test_live_dns_must_resolve_only_public_addresses_before_request() -> None:
             )
         )
     assert private_failure.value.code is DownloadErrorCode.DNS_NOT_PUBLIC
+    assert calls == 0
+
+    class SlowResolver:
+        def resolve(self, _: str) -> tuple[str, ...]:
+            time.sleep(0.05)
+            return ("93.184.216.34",)
+
+    async def resolve_with_timeout() -> None:
+        policy = _policy(connect_timeout_seconds=0.001)
+        transport = DnsPinnedTransport(
+            SlowResolver(),
+            ("example.org", "cdn.example.org"),
+            transport_factory=lambda: httpx.MockTransport(handler),
+            resolution_timeout_seconds=policy.connect_timeout_seconds,
+        )
+        async with SafeDownloadClient(
+            _runtime(DownloadExecutionMode.LIVE_NETWORK),
+            policy,
+            transport=transport,
+        ) as client:
+            await client.fetch("https://example.org/file", byte_limit=1000)
+
+    with pytest.raises(DownloadFailure) as resolution_timeout:
+        asyncio.run(resolve_with_timeout())
+    assert resolution_timeout.value.code is DownloadErrorCode.DNS_NOT_PUBLIC
+    assert resolution_timeout.value.retryable
+    assert calls == 0
+
+    multicast = _Resolver("224.0.0.1", "ff02::1")
+    with pytest.raises(DownloadFailure) as multicast_failure:
+        asyncio.run(
+            _fetch(
+                handler,
+                mode=DownloadExecutionMode.LIVE_NETWORK,
+                resolver=multicast,
+            )
+        )
+    assert multicast_failure.value.code is DownloadErrorCode.DNS_NOT_PUBLIC
     assert calls == 0
 
     resolution_error = _Resolver(error=OSError("DNS failed"))
@@ -307,6 +485,40 @@ def test_live_dns_must_resolve_only_public_addresses_before_request() -> None:
     assert observed_request.url.host == "93.184.216.34"
     assert observed_request.headers["host"] == "example.org"
     assert observed_request.extensions["sni_hostname"] == "example.org"
+
+
+def test_injected_dns_pinned_transport_remains_open_until_owner_closes_it() -> None:
+    class CloseTrackingTransport(httpx.AsyncBaseTransport):
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def handle_async_request(self, _: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=b"data")
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    async def scenario() -> tuple[bool, bool]:
+        delegate = CloseTrackingTransport()
+        transport = DnsPinnedTransport(
+            _Resolver("93.184.216.34"),
+            ("example.org",),
+            transport_factory=lambda: delegate,
+        )
+        async with SafeDownloadClient(
+            _runtime(DownloadExecutionMode.LIVE_NETWORK, hosts=("example.org",)),
+            _policy(),
+            transport=transport,
+        ) as client:
+            await client.fetch("https://example.org/file", byte_limit=1000)
+        open_after_client = not delegate.closed
+        await transport.aclose()
+        return open_after_client, delegate.closed
+
+    open_after_client, closed_by_owner = asyncio.run(scenario())
+
+    assert open_after_client
+    assert closed_by_owner
 
 
 @pytest.mark.parametrize(

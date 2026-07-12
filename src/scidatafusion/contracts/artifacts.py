@@ -54,6 +54,7 @@ class ArtifactDownloadStatus(StrEnum):
     PARTIAL = "partial"
     NEEDS_REVIEW = "needs_review"
     UNSUPPORTED = "unsupported"
+    FAILED = "failed"
 
 
 class DownloadExecutionMode(StrEnum):
@@ -141,24 +142,40 @@ class DownloadArtifact(StrictContract):
 
 
 class DownloadPolicy(StrictContract):
-    policy_version: SemanticVersion = "1.0.0"
-    max_total_bytes: int = Field(default=100_000_000, ge=1, le=10_000_000_000)
-    max_file_bytes: int = Field(default=25_000_000, ge=1, le=2_000_000_000)
-    chunk_size_bytes: int = Field(default=65_536, ge=1024, le=4_194_304)
+    policy_version: SemanticVersion = "1.1.0"
+    max_total_bytes: int = Field(default=100_000_000, ge=1, le=1_000_000_000)
+    max_file_bytes: int = Field(default=25_000_000, ge=1, le=64_000_000)
+    chunk_size_bytes: int = Field(default=65_536, ge=1024, le=1_048_576)
     max_redirects: int = Field(default=3, ge=0, le=10)
     connect_timeout_seconds: float = Field(default=5.0, gt=0.0, le=60.0)
     read_timeout_seconds: float = Field(default=30.0, gt=0.0, le=300.0)
     max_attempts: int = Field(default=2, ge=1, le=5)
+    requests_per_second_per_host: float = Field(
+        default=2.0,
+        gt=0.0,
+        le=100.0,
+        allow_inf_nan=False,
+    )
+    base_backoff_seconds: float = Field(default=0.25, ge=0.0, le=60.0, allow_inf_nan=False)
+    max_backoff_seconds: float = Field(default=4.0, ge=0.0, le=300.0, allow_inf_nan=False)
+    max_retry_after_seconds: float = Field(
+        default=30.0,
+        ge=0.0,
+        le=300.0,
+        allow_inf_nan=False,
+    )
+    cache_enabled: bool = True
     max_root_locators_per_source: int = Field(default=2, ge=1, le=20)
     max_attachments_per_landing: int = Field(default=10, ge=0, le=100)
-    max_archive_entries: int = Field(default=1000, ge=1, le=100_000)
+    max_html_inspection_bytes: int = Field(default=4_194_304, ge=1024, le=8_388_608)
+    max_archive_entries: int = Field(default=1000, ge=1, le=10_000)
     max_archive_uncompressed_bytes: int = Field(
-        default=100_000_000,
+        default=64_000_000,
         ge=1,
-        le=10_000_000_000,
+        le=64_000_000,
     )
-    max_archive_member_bytes: int = Field(default=25_000_000, ge=1, le=2_000_000_000)
-    max_archive_compression_ratio: float = Field(default=100.0, ge=1.0, le=10_000.0)
+    max_archive_member_bytes: int = Field(default=25_000_000, ge=1, le=64_000_000)
+    max_archive_compression_ratio: float = Field(default=100.0, ge=1.0, le=1_000.0)
     max_archive_depth: int = Field(default=1, ge=0, le=5)
 
     @model_validator(mode="after")
@@ -166,6 +183,10 @@ class DownloadPolicy(StrictContract):
         numeric = (
             self.connect_timeout_seconds,
             self.read_timeout_seconds,
+            self.requests_per_second_per_host,
+            self.base_backoff_seconds,
+            self.max_backoff_seconds,
+            self.max_retry_after_seconds,
             self.max_archive_compression_ratio,
         )
         if any(not math.isfinite(value) for value in numeric):
@@ -174,6 +195,8 @@ class DownloadPolicy(StrictContract):
             raise ValueError("per-file bytes cannot exceed the total download budget")
         if self.max_archive_member_bytes > self.max_archive_uncompressed_bytes:
             raise ValueError("archive member bytes cannot exceed the archive expansion budget")
+        if self.base_backoff_seconds > self.max_backoff_seconds:
+            raise ValueError("base retry backoff cannot exceed maximum backoff")
         return self
 
 
@@ -273,6 +296,8 @@ class ArtifactDownloadRequest(StrictContract):
             raise ValueError("download approvals must resolve to selected M06 candidates")
         for approval in self.approvals:
             source = selected_by_id[approval.candidate_id]
+            if approval.approved_at > self.requested_at:
+                raise ValueError("future download approval cannot authorize this request")
             if (
                 approval.kind is DownloadApprovalKind.OPEN_LICENSE_METADATA
                 and source.license_decision is not LicenseDecision.ALLOWED
@@ -344,6 +369,7 @@ class ContentInspection(StrictContract):
     artifact_kind: ArtifactKind
     media_type_mismatch: bool
     confidence: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    requires_review: bool = False
 
     @model_validator(mode="after")
     def validate_mismatch(self) -> Self:
@@ -355,6 +381,13 @@ class ContentInspection(StrictContract):
             raise ValueError("media-type mismatch must be derived from declared and detected types")
         if self.basis is ContentDetectionBasis.UNKNOWN and self.confidence != 0.0:
             raise ValueError("unknown content detection cannot claim confidence")
+        expected_review = (
+            expected
+            or self.basis is ContentDetectionBasis.UNKNOWN
+            or self.artifact_kind is ArtifactKind.UNKNOWN
+        )
+        if self.requires_review is not expected_review:
+            raise ValueError("content review state must be derived from deterministic inspection")
         return self
 
 
@@ -498,6 +531,7 @@ class DownloadAttempt(StrictContract):
     started_at: datetime
     finished_at: datetime
     bytes_received: int = Field(ge=0)
+    cache_hit: bool = False
     http_status: int | None = Field(default=None, ge=100, le=599)
     byte_sha256: ContentHash | None = None
     object_id: BronzeObjectId | None = None
@@ -537,6 +571,8 @@ class DownloadAttempt(StrictContract):
             raise ValueError("successful downloads cannot have errors and other states require one")
         if self.retryable and self.status is not DownloadAttemptStatus.FAILED:
             raise ValueError("only failed download attempts may be retryable")
+        if self.cache_hit and (not succeeded or self.network_performed is not False):
+            raise ValueError("cache-hit attempts must succeed without a network operation")
         return self
 
 
@@ -560,6 +596,18 @@ class DownloadRunLog(DownloadArtifact):
             raise ValueError("download attempt ids must be unique")
         if len(attempt_keys) != len(set(attempt_keys)):
             raise ValueError("download attempt keys must be unique")
+        by_locator: dict[tuple[str, str], list[DownloadAttempt]] = {}
+        for attempt in self.attempts:
+            key = (attempt.candidate_id, attempt.locator.locator_hash)
+            by_locator.setdefault(key, []).append(attempt)
+        for attempts in by_locator.values():
+            ordered = sorted(attempts, key=lambda item: item.attempt_number)
+            if tuple(item.attempt_number for item in ordered) != tuple(range(1, len(ordered) + 1)):
+                raise ValueError("download attempt numbers must be contiguous and one-based")
+            if ordered[-1].retryable:
+                raise ValueError("terminal download attempts cannot remain retryable")
+            if any(not item.retryable for item in ordered[:-1]):
+                raise ValueError("only retryable failures may precede another attempt")
         return self
 
 
@@ -571,6 +619,8 @@ class ArtifactDownloadMetrics(StrictContract):
     skipped_download_count: int = Field(ge=0)
     failed_download_count: int = Field(ge=0)
     quarantined_download_count: int = Field(ge=0)
+    cache_hit_count: int = Field(ge=0)
+    review_required_object_count: int = Field(ge=0)
     acquisition_count: int = Field(ge=0)
     archive_member_count: int = Field(ge=0)
     bronze_object_count: int = Field(ge=0)
@@ -589,6 +639,17 @@ class ArtifactStoredPayload(StrictContract):
     idempotency_key: ContentHash
 
 
+class ArtifactDownloadCompletedPayload(StrictContract):
+    status: ArtifactDownloadStatus
+    artifact_set_hash: ContentHash
+    manifest_hash: ContentHash
+    run_log_hash: ContentHash
+    bronze_object_count: int = Field(ge=0)
+    input_hash: ContentHash
+    output_hash: ContentHash
+    idempotency_key: ContentHash
+
+
 class ArtifactDownloadResult(DownloadArtifact):
     module_id: Literal["M07"] = "M07"
     status: ArtifactDownloadStatus
@@ -600,7 +661,10 @@ class ArtifactDownloadResult(DownloadArtifact):
     run_log: DownloadRunLog
     warnings: tuple[NonEmptyStr, ...] = ()
     metrics: ArtifactDownloadMetrics
-    events: tuple[EventEnvelope[ArtifactStoredPayload], ...]
+    events: tuple[
+        EventEnvelope[ArtifactStoredPayload | ArtifactDownloadCompletedPayload],
+        ...,
+    ]
 
     @model_validator(mode="after")
     def validate_result(self) -> Self:
@@ -679,7 +743,7 @@ class ArtifactDownloadResult(DownloadArtifact):
             if not (
                 attempt.object_id == acquisition.object_id == obj.object_id
                 and attempt.byte_sha256 == acquisition.byte_sha256 == obj.byte_sha256
-                and attempt.bytes_received == obj.size_bytes
+                and attempt.bytes_received == (0 if attempt.cache_hit else obj.size_bytes)
                 and acquisition.status is expected_acquisition_status
             ):
                 raise ValueError(
@@ -703,6 +767,10 @@ class ArtifactDownloadResult(DownloadArtifact):
             quarantined_download_count=sum(
                 item.status is DownloadAttemptStatus.QUARANTINED for item in run_log.attempts
             ),
+            cache_hit_count=sum(item.cache_hit for item in run_log.attempts),
+            review_required_object_count=sum(
+                item.media.requires_review for item in artifact_set.objects
+            ),
             acquisition_count=len(manifest.acquisitions),
             archive_member_count=sum(
                 item.relationship is ArtifactRelationship.ARCHIVE_MEMBER
@@ -714,20 +782,36 @@ class ArtifactDownloadResult(DownloadArtifact):
         )
         if self.metrics != expected_metrics:
             raise ValueError("M07 metrics must be derived from artifacts and attempts")
+        terminal_by_locator: dict[tuple[str, str], DownloadAttempt] = {}
+        for attempt in run_log.attempts:
+            key = (attempt.candidate_id, attempt.locator.locator_hash)
+            previous = terminal_by_locator.get(key)
+            if previous is None or attempt.attempt_number > previous.attempt_number:
+                terminal_by_locator[key] = attempt
+        terminal_attempts = tuple(terminal_by_locator.values())
         if not manifest.selected_candidate_ids:
             expected_status = ArtifactDownloadStatus.UNSUPPORTED
         elif not manifest.acquisitions:
-            expected_status = (
-                ArtifactDownloadStatus.NEEDS_REVIEW
-                if any(
-                    item.error_code is DownloadErrorCode.LICENSE_APPROVAL_REQUIRED
-                    for item in run_log.attempts
-                )
-                else ArtifactDownloadStatus.UNSUPPORTED
+            if any(
+                item.error_code is DownloadErrorCode.LICENSE_APPROVAL_REQUIRED
+                or item.status is DownloadAttemptStatus.QUARANTINED
+                for item in run_log.attempts
+            ):
+                expected_status = ArtifactDownloadStatus.NEEDS_REVIEW
+            elif any(item.status is DownloadAttemptStatus.FAILED for item in run_log.attempts):
+                expected_status = ArtifactDownloadStatus.FAILED
+            else:
+                expected_status = ArtifactDownloadStatus.UNSUPPORTED
+        elif (
+            any(
+                item.status
+                not in {DownloadAttemptStatus.STORED, DownloadAttemptStatus.DEDUPLICATED}
+                for item in terminal_attempts
             )
-        elif len(successful_attempts) != len(run_log.attempts) or {
-            item.candidate_id for item in manifest.acquisitions
-        } != set(manifest.selected_candidate_ids):
+            or {item.candidate_id for item in manifest.acquisitions}
+            != set(manifest.selected_candidate_ids)
+            or any(item.media.requires_review for item in artifact_set.objects)
+        ):
             expected_status = ArtifactDownloadStatus.PARTIAL
         else:
             expected_status = ArtifactDownloadStatus.SUCCEEDED
@@ -735,20 +819,40 @@ class ArtifactDownloadResult(DownloadArtifact):
             f"{item.error_code.value}:{item.attempt_id}"
             for item in run_log.attempts
             if item.error_code is not None
+        ) + tuple(
+            f"{(DownloadErrorCode.CONTENT_TYPE_MISMATCH if item.media.media_type_mismatch else DownloadErrorCode.UNSUPPORTED_MEDIA_TYPE).value}:{item.object_id}"
+            for item in artifact_set.objects
+            if item.media.requires_review
         )
         if self.status is not expected_status or self.warnings != expected_warnings:
             raise ValueError("M07 status and warnings must be artifact-derived")
-        if len(self.events) != len(artifact_set.objects):
+        stored_events = tuple(
+            event for event in self.events if event.event_type.value == "artifact.stored"
+        )
+        completed_events = tuple(
+            event
+            for event in self.events
+            if event.event_type.value == "artifact.download.completed"
+        )
+        if len(stored_events) != len(artifact_set.objects):
             raise ValueError("M07 must emit one artifact.stored event per Bronze object")
+        if len(completed_events) != 1 or len(self.events) != len(stored_events) + 1:
+            raise ValueError("M07 must emit exactly one artifact.download.completed event")
         acquisitions_by_object = {
             object_id: sum(item.object_id == object_id for item in manifest.acquisitions)
             for object_id in objects_by_id
         }
-        event_object_ids = tuple(event.payload.object_id for event in self.events)
+        event_object_ids = tuple(
+            event.payload.object_id
+            for event in stored_events
+            if isinstance(event.payload, ArtifactStoredPayload)
+        )
         if len(event_object_ids) != len(set(event_object_ids)):
             raise ValueError("artifact.stored events must refer to unique Bronze objects")
-        for event in self.events:
+        for event in stored_events:
             payload = event.payload
+            if not isinstance(payload, ArtifactStoredPayload):
+                raise ValueError("artifact.stored event requires an artifact payload")
             event_object = objects_by_id.get(payload.object_id)
             if (
                 event.event_type.value != "artifact.stored"
@@ -770,6 +874,29 @@ class ArtifactDownloadResult(DownloadArtifact):
                 or payload.idempotency_key != self.idempotency_key
             ):
                 raise ValueError("artifact.stored event must refer to this M07 result")
+        completed = completed_events[0]
+        completed_payload = completed.payload
+        if (
+            not isinstance(completed_payload, ArtifactDownloadCompletedPayload)
+            or completed.event_type.value != "artifact.download.completed"
+            or completed.task_id != self.task_id
+            or completed.run_id != self.run_id
+            or completed.occurred_at != self.created_at
+            or completed.schema_version != self.contract_version
+            or completed.producer.component != "artifact_download_service"
+            or completed.producer.version != self.producer_version
+            or completed.correlation_id != self.input_hash
+            or completed.causation_event_id is not None
+            or completed_payload.status is not self.status
+            or completed_payload.artifact_set_hash != artifact_set.artifact_set_hash
+            or completed_payload.manifest_hash != manifest.manifest_hash
+            or completed_payload.run_log_hash != run_log.run_log_hash
+            or completed_payload.bronze_object_count != len(artifact_set.objects)
+            or completed_payload.input_hash != self.input_hash
+            or completed_payload.output_hash != self.output_hash
+            or completed_payload.idempotency_key != self.idempotency_key
+        ):
+            raise ValueError("artifact.download.completed event must refer to this M07 result")
         return self
 
 
@@ -797,10 +924,10 @@ def _require_sanitized_https_url(value: str, *, label: str) -> None:
 
 def _is_public_host(host: str) -> bool:
     try:
-        address = ip_address(host)
+        ip_address(host)
     except ValueError:
         return bool(_PUBLIC_HOST_PATTERN.fullmatch(host)) and host != "localhost"
-    return address.is_global
+    return False
 
 
 def _is_reserved_dns_name(host: str) -> bool:

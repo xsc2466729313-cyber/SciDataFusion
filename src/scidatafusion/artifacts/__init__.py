@@ -1,11 +1,17 @@
 """M07 immutable artifact acquisition primitives."""
 
 from scidatafusion.artifacts.archive import ExtractedArchiveMember, SafeArchiveInspector
+from scidatafusion.artifacts.checkpoints import (
+    ArtifactCheckpointStore,
+    FileSystemArtifactCheckpointStore,
+    MemoryArtifactCheckpointStore,
+)
 from scidatafusion.artifacts.downloader import (
     DnsPinnedTransport,
     DownloadFailure,
     DownloadFetchResult,
     HostResolver,
+    LiveHostRateLimiter,
     SafeDownloadClient,
     SystemHostResolver,
     sanitize_url_for_manifest,
@@ -16,6 +22,7 @@ from scidatafusion.artifacts.fixtures import (
 )
 from scidatafusion.artifacts.integrity import (
     calculate_acquisition_hash,
+    calculate_artifact_download_idempotency_key,
     calculate_artifact_download_input_hash,
     calculate_artifact_download_output_hash,
     calculate_artifact_manifest_hash,
@@ -29,7 +36,7 @@ from scidatafusion.artifacts.integrity import (
     verify_artifact_download_integrity,
     verify_artifact_download_request_integrity,
 )
-from scidatafusion.artifacts.service import ArtifactDownloadService
+from scidatafusion.artifacts.service import ArtifactDownloadService, DownloadRequestAuthorizer
 from scidatafusion.artifacts.sniffer import ContentSniffer
 from scidatafusion.artifacts.storage import (
     BronzeByteStore,
@@ -39,6 +46,7 @@ from scidatafusion.artifacts.storage import (
 )
 
 __all__ = [
+    "ArtifactCheckpointStore",
     "ArtifactDownloadService",
     "BronzeByteStore",
     "BronzeWriteReceipt",
@@ -46,9 +54,13 @@ __all__ = [
     "DnsPinnedTransport",
     "DownloadFailure",
     "DownloadFetchResult",
+    "DownloadRequestAuthorizer",
     "ExtractedArchiveMember",
+    "FileSystemArtifactCheckpointStore",
     "FileSystemBronzeStore",
     "HostResolver",
+    "LiveHostRateLimiter",
+    "MemoryArtifactCheckpointStore",
     "MemoryBronzeStore",
     "OfflineArtifactBundle",
     "SafeArchiveInspector",
@@ -56,6 +68,7 @@ __all__ = [
     "SystemHostResolver",
     "build_offline_ia_artifact_bundle",
     "calculate_acquisition_hash",
+    "calculate_artifact_download_idempotency_key",
     "calculate_artifact_download_input_hash",
     "calculate_artifact_download_output_hash",
     "calculate_artifact_manifest_hash",

@@ -9,10 +9,12 @@ from urllib.parse import urlsplit
 from scidatafusion.artifacts.storage import BronzeByteStore
 from scidatafusion.contracts.artifacts import (
     ArtifactAcquisition,
+    ArtifactDownloadCompletedPayload,
     ArtifactDownloadRequest,
     ArtifactDownloadResult,
     ArtifactManifest,
     ArtifactRelationship,
+    ArtifactStoredPayload,
     BronzeArtifactSet,
     BronzeObject,
     DownloadPolicy,
@@ -64,6 +66,23 @@ def calculate_artifact_download_input_hash(request: ArtifactDownloadRequest) -> 
             "requested_at": request.requested_at.isoformat(),
             "runtime_hash": request.runtime.runtime_hash,
             "selected_source_set_hash": (request.selected_source_set.selected_source_set_hash),
+        }
+    )
+
+
+def calculate_artifact_download_idempotency_key(
+    request: ArtifactDownloadRequest,
+    producer_version: str,
+) -> str:
+    """Bind replay identity to the request, module, contract, and producer version."""
+
+    return canonical_hash(
+        {
+            "contract_version": request.selected_source_set.contract_version,
+            "input_hash": calculate_artifact_download_input_hash(request),
+            "module_id": "M07",
+            "producer_version": producer_version,
+            "task_id": request.selected_source_set.task_id,
         }
     )
 
@@ -171,12 +190,16 @@ def verify_artifact_download_integrity(
 
     verify_artifact_download_request_integrity(request)
     expected_input_hash = calculate_artifact_download_input_hash(request)
+    expected_idempotency_key = calculate_artifact_download_idempotency_key(
+        request,
+        result.producer_version,
+    )
     policy_hash = calculate_download_policy_hash(request.policy)
     selected = request.selected_source_set
     selected_by_id = {item.candidate_id: item for item in selected.sources}
     if not (
         hmac.compare_digest(result.input_hash, expected_input_hash)
-        and hmac.compare_digest(result.idempotency_key, expected_input_hash)
+        and hmac.compare_digest(result.idempotency_key, expected_idempotency_key)
         and result.task_id == selected.task_id
         and result.run_id == selected.run_id
         and result.contract_version == selected.contract_version
@@ -188,6 +211,11 @@ def verify_artifact_download_integrity(
         == tuple(item.candidate_id for item in selected.sources)
     ):
         _fail("M07 result does not match its immutable request snapshot")
+    if any(
+        attempt.execution_mode is not request.runtime.execution_mode
+        for attempt in result.run_log.attempts
+    ):
+        _fail("M07 attempt execution mode does not match the runtime snapshot")
 
     approvals = {item.candidate_id: item for item in request.approvals}
     selected_locator_hashes = {
@@ -232,9 +260,13 @@ def verify_artifact_download_integrity(
 
     objects_by_id = {item.object_id: item for item in result.artifact_set.objects}
     for event in result.events:
-        expected_event_id = (
-            f"evt_{canonical_hash((result.input_hash, event.payload.object_id))[:32]}"
-        )
+        if isinstance(event.payload, ArtifactStoredPayload):
+            identity = event.payload.object_id
+        elif isinstance(event.payload, ArtifactDownloadCompletedPayload):
+            identity = "completed"
+        else:
+            _fail("M07 event has an unsupported payload")
+        expected_event_id = f"evt_{canonical_hash((result.idempotency_key, identity))[:32]}"
         if not hmac.compare_digest(event.event_id, expected_event_id):
             _fail("M07 artifact event id is not the deterministic object event id")
     for obj in result.artifact_set.objects:
