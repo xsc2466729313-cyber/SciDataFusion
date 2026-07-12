@@ -1181,6 +1181,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
+    { name = "polars" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pypdf" },
@@ -1193,7 +1194,6 @@ api = [
 ]
 data = [
     { name = "duckdb" },
-    { name = "polars" },
     { name = "pyarrow" },
 ]
 
@@ -1212,7 +1212,7 @@ requires-dist = [
     { name = "duckdb", marker = "extra == 'data'", specifier = ">=1.2,<2" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "polars", marker = "extra == 'data'", specifier = ">=1.22,<2" },
+    { name = "polars", specifier = ">=1.22,<2" },
     { name = "pyarrow", marker = "extra == 'data'", specifier = ">=19,<21" },
     { name = "pydantic", specifier = ">=2.10,<3" },
     { name = "pydantic-settings", specifier = ">=2.7,<3" },

@@ -457,3 +457,62 @@ def test_phase3_document_demo_produces_safe_partial_ir_summary(
         "12.3",
     ):
         assert secret_or_content not in captured.out
+
+
+def test_phase3_table_demo_produces_safe_cell_evidence_summary(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m10-reviewer@example.org"
+
+    exit_code = main(["phase3-table-demo", "--goal", goal, "--confirmed-by", reviewer])
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "succeeded"
+    assert report["execution_mode"] == "offline"
+    assert report["network_performed"] is False
+    assert report["model_performed"] is False
+    assert report["bronze_writes"] == 0
+    assert report["m13_field_extractions"] == 0
+    assert report["metrics"] == {
+        "eligible_route_count": 1,
+        "succeeded_route_count": 1,
+        "review_route_count": 0,
+        "failed_route_count": 0,
+        "attempt_count": 1,
+        "table_count": 1,
+        "row_count": 2,
+        "column_count": 4,
+        "cell_count": 8,
+        "exact_cell_evidence_count": 8,
+        "gap_count": 0,
+        "model_attempt_count": 0,
+        "network_attempt_count": 0,
+        "actual_cost_micro_usd": 0,
+    }
+    assert report["route_statuses"] == {"succeeded": 1}
+    assert report["attempt_statuses"] == {"succeeded": 1}
+    assert report["parser_attempts"] == {"m10.csv": 1}
+    assert report["quality_checks"] == {
+        "cell_evidence": {"failed": 0, "passed": 1},
+        "output_schema": {"failed": 0, "passed": 1},
+        "table_structure": {"failed": 0, "passed": 1},
+    }
+    assert report["event_type"] == "table.parsed"
+    assert report["event_count"] == 1
+    for secret_or_content in (
+        goal,
+        reviewer,
+        "evil.example",
+        "malware.exe",
+        "offline-fixture:",
+        "https://",
+        "object_id",
+        "observation_time",
+        "SN-A",
+        "59000.1",
+        "12.3",
+    ):
+        assert secret_or_content not in captured.out

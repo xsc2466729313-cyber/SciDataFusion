@@ -13,8 +13,8 @@ The source package is being built phase by phase from the
 Phase 2 is complete and Phase 3 is in progress. Phase 1 turns an accepted research goal into a
 confirmed scientific data contract; M04-M06 discover and select evidence-backed sources; M07
 preserves authorized bytes in immutable Bronze storage; M08 creates an explainable,
-registry-bound downstream parse plan; and M09 executes the eligible document routes into a
-provenance-preserving unified document IR:
+registry-bound downstream parse plan; M09 executes eligible document routes into a
+provenance-preserving unified document IR; and M10 recovers native tables with cell-level evidence:
 
 - M00 security, privacy, upload, and finite-budget intake gates;
 - M01 evidence-grounded problem compilation with deterministic fallback and a validated Qwen
@@ -72,7 +72,15 @@ provenance-preserving unified document IR:
   fallback controls;
 - an offline Ia M09 result with three eligible document routes, two successful document IRs, one
   honest PDF review outcome, a blocked unavailable OCR fallback, and zero network, model, M10,
-  M11, M13, or Bronze-write operations.
+  M11, M13, or Bronze-write operations;
+- M10 strict table request, runtime, cell, header, quality, attempt, gap, route, `TableIR`, result,
+  checkpoint, and `table.parsed` event contracts bound to the exact M07-M08 chain;
+- bounded UTF-8 CSV/TSV parsing with exact per-cell byte spans, preserved lexical and decoded text,
+  non-mutating type labels, deterministic header/structure/evidence gates, and explicit review;
+- canonical content-addressed TableIR storage, immutable complete-result replay, and stable raw-text
+  row and all-String Polars projections;
+- an offline Ia M10 result with one successful 2-by-4 TableIR, eight exact cell evidence anchors,
+  one completion event, and zero network, model, cost, M13, or Bronze-write operations.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -80,8 +88,10 @@ credentials or external-source calls. M06 adds no network or model call. In the 
 selects three source categories with full Required/entity/source-type candidate coverage, then
 correctly remains partial because record-level scope and reuse permission are not yet proven. M07
 retains controlled source bytes but does not parse scientific values. M08 classifies and plans only;
-M09 parses supported documents into document IR but does not extract scientific fields. M10 table
-IR, later evidence/normalization/fusion, and the web workbench remain future checkpoints.
+M09 parses supported documents into document IR but does not extract scientific fields. M10 parses
+the native CSV slice into table IR without changing scientific values. M13 evidence extraction,
+later normalization/fusion, deferred complex document/table formats, and the web workbench remain
+future checkpoints.
 
 ## Quick start
 
@@ -96,6 +106,7 @@ uv run scidatafusion phase2-select-demo --goal "Study Type Ia supernova light cu
 uv run scidatafusion phase3-download-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase3-parse-plan-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase3-document-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase3-table-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -139,6 +150,13 @@ scientific value and performs no network or model call. A separate valid two-pag
 checks local pypdf extraction, approximate normalized coordinates, and non-destructive repeated
 header/footer annotation. This slice does not establish the representative-corpus fidelity,
 reading-order, heading, bbox, failure-rate, or latency targets.
+
+`phase3-table-demo` executes only the M08 `m10.csv` route. It preserves every CSV cell as exact
+lexical text, decoded text, and a Bronze byte span, then emits one content-addressed TableIR. The Ia
+fixture produces two rows, four columns, and eight exact cell anchors; Polars projection keeps every
+column as `String`. The summary exposes no cell value or source location. XLSX, HTML/PDF/image table
+recovery, page bbox, merged cells, footnotes, multi-level headers, cross-page merging, and the
+representative 100-table accuracy benchmark remain deferred.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported

@@ -7,7 +7,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 0 | repository, contracts, configuration, quality gates | locked clean build and doctor | complete |
 | 1 | M00-M03 | research goal to confirmed data contract | complete |
 | 2 | M04-M06 | federated discovery, coverage, selected sources | complete |
-| 3 | M07-M10 | immutable download, document and table IR | in progress (M07-M09 complete; M10 next) |
+| 3 | M07-M10 | immutable download, document and table IR | complete (first offline vertical slice) |
 | 4 | M13-M15 | field evidence, mapping, unit/time normalization | pending |
 | 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | pending |
 | 6 | M19 | hybrid retrieval and evidence graph | pending |
@@ -49,8 +49,16 @@ bounded local pypdf, HTML, and plain-text adapters. It produces two content-addr
 and keeps the malformed page-less PDF as an explicit review outcome with an unavailable OCR
 fallback, so the offline Ia aggregate is partial without inventing content. Quality decisions,
 candidate selection, gaps, parser/runtime identities, checkpoint replay, and one privacy-reduced
-completion event remain independently verifiable. M10 next converts supported tables into table
-IR; M09 does not extract scientific fields or establish representative-corpus accuracy targets.
+completion event remain independently verifiable. M09 does not extract scientific fields or
+establish representative-corpus accuracy targets.
+
+M10 verifies the same M07-M08 chain and executes its one native CSV route. The first accepted slice
+produces a two-row, four-column TableIR with eight exact byte-evidenced cells, deterministic quality
+gates, content-addressed replay, and all-String Polars projection. It does not silently repair a
+header or coerce scientific-looking text. XLSX, HTML/PDF/image tables, complex headers, merged
+cells, footnotes, and cross-page reconstruction remain explicit format-capability gaps rather than
+claims of this slice. M13 next creates field candidates with EvidenceAtom links; M10 does not claim
+field extraction or Gold correctness.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

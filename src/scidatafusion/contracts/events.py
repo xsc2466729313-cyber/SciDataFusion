@@ -38,6 +38,7 @@ class EventType(StrEnum):
     ARTIFACT_DOWNLOAD_COMPLETED = "artifact.download.completed"
     PARSE_PLAN_CREATED = "parse.plan.created"
     DOCUMENT_PARSED = "document.parsed"
+    TABLE_PARSED = "table.parsed"
     FIELD_EXTRACTED = "field.extracted"
     RECORD_NORMALIZED = "record.normalized"
     FUSION_COMPLETED = "fusion.completed"
