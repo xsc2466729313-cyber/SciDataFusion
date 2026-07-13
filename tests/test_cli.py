@@ -743,3 +743,55 @@ def test_phase5_fuse_demo_reports_decisions_without_scientific_values(
         "band",
     ):
         assert private_content not in captured.out
+
+
+def test_phase5_audit_demo_reports_review_queue_without_scientific_values(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m18-reviewer@example.org"
+
+    exit_code = main(["phase5-audit-demo", "--goal", goal, "--confirmed-by", reviewer])
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 3
+    assert report["status"] == "needs_review"
+    assert report["execution_mode"] == "offline"
+    assert report["network_performed"] is False
+    assert report["model_performed"] is False
+    assert report["automatic_repairs_executed"] == 0
+    assert report["scientific_value_mutations"] == 0
+    assert report["formal_gold_published"] is False
+    assert report["quality_gate_passed"] is False
+    assert report["metrics"]["gate_count"] == 3
+    assert report["metrics"]["issue_count"] == 3
+    assert report["metrics"]["review_queue_count"] == 3
+    assert report["metrics"]["formal_gold_record_count"] == 0
+    assert report["gate_kinds"] == {
+        "any_of_fields": 1,
+        "field_provenance": 1,
+        "required_fields": 1,
+    }
+    assert report["issue_codes"] == {
+        "any_of_fields_missing": 1,
+        "field_provenance_missing": 1,
+        "required_field_missing": 1,
+    }
+    assert report["issue_severities"] == {"critical": 3}
+    assert report["planned_actions"] == {"request_human": 3}
+    assert report["review_statuses"] == {"pending": 3}
+    assert report["event_type"] == "quality.gated"
+    for private_content in (
+        goal,
+        reviewer,
+        "SN-A",
+        "59000.1",
+        "12.3",
+        "object_id",
+        "source_record_id",
+        "observation_time",
+        "magnitude",
+        "band",
+    ):
+        assert private_content not in captured.out

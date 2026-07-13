@@ -44,6 +44,7 @@ class EventType(StrEnum):
     RECORD_NORMALIZED = "record.normalized"
     ENTITY_RESOLVED = "entity.resolved"
     FUSION_COMPLETED = "fusion.completed"
+    QUALITY_GATED = "quality.gated"
     QUALITY_ISSUE_CREATED = "quality.issue.created"
     REVIEW_RESOLVED = "review.resolved"
     DELIVERY_COMPLETED = "delivery.completed"

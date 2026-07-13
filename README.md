@@ -10,7 +10,7 @@ The source package is being built phase by phase from the
 
 ## Current checkpoint
 
-Phases 1-4 are complete and Phase 5 has accepted its first M16-M17 offline slices. Phase 1 turns an accepted research goal into a
+Phases 1-4 are complete and Phase 5 has accepted its first M16-M18 offline slice. Phase 1 turns an accepted research goal into a
 confirmed scientific data contract; M04-M06 discover and select evidence-backed sources; M07
 preserves authorized bytes in immutable Bronze storage; M08 creates an explainable,
 registry-bound downstream parse plan; M09 executes eligible document routes into a
@@ -123,7 +123,15 @@ provenance-preserving unified document IR; and M10 recovers native tables with c
   view;
 - an offline Ia M17 result with four retained candidates, two evidence-complete Gold candidate
   fields, two explicitly withheld fields, zero conflicts, zero silent overwrites, and zero model,
-  network, tolerance aggregation, source-priority selection, or final-Gold operations.
+  network, tolerance aggregation, source-priority selection, or final-Gold operations;
+- M18 strict request, policy, runtime, gate-evaluation, quality-issue, repair-plan, review-queue,
+  report, formal-Gold, metric, checkpoint, and `quality.gated` event contracts bound to the exact
+  M17 result;
+- contract-driven required-field, any-of-field, and field-provenance validators with deterministic
+  scores, issue severity, evidence references, impact analysis, and whitelist repair actions;
+- an offline Ia M18 result with three failed blocking gates, three Critical issues, three
+  `request_human` plans, three pending review items, zero executed repairs, and no formal Gold,
+  model, network, cost, or scientific-value mutation.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -138,8 +146,9 @@ retains unevidenced alias headers without auto-acceptance. M15 performs traceabl
 retains ambiguous fields with explicit issues, and refuses to infer source units or time scales.
 M16 creates conservative evidence-backed entity clusters without fuzzy or model decisions. M17
 retains every field candidate and permits a Gold candidate value only for one eligible value or
-exact eligible consensus. M18 quality audit/HITL, deferred complex document/table formats, and the
-web workbench remain future checkpoints.
+exact eligible consensus. M18 executes the confirmed contract's quality gates and blocks formal
+Gold while unresolved required, any-of, or provenance issues remain. M19 retrieval/evidence graph,
+deferred complex document/table formats, and the web workbench remain future checkpoints.
 
 ## Quick start
 
@@ -160,6 +169,7 @@ uv run scidatafusion phase4-map-demo --goal "Study Type Ia supernova light curve
 uv run scidatafusion phase4-normalize-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase5-resolve-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase5-fuse-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase5-audit-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -250,6 +260,14 @@ and two withheld fields rather than a production multi-source conflict. The summ
 counts, decision classes, opaque identifiers, and hashes. Tolerance reconciliation, source
 priority, uncertainty aggregation, version precedence, LLM explanations, final Gold publication,
 and benchmark conflict accuracy remain deferred.
+
+`phase5-audit-demo` consumes the exact M17 request/result and evaluates every quality gate in the
+confirmed scientific contract. The current Gold candidate record fails required-field completeness,
+required-field provenance, and the magnitude-or-flux gate, so M18 emits three Critical issues and
+routes each to `request_human`. No automatic repair executes, the before/after score remains
+unchanged, and formal Gold is absent. The summary exposes only counts, gate/issue/action classes,
+opaque identifiers, and hashes. Domain validators, statistical anomaly detection, safe local retry
+execution, reviewer resolution, benchmark recall, and quality-approved export remain deferred.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported

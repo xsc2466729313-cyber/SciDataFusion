@@ -61,6 +61,11 @@ from scidatafusion.contracts.parsing import (
     ParsePlanningResult,
     ParsePlanningStatus,
 )
+from scidatafusion.contracts.quality import (
+    QualityAuditRequest,
+    QualityAuditResult,
+    QualityStatus,
+)
 from scidatafusion.contracts.scientific import ScientificDataContract
 from scidatafusion.contracts.search import (
     SearchCapabilityMode,
@@ -95,6 +100,8 @@ from scidatafusion.normalization.fixtures import build_offline_normalization_bun
 from scidatafusion.normalization.service import ScientificNormalizationService
 from scidatafusion.parsing import ParsePlanningService
 from scidatafusion.parsing.fixtures import build_offline_parse_planning_bundle
+from scidatafusion.quality.fixtures import build_offline_quality_bundle
+from scidatafusion.quality.service import QualityAuditService
 from scidatafusion.search import SearchPlanner, SourceCapabilityRegistryLoader, source_ids
 from scidatafusion.selection import SourceSelectionService
 from scidatafusion.tables.fixtures import build_offline_table_parsing_bundle
@@ -246,6 +253,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     fusion.add_argument("--goal", required=True, help="scientific research goal")
     fusion.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    quality = subparsers.add_parser(
+        "phase5-audit-demo",
+        help="run M00-M18 with contract quality gates and review planning offline",
+    )
+    quality.add_argument("--goal", required=True, help="scientific research goal")
+    quality.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -857,6 +874,58 @@ def build_fusion_summary(result: FusionResult) -> dict[str, object]:
     }
 
 
+def build_quality_summary(result: QualityAuditResult) -> dict[str, object]:
+    """Render M18 audit outcomes without field names, values, or evidence content."""
+
+    return {
+        "status": result.status.value,
+        "execution_mode": result.runtime.execution_mode.value,
+        "network_performed": False,
+        "model_performed": False,
+        "automatic_repairs_executed": 0,
+        "scientific_value_mutations": 0,
+        "formal_gold_published": result.formal_gold_dataset is not None,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "contract_id": result.contract_id,
+        "contract_hash": result.contract_hash,
+        "upstream_fusion_output_hash": result.upstream_fusion_output_hash,
+        "gate_evaluation_set_id": result.gate_evaluation_set.evaluation_set_id,
+        "gate_evaluation_set_hash": result.gate_evaluation_set.evaluation_set_hash,
+        "issue_set_id": result.issue_set.issue_set_id,
+        "issue_set_hash": result.issue_set.issue_set_hash,
+        "repair_plan_id": result.repair_plan.repair_plan_id,
+        "repair_plan_hash": result.repair_plan.repair_plan_hash,
+        "review_queue_id": result.review_queue.review_queue_id,
+        "review_queue_hash": result.review_queue.review_queue_hash,
+        "quality_report_id": result.quality_report.quality_report_id,
+        "quality_report_hash": result.quality_report.quality_report_hash,
+        "quality_gate_passed": result.quality_report.quality_gate_passed,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "gate_kinds": dict(
+            sorted(
+                Counter(item.kind.value for item in result.gate_evaluation_set.evaluations).items()
+            )
+        ),
+        "issue_codes": dict(
+            sorted(Counter(item.code.value for item in result.issue_set.issues).items())
+        ),
+        "issue_severities": dict(
+            sorted(Counter(item.severity.value for item in result.issue_set.issues).items())
+        ),
+        "planned_actions": dict(
+            sorted(Counter(item.action.value for item in result.repair_plan.steps).items())
+        ),
+        "review_statuses": dict(
+            sorted(Counter(item.status.value for item in result.review_queue.items).items())
+        ),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "input_hash": result.input_hash,
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -1099,6 +1168,25 @@ async def _execute_offline_fusion(
         requested_at=bundle.runtime.checked_at,
     )
     result = await ConflictPreservingFusionService(bronze_store=store).execute(request)
+    return request, result, store
+
+
+async def _execute_offline_quality_audit(
+    contract: ScientificDataContract,
+    planning: SearchPlanningResult,
+) -> tuple[QualityAuditRequest, QualityAuditResult, MemoryBronzeStore]:
+    """Execute M18 over the exact offline M17 result without network or model calls."""
+
+    fusion_request, fusion_result, store = await _execute_offline_fusion(contract, planning)
+    bundle = build_offline_quality_bundle(not_before=fusion_result.created_at)
+    request = QualityAuditRequest(
+        fusion_request=fusion_request,
+        fusion_result=fusion_result,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        requested_at=bundle.runtime.checked_at,
+    )
+    result = await QualityAuditService(bronze_store=store).execute(request)
     return request, result, store
 
 
@@ -1549,6 +1637,39 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return (
                 0 if fusion_result.status in {FusionStatus.SUCCEEDED, FusionStatus.PARTIAL} else 3
+            )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase5-audit-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            _, quality_result, _ = asyncio.run(
+                _execute_offline_quality_audit(phase1.confirmation.contract, planning)
+            )
+            print(
+                json.dumps(
+                    build_quality_summary(quality_result),
+                    ensure_ascii=True,
+                    indent=2,
+                )
+            )
+            return (
+                0
+                if quality_result.status in {QualityStatus.SUCCEEDED, QualityStatus.PARTIAL}
+                else 3
             )
         except (AppError, RegistryLoadError, ValidationError) as exc:
             if isinstance(exc, AppError):

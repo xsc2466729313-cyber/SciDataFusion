@@ -9,7 +9,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 2 | M04-M06 | federated discovery, coverage, selected sources | complete |
 | 3 | M07-M10 | immutable download, document and table IR | complete (first offline vertical slice) |
 | 4 | M13-M15 | field evidence, mapping, unit/time normalization | complete (first offline vertical slice) |
-| 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | in progress (M16-M17 complete) |
+| 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | complete (first offline vertical slice) |
 | 6 | M19 | hybrid retrieval and evidence graph | pending |
 | 7 | M11-M12 | chart digitization and scientific formats | pending |
 | 8 | M20 | FastAPI, interactive workbench, exports, reproduction bundle | pending |
@@ -97,6 +97,15 @@ view, withholds two context-blocked fields, and produces zero conflicts or silen
 remains partial with no tolerance aggregation, source-priority rule, uncertainty aggregation, LLM,
 network, final Gold publication, or benchmark accuracy claim. M18 next owns quality audit, repair,
 and human review.
+
+M18 re-verifies the exact M17 chain and evaluates every registered contract quality gate against
+the Gold candidate records. Failed record-level gates become evidence-referenced issues with
+derived severity, whitelist actions, bounded repair impact, and one pending review item each. The
+Ia candidate fails required-field completeness, required-field provenance, and the photometric
+any-of gate, so the result contains three Critical issues and no formal Gold. No repair executes,
+the before/after score remains unchanged, and no scientific value is mutated. Domain validators,
+statistical anomaly benchmarks, reviewer resolution, local retry execution, and approved export
+remain future slices. Phase 6 next begins M19 hybrid retrieval and evidence graph work.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.
