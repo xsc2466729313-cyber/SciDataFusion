@@ -10,7 +10,7 @@ The source package is being built phase by phase from the
 
 ## Current checkpoint
 
-Phase 3 is complete and Phase 4 is in progress. Phase 1 turns an accepted research goal into a
+Phases 1-4 are complete and Phase 5 has accepted its first M16-M17 offline slices. Phase 1 turns an accepted research goal into a
 confirmed scientific data contract; M04-M06 discover and select evidence-backed sources; M07
 preserves authorized bytes in immutable Bronze storage; M08 creates an explainable,
 registry-bound downstream parse plan; M09 executes eligible document routes into a
@@ -114,7 +114,16 @@ provenance-preserving unified document IR; and M10 recovers native tables with c
   accounting, score/threshold 1.0, and separate exact eligible-field duplicate fingerprints;
 - an offline Ia M16 result with one evidenced singleton cluster, zero candidate pairs, zero
   automatic merges, zero duplicate groups, and zero fuzzy, model, network, cost, Gold, or
-  scientific-value mutation operations.
+  scientific-value mutation operations;
+- M17 strict request, policy, runtime, retained-candidate, fused-record, conflict, resolution,
+  Gold-candidate, metric, result, checkpoint, and `fusion.completed` event contracts bound to the
+  exact M16 result;
+- deterministic single-value and exact-consensus selection that retains every normalized candidate
+  and its evidence, while withholding unresolved or context-blocked values from the Gold candidate
+  view;
+- an offline Ia M17 result with four retained candidates, two evidence-complete Gold candidate
+  fields, two explicitly withheld fields, zero conflicts, zero silent overwrites, and zero model,
+  network, tolerance aggregation, source-priority selection, or final-Gold operations.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -128,8 +137,9 @@ exact-header table candidates and never writes Gold. M14 revalidates exact canon
 retains unevidenced alias headers without auto-acceptance. M15 performs traceable exact parsing,
 retains ambiguous fields with explicit issues, and refuses to infer source units or time scales.
 M16 creates conservative evidence-backed entity clusters without fuzzy or model decisions. M17
-conflict-preserving fusion, deferred complex document/table formats, and the web workbench remain
-future checkpoints.
+retains every field candidate and permits a Gold candidate value only for one eligible value or
+exact eligible consensus. M18 quality audit/HITL, deferred complex document/table formats, and the
+web workbench remain future checkpoints.
 
 ## Quick start
 
@@ -149,6 +159,7 @@ uv run scidatafusion phase4-extract-demo --goal "Study Type Ia supernova light c
 uv run scidatafusion phase4-map-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase4-normalize-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase5-resolve-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase5-fuse-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -229,6 +240,16 @@ matching buckets. The single Ia record produces one singleton cluster and no aut
 duplicate group. The summary omits entity-key names/values, records, evidence content, goal text,
 and reviewer identity. Fuzzy/probabilistic matching, alias graphs, transitive consistency,
 benchmark accuracy, conflict fusion, and Gold writes remain deferred.
+
+`phase5-fuse-demo` consumes the exact M16 request/result and retains every normalized field as a
+content-addressed candidate. A field enters the Gold candidate view only when its sole candidate is
+M16-eligible or every eligible candidate has the same normalized value hash. Distinct values create
+an unresolved conflict with no selected value; blocked context creates an explicit withheld
+decision. The Ia fixture has one record, so it demonstrates two safe single-candidate selections
+and two withheld fields rather than a production multi-source conflict. The summary exposes only
+counts, decision classes, opaque identifiers, and hashes. Tolerance reconciliation, source
+priority, uncertainty aggregation, version precedence, LLM explanations, final Gold publication,
+and benchmark conflict accuracy remain deferred.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported

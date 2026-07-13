@@ -49,6 +49,7 @@ from scidatafusion.contracts.extraction import (
     ExtractionResult,
     ExtractionStatus,
 )
+from scidatafusion.contracts.fusion import FusionRequest, FusionResult, FusionStatus
 from scidatafusion.contracts.mapping import MappingRequest, MappingResult, MappingStatus
 from scidatafusion.contracts.normalization import (
     NormalizationRequest,
@@ -86,6 +87,8 @@ from scidatafusion.entity_resolution.service import EntityResolutionService
 from scidatafusion.errors import AppError
 from scidatafusion.extraction.fixtures import build_offline_extraction_bundle
 from scidatafusion.extraction.service import EvidenceFirstExtractionService
+from scidatafusion.fusion.fixtures import build_offline_fusion_bundle
+from scidatafusion.fusion.service import ConflictPreservingFusionService
 from scidatafusion.mapping.fixtures import build_offline_mapping_bundle
 from scidatafusion.mapping.service import FieldMappingService
 from scidatafusion.normalization.fixtures import build_offline_normalization_bundle
@@ -233,6 +236,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     resolution.add_argument("--goal", required=True, help="scientific research goal")
     resolution.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    fusion = subparsers.add_parser(
+        "phase5-fuse-demo",
+        help="run M00-M17 with exact-consensus conflict-preserving fusion offline",
+    )
+    fusion.add_argument("--goal", required=True, help="scientific research goal")
+    fusion.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -799,6 +812,51 @@ def build_entity_resolution_summary(result: EntityResolutionResult) -> dict[str,
     }
 
 
+def build_fusion_summary(result: FusionResult) -> dict[str, object]:
+    """Render M17 decisions without scientific values, field names, or evidence content."""
+
+    return {
+        "status": result.status.value,
+        "execution_mode": result.runtime.execution_mode.value,
+        "network_performed": False,
+        "model_performed": False,
+        "tolerance_aggregations": 0,
+        "source_priority_selections": 0,
+        "llm_value_decisions": 0,
+        "silent_overwrites": 0,
+        "final_gold_writes": 0,
+        "m18_audit_executions": 0,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "contract_id": result.contract_id,
+        "contract_hash": result.contract_hash,
+        "upstream_entity_output_hash": result.upstream_entity_output_hash,
+        "candidate_set_id": result.candidate_set.candidate_set_id,
+        "candidate_set_hash": result.candidate_set.candidate_set_hash,
+        "fused_record_set_id": result.fused_record_set.fused_record_set_id,
+        "fused_record_set_hash": result.fused_record_set.fused_record_set_hash,
+        "conflict_set_id": result.conflict_set.conflict_set_id,
+        "conflict_set_hash": result.conflict_set.conflict_set_hash,
+        "decision_set_id": result.decision_set.decision_set_id,
+        "decision_set_hash": result.decision_set.decision_set_hash,
+        "gold_candidate_dataset_id": result.gold_dataset.dataset_id,
+        "gold_candidate_dataset_hash": result.gold_dataset.dataset_hash,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "fusion_decisions": dict(
+            sorted(Counter(item.decision.value for item in result.decision_set.decisions).items())
+        ),
+        "conflict_classes": dict(
+            sorted(
+                Counter(item.classification.value for item in result.conflict_set.conflicts).items()
+            )
+        ),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "input_hash": result.input_hash,
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -1020,6 +1078,27 @@ async def _execute_offline_entity_resolution(
         requested_at=bundle.runtime.checked_at,
     )
     result = await EntityResolutionService(bronze_store=store).execute(request)
+    return request, result, store
+
+
+async def _execute_offline_fusion(
+    contract: ScientificDataContract,
+    planning: SearchPlanningResult,
+) -> tuple[FusionRequest, FusionResult, MemoryBronzeStore]:
+    """Execute M17 over the exact offline M16 result without network or model calls."""
+
+    entity_request, entity_result, store = await _execute_offline_entity_resolution(
+        contract, planning
+    )
+    bundle = build_offline_fusion_bundle(not_before=entity_result.created_at)
+    request = FusionRequest(
+        entity_request=entity_request,
+        entity_result=entity_result,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        requested_at=bundle.runtime.checked_at,
+    )
+    result = await ConflictPreservingFusionService(bronze_store=store).execute(request)
     return request, result, store
 
 
@@ -1439,6 +1518,37 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if resolution_result.status
                 in {EntityResolutionStatus.SUCCEEDED, EntityResolutionStatus.PARTIAL}
                 else 3
+            )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase5-fuse-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            _, fusion_result, _ = asyncio.run(
+                _execute_offline_fusion(phase1.confirmation.contract, planning)
+            )
+            print(
+                json.dumps(
+                    build_fusion_summary(fusion_result),
+                    ensure_ascii=True,
+                    indent=2,
+                )
+            )
+            return (
+                0 if fusion_result.status in {FusionStatus.SUCCEEDED, FusionStatus.PARTIAL} else 3
             )
         except (AppError, RegistryLoadError, ValidationError) as exc:
             if isinstance(exc, AppError):

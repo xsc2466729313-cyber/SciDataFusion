@@ -9,7 +9,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 2 | M04-M06 | federated discovery, coverage, selected sources | complete |
 | 3 | M07-M10 | immutable download, document and table IR | complete (first offline vertical slice) |
 | 4 | M13-M15 | field evidence, mapping, unit/time normalization | complete (first offline vertical slice) |
-| 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | in progress (M16 complete) |
+| 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | in progress (M16-M17 complete) |
 | 6 | M19 | hybrid retrieval and evidence graph | pending |
 | 7 | M11-M12 | chart digitization and scientific formats | pending |
 | 8 | M20 | FastAPI, interactive workbench, exports, reproduction bundle | pending |
@@ -87,6 +87,16 @@ one evidenced singleton cluster, zero candidate pairs, zero automatic merges, an
 groups. It inherits the upstream partial status, exposes no entity values, and performs no fuzzy,
 LLM, network, Gold, or scientific-value mutation operation. M17 next owns conflict-preserving
 fusion within those clusters.
+
+M17 re-verifies the exact M16 chain and converts every normalized field in each eligible entity
+cluster into an immutable fusion candidate. A single candidate or multi-candidate exact consensus
+is selectable only when every candidate is M16-eligible and evidence-backed. All other fields are
+withheld, and distinct candidate hashes create an unresolved conflict with no selected value. The
+one-record Ia fixture retains four candidates, selects two identity fields into a Gold candidate
+view, withholds two context-blocked fields, and produces zero conflicts or silent overwrites. It
+remains partial with no tolerance aggregation, source-priority rule, uncertainty aggregation, LLM,
+network, final Gold publication, or benchmark accuracy claim. M18 next owns quality audit, repair,
+and human review.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

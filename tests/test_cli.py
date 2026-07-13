@@ -701,3 +701,45 @@ def test_phase5_resolve_demo_reports_singleton_without_entity_values(
     assert report["event_type"] == "entity.resolved"
     for private_content in (goal, reviewer, "SN-A", "59000.1", "12.3", "object_id"):
         assert private_content not in captured.out
+
+
+def test_phase5_fuse_demo_reports_decisions_without_scientific_values(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m17-reviewer@example.org"
+
+    exit_code = main(["phase5-fuse-demo", "--goal", goal, "--confirmed-by", reviewer])
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "partial"
+    assert report["execution_mode"] == "offline"
+    assert report["network_performed"] is False
+    assert report["model_performed"] is False
+    assert report["tolerance_aggregations"] == 0
+    assert report["source_priority_selections"] == 0
+    assert report["llm_value_decisions"] == 0
+    assert report["silent_overwrites"] == 0
+    assert report["final_gold_writes"] == 0
+    assert report["metrics"]["candidate_count"] == 4
+    assert report["metrics"]["selected_field_count"] == 2
+    assert report["metrics"]["withheld_field_count"] == 2
+    assert report["metrics"]["conflict_count"] == 0
+    assert report["metrics"]["gold_evidence_coverage"] == 1.0
+    assert report["fusion_decisions"] == {"single_eligible": 2, "withheld_review": 2}
+    assert report["conflict_classes"] == {}
+    assert report["event_type"] == "fusion.completed"
+    for private_content in (
+        goal,
+        reviewer,
+        "SN-A",
+        "59000.1",
+        "12.3",
+        "object_id",
+        "observation_time",
+        "magnitude",
+        "band",
+    ):
+        assert private_content not in captured.out
