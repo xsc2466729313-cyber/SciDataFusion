@@ -42,6 +42,7 @@ class EventType(StrEnum):
     FIELD_EXTRACTED = "field.extracted"
     FIELD_MAPPED = "field.mapped"
     RECORD_NORMALIZED = "record.normalized"
+    ENTITY_RESOLVED = "entity.resolved"
     FUSION_COMPLETED = "fusion.completed"
     QUALITY_ISSUE_CREATED = "quality.issue.created"
     REVIEW_RESOLVED = "review.resolved"

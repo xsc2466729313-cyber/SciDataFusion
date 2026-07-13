@@ -39,6 +39,11 @@ from scidatafusion.contracts.documents import (
     DocumentParsingResult,
     DocumentParsingStatus,
 )
+from scidatafusion.contracts.entity_resolution import (
+    EntityResolutionRequest,
+    EntityResolutionResult,
+    EntityResolutionStatus,
+)
 from scidatafusion.contracts.extraction import (
     ExtractionRequest,
     ExtractionResult,
@@ -76,6 +81,8 @@ from scidatafusion.contracts.workflow import Phase1Status, Phase1WorkflowResult
 from scidatafusion.documents.fixtures import build_offline_document_parsing_bundle
 from scidatafusion.documents.service import DocumentParsingService
 from scidatafusion.domain.registry import RegistryLoadError
+from scidatafusion.entity_resolution.fixtures import build_offline_entity_resolution_bundle
+from scidatafusion.entity_resolution.service import EntityResolutionService
 from scidatafusion.errors import AppError
 from scidatafusion.extraction.fixtures import build_offline_extraction_bundle
 from scidatafusion.extraction.service import EvidenceFirstExtractionService
@@ -216,6 +223,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     normalization.add_argument("--goal", required=True, help="scientific research goal")
     normalization.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    resolution = subparsers.add_parser(
+        "phase5-resolve-demo",
+        help="run M00-M16 with exact stable-identifier entity resolution offline",
+    )
+    resolution.add_argument("--goal", required=True, help="scientific research goal")
+    resolution.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -738,6 +755,50 @@ def build_normalization_summary(result: NormalizationResult) -> dict[str, object
     }
 
 
+def build_entity_resolution_summary(result: EntityResolutionResult) -> dict[str, object]:
+    """Render M16 decisions without entity-key values, records, or evidence content."""
+
+    return {
+        "status": result.status.value,
+        "execution_mode": result.runtime.execution_mode.value,
+        "network_performed": False,
+        "model_performed": False,
+        "fuzzy_auto_merges": 0,
+        "llm_merge_decisions": 0,
+        "gold_writes": 0,
+        "m17_fusion_executions": 0,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "contract_id": result.contract_id,
+        "contract_hash": result.contract_hash,
+        "upstream_normalization_output_hash": result.upstream_normalization_output_hash,
+        "resolution_evidence_set_id": result.resolution_evidence_set.evidence_set_id,
+        "resolution_evidence_set_hash": result.resolution_evidence_set.evidence_set_hash,
+        "cluster_set_id": result.cluster_set.cluster_set_id,
+        "cluster_set_hash": result.cluster_set.cluster_set_hash,
+        "duplicate_group_set_id": result.duplicate_group_set.duplicate_group_set_id,
+        "duplicate_group_set_hash": result.duplicate_group_set.duplicate_group_set_hash,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "resolution_methods": dict(
+            sorted(
+                Counter(
+                    item.method.value for item in result.resolution_evidence_set.records
+                ).items()
+            )
+        ),
+        "cluster_decisions": dict(
+            sorted(Counter(item.decision.value for item in result.cluster_set.clusters).items())
+        ),
+        "duplicate_methods": dict(
+            sorted(Counter(item.method.value for item in result.duplicate_group_set.groups).items())
+        ),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "input_hash": result.input_hash,
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -938,6 +999,27 @@ async def _execute_offline_normalization(
         requested_at=bundle.runtime.checked_at,
     )
     result = await ScientificNormalizationService(bronze_store=store).execute(request)
+    return request, result, store
+
+
+async def _execute_offline_entity_resolution(
+    contract: ScientificDataContract,
+    planning: SearchPlanningResult,
+) -> tuple[EntityResolutionRequest, EntityResolutionResult, MemoryBronzeStore]:
+    """Execute M16 over the exact offline M15 result without network or model calls."""
+
+    normalization_request, normalization_result, store = await _execute_offline_normalization(
+        contract, planning
+    )
+    bundle = build_offline_entity_resolution_bundle(not_before=normalization_result.created_at)
+    request = EntityResolutionRequest(
+        normalization_request=normalization_request,
+        normalization_result=normalization_result,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        requested_at=bundle.runtime.checked_at,
+    )
+    result = await EntityResolutionService(bronze_store=store).execute(request)
     return request, result, store
 
 
@@ -1334,6 +1416,40 @@ def main(argv: Sequence[str] | None = None) -> int:
                 code = "validation_failed"
             print(
                 json.dumps({"status": "error", "error": code}, ensure_ascii=True), file=sys.stderr
+            )
+            return 2
+    if args.command == "phase5-resolve-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            _, resolution_result, _ = asyncio.run(
+                _execute_offline_entity_resolution(phase1.confirmation.contract, planning)
+            )
+            print(
+                json.dumps(
+                    build_entity_resolution_summary(resolution_result),
+                    ensure_ascii=True,
+                    indent=2,
+                )
+            )
+            return (
+                0
+                if resolution_result.status
+                in {EntityResolutionStatus.SUCCEEDED, EntityResolutionStatus.PARTIAL}
+                else 3
+            )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
             )
             return 2
     return 2

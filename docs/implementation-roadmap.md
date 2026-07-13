@@ -9,7 +9,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 2 | M04-M06 | federated discovery, coverage, selected sources | complete |
 | 3 | M07-M10 | immutable download, document and table IR | complete (first offline vertical slice) |
 | 4 | M13-M15 | field evidence, mapping, unit/time normalization | complete (first offline vertical slice) |
-| 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | pending |
+| 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | in progress (M16 complete) |
 | 6 | M19 | hybrid retrieval and evidence graph | pending |
 | 7 | M11-M12 | chart digitization and scientific formats | pending |
 | 8 | M20 | FastAPI, interactive workbench, exports, reproduction bundle | pending |
@@ -79,6 +79,14 @@ precision metadata, reversibility, and evidence. Because the Ia source cells do 
 units or a time scale, M15 does not treat target units as source context and does not claim an MJD
 or magnitude conversion. It emits three blocking issues, keeps two identity fields eligible for
 M16, and remains partial without model, network, guessing, Gold writes, or binary-float coercion.
+
+M16 re-verifies M15 and buckets records by exact evidence-backed contract entity-key fingerprints.
+Only multi-record exact-key buckets can auto-merge, at score and threshold 1.0; exact duplicates
+also require equality across every M16-eligible field. The one-record Ia fixture therefore yields
+one evidenced singleton cluster, zero candidate pairs, zero automatic merges, and zero duplicate
+groups. It inherits the upstream partial status, exposes no entity values, and performs no fuzzy,
+LLM, network, Gold, or scientific-value mutation operation. M17 next owns conflict-preserving
+fusion within those clusters.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

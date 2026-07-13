@@ -669,3 +669,35 @@ def test_phase4_normalize_demo_reports_traceability_without_values(
     assert report["event_type"] == "record.normalized"
     for private_content in (goal, reviewer, "SN-A", "59000.1", "12.3", "MJD", "mag"):
         assert private_content not in captured.out
+
+
+def test_phase5_resolve_demo_reports_singleton_without_entity_values(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m16-reviewer@example.org"
+
+    exit_code = main(["phase5-resolve-demo", "--goal", goal, "--confirmed-by", reviewer])
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "partial"
+    assert report["execution_mode"] == "offline"
+    assert report["network_performed"] is False
+    assert report["model_performed"] is False
+    assert report["fuzzy_auto_merges"] == 0
+    assert report["llm_merge_decisions"] == 0
+    assert report["gold_writes"] == 0
+    assert report["metrics"]["input_record_count"] == 1
+    assert report["metrics"]["candidate_pair_count"] == 0
+    assert report["metrics"]["entity_cluster_count"] == 1
+    assert report["metrics"]["singleton_cluster_count"] == 1
+    assert report["metrics"]["automatic_merge_cluster_count"] == 0
+    assert report["metrics"]["duplicate_group_count"] == 0
+    assert report["resolution_methods"] == {"exact_stable_identifier": 1}
+    assert report["cluster_decisions"] == {"singleton": 1}
+    assert report["duplicate_methods"] == {}
+    assert report["event_type"] == "entity.resolved"
+    for private_content in (goal, reviewer, "SN-A", "59000.1", "12.3", "object_id"):
+        assert private_content not in captured.out

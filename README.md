@@ -107,7 +107,14 @@ provenance-preserving unified document IR; and M10 recovers native tables with c
   source units or astronomical time scale are not independently evidenced;
 - an offline Ia M15 result with four retained fields, two reversible exact-decimal transformations,
   three explicit context issues, two M16-eligible identity fields, and zero model, network, LLM
-  value mutation, cost, Gold, or scientific unit/time conversion operations.
+  value mutation, cost, Gold, or scientific unit/time conversion operations;
+- M16 strict request, policy, runtime, resolution-evidence, entity-cluster, duplicate-group,
+  metric, result, checkpoint, and `entity.resolved` event contracts bound to the exact M15 result;
+- exact stable-identifier blocking over evidence-backed entity-key hashes, with bucket-local pair
+  accounting, score/threshold 1.0, and separate exact eligible-field duplicate fingerprints;
+- an offline Ia M16 result with one evidenced singleton cluster, zero candidate pairs, zero
+  automatic merges, zero duplicate groups, and zero fuzzy, model, network, cost, Gold, or
+  scientific-value mutation operations.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -120,8 +127,9 @@ the native CSV slice into table IR without changing scientific values. M13 extra
 exact-header table candidates and never writes Gold. M14 revalidates exact canonical mappings and
 retains unevidenced alias headers without auto-acceptance. M15 performs traceable exact parsing,
 retains ambiguous fields with explicit issues, and refuses to infer source units or time scales.
-M16 conflict-preserving fusion, deferred complex document/table formats, and the web workbench
-remain future checkpoints.
+M16 creates conservative evidence-backed entity clusters without fuzzy or model decisions. M17
+conflict-preserving fusion, deferred complex document/table formats, and the web workbench remain
+future checkpoints.
 
 ## Quick start
 
@@ -140,6 +148,7 @@ uv run scidatafusion phase3-table-demo --goal "Study Type Ia supernova light cur
 uv run scidatafusion phase4-extract-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase4-map-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase4-normalize-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase5-resolve-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -213,6 +222,13 @@ issues and does not claim that either number has been converted to the contract 
 summary contains counts, statuses, identifiers, and hashes only; it omits values, units, evidence
 content, goal text, and reviewer identity. Unit/time conversion, coordinate systems, uncertainty,
 entity conflict handling, and Gold writes remain deferred.
+
+`phase5-resolve-demo` consumes the exact M15 request/result. It uses only eligible contract entity
+keys to create privacy-reduced exact identifier fingerprints, then generates candidate pairs inside
+matching buckets. The single Ia record produces one singleton cluster and no automatic merge or
+duplicate group. The summary omits entity-key names/values, records, evidence content, goal text,
+and reviewer identity. Fuzzy/probabilistic matching, alias graphs, transitive consistency,
+benchmark accuracy, conflict fusion, and Gold writes remain deferred.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported
