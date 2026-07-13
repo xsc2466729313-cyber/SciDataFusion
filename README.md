@@ -10,7 +10,7 @@ The source package is being built phase by phase from the
 
 ## Current checkpoint
 
-Phase 2 is complete and Phase 3 is in progress. Phase 1 turns an accepted research goal into a
+Phase 3 is complete and Phase 4 is in progress. Phase 1 turns an accepted research goal into a
 confirmed scientific data contract; M04-M06 discover and select evidence-backed sources; M07
 preserves authorized bytes in immutable Bronze storage; M08 creates an explainable,
 registry-bound downstream parse plan; M09 executes eligible document routes into a
@@ -80,7 +80,16 @@ provenance-preserving unified document IR; and M10 recovers native tables with c
 - canonical content-addressed TableIR storage, immutable complete-result replay, and stable raw-text
   row and all-String Polars projections;
 - an offline Ia M10 result with one successful 2-by-4 TableIR, eight exact cell evidence anchors,
-  one completion event, and zero network, model, cost, M13, or Bronze-write operations.
+  one completion event, and zero network, model, cost, M13, or Bronze-write operations;
+- M13 strict request, runtime, evidence, candidate, gap, metric, result, checkpoint, and
+  `field.extracted` event contracts bound to the confirmed contract and exact M10 lineage;
+- evidence-first exact-header extraction in which every candidate retains unchanged source text,
+  exact Bronze-replayable cell evidence, and same-row entity-key evidence;
+- explicit gaps for missing headers or values, absent entity bindings, failed table quality,
+  unsupported header structure, and source-cell-bound unmapped headers;
+- an offline Ia M13 result with four explicit candidates, four exact evidence atoms, 100% evidence
+  coverage, one honest missing-required-field gap, and zero network, model, cost, M14, Gold, or
+  Bronze-write operations.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -89,9 +98,10 @@ selects three source categories with full Required/entity/source-type candidate 
 correctly remains partial because record-level scope and reuse permission are not yet proven. M07
 retains controlled source bytes but does not parse scientific values. M08 classifies and plans only;
 M09 parses supported documents into document IR but does not extract scientific fields. M10 parses
-the native CSV slice into table IR without changing scientific values. M13 evidence extraction,
-later normalization/fusion, deferred complex document/table formats, and the web workbench remain
-future checkpoints.
+the native CSV slice into table IR without changing scientific values. M13 extracts only explicit,
+exact-header table candidates and never writes Gold. M14 semantic mapping, later
+normalization/fusion, deferred complex document/table formats, and the web workbench remain future
+checkpoints.
 
 ## Quick start
 
@@ -107,6 +117,7 @@ uv run scidatafusion phase3-download-demo --goal "Study Type Ia supernova light 
 uv run scidatafusion phase3-parse-plan-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase3-document-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase3-table-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase4-extract-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -157,6 +168,13 @@ fixture produces two rows, four columns, and eight exact cell anchors; Polars pr
 column as `String`. The summary exposes no cell value or source location. XLSX, HTML/PDF/image table
 recovery, page bbox, merged cells, footnotes, multi-level headers, cross-page merging, and the
 representative 100-table accuracy benchmark remain deferred.
+
+`phase4-extract-demo` consumes that exact M10 result. It creates a field candidate only after an
+exact table-cell `EvidenceAtom` exists and binds every candidate to same-row entity-key evidence.
+The Ia fixture emits four explicit candidates and remains `partial` because
+`source_record_id` is absent; it does not invent the field. The summary omits values, lexemes,
+locations, URLs, goal text, and reviewer identity. Alias mapping, inference, normalization,
+DocumentIR/FigureIR/DatasetIR extraction, Gold writes, and judged-corpus accuracy remain deferred.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported

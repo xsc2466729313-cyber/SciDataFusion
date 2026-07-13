@@ -516,3 +516,64 @@ def test_phase3_table_demo_produces_safe_cell_evidence_summary(
         "12.3",
     ):
         assert secret_or_content not in captured.out
+
+
+def test_phase4_extract_demo_produces_safe_evidence_coverage_summary(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m13-reviewer@example.org"
+
+    exit_code = main(["phase4-extract-demo", "--goal", goal, "--confirmed-by", reviewer])
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "partial"
+    assert report["execution_mode"] == "offline"
+    assert report["network_performed"] is False
+    assert report["model_performed"] is False
+    assert report["gold_writes"] == 0
+    assert report["m14_mapping_executions"] == 0
+    assert report["metrics"] == {
+        "input_table_count": 1,
+        "accepted_table_count": 1,
+        "input_data_row_count": 1,
+        "extracted_row_count": 1,
+        "evidence_atom_count": 4,
+        "candidate_count": 4,
+        "explicit_candidate_count": 4,
+        "inferred_candidate_count": 0,
+        "derived_candidate_count": 0,
+        "evidence_coverage": 1.0,
+        "required_field_coverage": 0.75,
+        "entity_bound_candidate_count": 4,
+        "gap_count": 1,
+        "model_attempt_count": 0,
+        "network_attempt_count": 0,
+        "actual_cost_micro_usd": 0,
+    }
+    assert report["candidate_fields"] == {
+        "band": 1,
+        "magnitude": 1,
+        "object_id": 1,
+        "observation_time": 1,
+    }
+    assert report["candidate_origins"] == {"explicit": 4}
+    assert report["evidence_source_kinds"] == {"table_cell": 4}
+    assert report["gap_codes"] == {"required_field_header_missing": 1}
+    assert report["event_type"] == "field.extracted"
+    assert report["event_count"] == 1
+    for secret_or_content in (
+        goal,
+        reviewer,
+        "evil.example",
+        "malware.exe",
+        "offline-fixture:",
+        "https://",
+        "SN-A",
+        "59000.1",
+        "12.3",
+        "deterministic_exact_header_table_cell",
+    ):
+        assert secret_or_content not in captured.out

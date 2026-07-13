@@ -8,7 +8,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 1 | M00-M03 | research goal to confirmed data contract | complete |
 | 2 | M04-M06 | federated discovery, coverage, selected sources | complete |
 | 3 | M07-M10 | immutable download, document and table IR | complete (first offline vertical slice) |
-| 4 | M13-M15 | field evidence, mapping, unit/time normalization | pending |
+| 4 | M13-M15 | field evidence, mapping, unit/time normalization | in progress (M13 complete) |
 | 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | pending |
 | 6 | M19 | hybrid retrieval and evidence graph | pending |
 | 7 | M11-M12 | chart digitization and scientific formats | pending |
@@ -57,8 +57,14 @@ produces a two-row, four-column TableIR with eight exact byte-evidenced cells, d
 gates, content-addressed replay, and all-String Polars projection. It does not silently repair a
 header or coerce scientific-looking text. XLSX, HTML/PDF/image tables, complex headers, merged
 cells, footnotes, and cross-page reconstruction remain explicit format-capability gaps rather than
-claims of this slice. M13 next creates field candidates with EvidenceAtom links; M10 does not claim
-field extraction or Gold correctness.
+claims of this slice. M10 does not claim field extraction or Gold correctness.
+
+M13 verifies the exact confirmed contract and M10 lineage, then creates only explicit candidates
+whose headers exactly equal contract fields. Every candidate references a minimal table-cell
+EvidenceAtom that replays to immutable Bronze bytes and same-row evidence for every entity key. The
+Ia fixture yields four evidence-bound candidates and remains partial because one required field is
+absent. It performs no semantic alias mapping, inference, derivation, normalization, model or
+network execution, or Gold write. M14 next owns registered field mapping and ambiguity handling.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

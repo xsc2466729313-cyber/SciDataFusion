@@ -39,6 +39,11 @@ from scidatafusion.contracts.documents import (
     DocumentParsingResult,
     DocumentParsingStatus,
 )
+from scidatafusion.contracts.extraction import (
+    ExtractionRequest,
+    ExtractionResult,
+    ExtractionStatus,
+)
 from scidatafusion.contracts.parsing import (
     ParsePlanningRequest,
     ParsePlanningResult,
@@ -66,6 +71,8 @@ from scidatafusion.documents.fixtures import build_offline_document_parsing_bund
 from scidatafusion.documents.service import DocumentParsingService
 from scidatafusion.domain.registry import RegistryLoadError
 from scidatafusion.errors import AppError
+from scidatafusion.extraction.fixtures import build_offline_extraction_bundle
+from scidatafusion.extraction.service import EvidenceFirstExtractionService
 from scidatafusion.parsing import ParsePlanningService
 from scidatafusion.parsing.fixtures import build_offline_parse_planning_bundle
 from scidatafusion.search import SearchPlanner, SourceCapabilityRegistryLoader, source_ids
@@ -169,6 +176,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     tables.add_argument("--goal", required=True, help="scientific research goal")
     tables.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    extraction = subparsers.add_parser(
+        "phase4-extract-demo",
+        help="run M00-M13 and create evidence-bound explicit field candidates offline",
+    )
+    extraction.add_argument("--goal", required=True, help="scientific research goal")
+    extraction.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -560,6 +577,43 @@ def build_table_summary(result: TableParsingResult) -> dict[str, object]:
             sorted(Counter(item.parser_id for item in result.attempts).items())
         ),
         "quality_checks": dict(sorted(quality_checks.items())),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "input_hash": result.input_hash,
+        "output_hash": result.output_hash,
+    }
+
+
+def build_extraction_summary(result: ExtractionResult) -> dict[str, object]:
+    """Render M13 evidence coverage without raw values, lexemes, URLs, or source content."""
+
+    return {
+        "status": result.status.value,
+        "execution_mode": result.runtime.execution_mode.value,
+        "network_performed": False,
+        "model_performed": False,
+        "gold_writes": 0,
+        "m14_mapping_executions": 0,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "contract_id": result.contract_id,
+        "contract_hash": result.contract_hash,
+        "upstream_table_output_hash": result.upstream_table_output_hash,
+        "evidence_set_id": result.evidence_set.evidence_set_id,
+        "evidence_set_hash": result.evidence_set.evidence_set_hash,
+        "candidate_set_id": result.candidate_set.candidate_set_id,
+        "candidate_set_hash": result.candidate_set.candidate_set_hash,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "candidate_fields": dict(
+            sorted(Counter(item.field_name for item in result.candidate_set.candidates).items())
+        ),
+        "candidate_origins": dict(
+            sorted(Counter(item.origin.value for item in result.candidate_set.candidates).items())
+        ),
+        "evidence_source_kinds": dict(
+            sorted(Counter(item.source_kind.value for item in result.evidence_set.atoms).items())
+        ),
+        "gap_codes": dict(sorted(Counter(item.code.value for item in result.gaps).items())),
         "event_type": result.event.event_type.value,
         "event_count": 1,
         "input_hash": result.input_hash,
@@ -967,6 +1021,80 @@ def main(argv: Sequence[str] | None = None) -> int:
             return (
                 0
                 if table_result.status in {TableParsingStatus.SUCCEEDED, TableParsingStatus.PARTIAL}
+                else 3
+            )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase4-extract-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            contract = phase1.confirmation.contract
+            selection = asyncio.run(_execute_offline_selection(contract, planning))
+            store = MemoryBronzeStore()
+            download_request, download_result = asyncio.run(
+                _execute_offline_artifacts_with_request(selection, store=store)
+            )
+            parse_bundle = build_offline_parse_planning_bundle()
+            parse_request = ParsePlanningRequest(
+                contract=contract,
+                download_request=download_request,
+                download_result=download_result,
+                capability_registry=parse_bundle.registry,
+                policy=parse_bundle.policy,
+                runtime=parse_bundle.runtime,
+                requested_at=parse_bundle.runtime.checked_at,
+            )
+            parse_result = asyncio.run(ParsePlanningService(store=store).execute(parse_request))
+            table_bundle = build_offline_table_parsing_bundle(
+                parse_result.plan.capability_registry,
+                parse_result.plan.runtime,
+            )
+            table_request = TableParsingRequest(
+                parse_planning_request=parse_request,
+                parse_planning_result=parse_result,
+                policy=table_bundle.policy,
+                runtime=table_bundle.runtime,
+                requested_at=table_bundle.runtime.checked_at,
+            )
+            table_result = asyncio.run(
+                TableParsingService(bronze_store=store).execute(table_request)
+            )
+            extraction_bundle = build_offline_extraction_bundle(not_before=table_result.created_at)
+            extraction_request = ExtractionRequest(
+                contract=contract,
+                table_parsing_request=table_request,
+                table_parsing_result=table_result,
+                policy=extraction_bundle.policy,
+                runtime=extraction_bundle.runtime,
+                requested_at=extraction_bundle.runtime.checked_at,
+            )
+            extraction_result = asyncio.run(
+                EvidenceFirstExtractionService(bronze_store=store).execute(extraction_request)
+            )
+            print(
+                json.dumps(
+                    build_extraction_summary(extraction_result),
+                    ensure_ascii=True,
+                    indent=2,
+                )
+            )
+            return (
+                0
+                if extraction_result.status
+                in {ExtractionStatus.SUCCEEDED, ExtractionStatus.PARTIAL}
                 else 3
             )
         except (AppError, RegistryLoadError, ValidationError) as exc:
