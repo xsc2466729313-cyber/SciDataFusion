@@ -10,7 +10,8 @@ The source package is being built phase by phase from the
 
 ## Current checkpoint
 
-Phases 1-6 are complete and Phase 7 has accepted its first M11 offline slice. Phase 1 turns an accepted research goal into a
+Phases 1-8 now have a connected Ia supernova vertical slice with offline replay and an optional
+audited online-discovery mode. Phase 1 turns an accepted research goal into a
 confirmed scientific data contract; M04-M06 discover and select evidence-backed sources; M07
 preserves authorized bytes in immutable Bronze storage; M08 creates an explainable,
 registry-bound downstream parse plan; M09 executes eligible document routes into a
@@ -147,13 +148,32 @@ provenance-preserving unified document IR; and M10 recovers native tables with c
 - an offline synthetic Ia chart result with one 64-by-64 content-addressed raster, two confirmed
   calibrations, one inverted magnitude axis, three digitized points, 100% calibration coverage,
   and zero OCR, VLM, network, model, cost, or scientific-value mutation operations.
+- M12 strict scientific-artifact, subset, plugin-runtime, DatasetIR, variable, coordinate, format
+  metadata, quality, metric, checkpoint, and `dataset.parsed` contracts;
+- an optional Astropy FITS plugin that deterministically reads a bounded binary-table subset,
+  retains raw and physical values, TSCAL/TZERO transformations, units, headers, source row indexes,
+  and non-finite missing values without model or network execution;
+- an offline Ia FITS result with three variables, four selected rows, twelve materialized cells,
+  one explicit scale/offset transformation, one preserved missing value, and content-addressed
+  DatasetIR replay;
 - M20 strict delivery contracts, Formal-Gold-only CSV/Parquet serialization, content-addressed
   artifacts, canonical manifests, deterministic UTF-8 ZIP packaging, and checkpoint replay;
-- a FastAPI workbench with offline M00-M20 execution, reduced quality/graph metrics, review issues,
+- a Chinese FastAPI scientific-data workbench organized by the complete research workflow, with
+  multi-source details, parser routing, field alignment, raw/normalized/fused values, evidence
+  locations, quality gates, review issues, a light-curve chart, an evidence graph, delivery files,
   short-lived content-bound download tickets, and structured `409`/`403` failure responses;
 - an offline Ia M20 review package containing dictionary, provenance, quality, evidence graph,
   runtime metrics, reproduction metadata, and an executable verification notebook, while correctly
   withholding CSV/Parquet because the M18 quality gate has not passed.
+- M21 controlled live discovery through the allowlisted SerpApi Google Search endpoint, with
+  bounded retries, rate limiting, concurrency, cache replay, response validation, and secret-free
+  invocation proof;
+- Qwen source relevance assessment through Alibaba Cloud Bailian's OpenAI-compatible endpoint,
+  with a versioned external prompt and strict `extra="forbid"` output contracts. The model may
+  classify likely evidence and recommend inspection, but cannot create or mutate scientific data;
+- a Chinese `离线复现 / 联网智能` segmented mode control plus live-source titles, domains,
+  snippets, relevance, evidence types, recommendations, provider latency, attempts, cache state,
+  and model token counts in the product workbench.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -172,14 +192,17 @@ exact eligible consensus. M18 executes the confirmed contract's quality gates an
 Gold while unresolved required, any-of, or provenance issues remain. M19 adds task-private sparse
 retrieval, an evidence graph, and quarantined task memory without promoting unreviewed experience.
 M11 adds manually calibrated deterministic scatter-chart digitization without pretending to have
-OCR or semantic legend inference. M20 adds the usable delivery workbench and reproduction package
-without pretending that the unresolved Ia candidate is Formal Gold. M12 scientific-format parsing,
-review resolution, and production deployment remain future checkpoints.
+OCR or semantic legend inference. M12 adds deterministic FITS subset parsing through an optional
+scientific-format plugin without claiming support for every format. M20 adds the connected Chinese
+workbench and reproduction package without pretending that the unresolved Ia candidate is Formal
+Gold. M21 adds optional real web search and Qwen source assessment without weakening the immutable
+offline scientific-value pipeline. Review resolution, representative multi-domain evaluation, and
+production deployment remain future checkpoints.
 
 ## Quick start
 
 ```powershell
-uv sync --python 3.11 --group dev
+uv sync --python 3.11 --group dev --extra scientific
 Copy-Item .env.example .env
 uv run scidatafusion doctor
 uv run scidatafusion phase1-demo --goal "Integrate multi-source Type Ia supernova light curves into CSV." --confirmed-by "demo-reviewer"
@@ -198,6 +221,7 @@ uv run scidatafusion phase5-fuse-demo --goal "Study Type Ia supernova light curv
 uv run scidatafusion phase5-audit-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase6-knowledge-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --query "quality evidence observation time magnitude" --confirmed-by "demo-reviewer"
 uv run scidatafusion phase7-figure-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase7-scientific-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase8-delivery-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --query "quality evidence observation time magnitude" --confirmed-by "demo-reviewer"
 uv run uvicorn scidatafusion.api:app --host 127.0.0.1 --port 8000
 uv run pytest tests/test_search_planning.py -q --no-cov
@@ -205,6 +229,24 @@ uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
 uv run powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
+
+The default `.env` remains offline and deterministic. To enable the `联网智能` option, set these
+values only in the ignored local `.env`, then restart Uvicorn:
+
+```dotenv
+SCIDATA_OFFLINE_MODE=false
+SERPAPI_API_KEY=
+DASHSCOPE_API_KEY=
+SCIDATA_BAILIAN_REGION=cn-beijing
+```
+
+For Beijing, the default model endpoint is the official shared
+`https://dashscope.aliyuncs.com/compatible-mode/v1`. A workspace-specific official
+`*.maas.aliyuncs.com/compatible-mode/v1` endpoint can still be selected with
+`SCIDATA_BAILIAN_WORKSPACE_ID`. `/api/v1/runtime` reports capability readiness without returning
+key material. Online search results and Qwen assessments augment source discovery; all parsing,
+normalization, fusion, evidence, quality gates, and delivery rules remain deterministic and
+evidence-bound.
 
 `doctor` never prints secret values. The default configuration is offline and does not call
 Alibaba Cloud or any external data source. `phase1-demo` also stays offline and labels its

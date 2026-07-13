@@ -14,13 +14,21 @@ async def _exercise_api() -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         health = await client.get("/api/health")
         assert health.status_code == 200
-        assert health.json() == {"status": "ok", "service": "scidatafusion", "module": "M20"}
+        assert health.json() == {"status": "ok", "service": "scidatafusion", "module": "M21"}
         assert health.headers["x-content-type-options"] == "nosniff"
 
         page = await client.get("/")
         assert page.status_code == 200
-        assert "SciDataFusion Workbench" in page.text
-        assert "运行 M00-M20" in page.text
+        assert "SciDataFusion 科学数据融合工作台" in page.text
+        assert "从科学问题到可交付数据" in page.text
+        assert "联网智能" in page.text
+        assert "实时联网发现" in page.text
+        assert "M00-M20" not in page.text
+
+        runtime = await client.get("/api/v1/runtime")
+        assert runtime.status_code == 200
+        assert runtime.json()["online_ready"] is False
+        assert runtime.json()["search_endpoint_host"] == "serpapi.com"
 
         status = await client.get("/api/v1/demo/status")
         assert status.status_code == 200
@@ -29,6 +37,30 @@ async def _exercise_api() -> None:
         assert summary["issue_count"] == 3
         assert summary["formal_gold_record_count"] == 0
         assert summary["known_limitations"]
+
+        workbench = await client.get("/api/v1/workbench")
+        assert workbench.status_code == 200
+        detail = workbench.json()
+        assert detail["execution_mode"] == "offline"
+        assert detail["online_research"] is None
+        assert [item["label"] for item in detail["stages"]] == [
+            "研究需求",
+            "多源发现",
+            "解析提取",
+            "清洗整合",
+            "质量校验",
+            "成果交付",
+        ]
+        assert len(detail["sources"]) == 3
+        assert len(detail["artifacts"]) == 6
+        assert len(detail["evidence"]) == 4
+        assert len(detail["fields"]) == 6
+        assert len(detail["chart_points"]) == 3
+        assert len(detail["graph_nodes"]) == 18
+        assert len(detail["graph_edges"]) == 33
+        assert detail["scientific_dataset"]["format"] == "fits"
+        assert detail["scientific_dataset"]["variable_names"] == ["MJD", "MAG", "MAG_ERR"]
+        assert detail["scientific_dataset"]["materialized_cell_count"] == 12
 
         issues = await client.get("/api/v1/demo/issues")
         assert issues.status_code == 200

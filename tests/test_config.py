@@ -13,6 +13,7 @@ def test_defaults_are_offline_and_secret_safe(tmp_path: Path) -> None:
     assert settings.environment is Environment.LOCAL
     assert settings.offline_mode is True
     assert summary["credentials_configured"] is False
+    assert summary["serpapi_configured"] is False
     assert "api_key" not in summary
 
 
@@ -62,6 +63,17 @@ def test_us_region_does_not_require_workspace_id_online() -> None:
     assert settings.resolved_qwen_base_url == (
         "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
     )
+
+
+def test_beijing_shared_endpoint_does_not_require_workspace_id_online() -> None:
+    settings = Settings(
+        _env_file=None,
+        offline_mode=False,
+        dashscope_api_key="test-key-material",
+        bailian_region=BailianRegion.CN_BEIJING,
+    )
+
+    assert settings.resolved_qwen_base_url == ("https://dashscope.aliyuncs.com/compatible-mode/v1")
 
 
 def test_online_mode_rejects_non_aliyun_endpoint() -> None:

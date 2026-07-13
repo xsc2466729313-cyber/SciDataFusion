@@ -11,7 +11,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 4 | M13-M15 | field evidence, mapping, unit/time normalization | complete (first offline vertical slice) |
 | 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | complete (first offline vertical slice) |
 | 6 | M19 | hybrid retrieval and evidence graph | complete (first offline vertical slice) |
-| 7 | M11-M12 | chart digitization and scientific formats | in progress (M11 complete) |
+| 7 | M11-M12 | chart digitization and scientific formats | complete (first offline vertical slice) |
 | 8 | M20 | FastAPI, interactive workbench, exports, reproduction bundle | complete (first offline vertical slice) |
 | 9 | evaluation | three domains, held-out domain, ablations, demo package | pending |
 
@@ -123,8 +123,18 @@ linear/log10 and increasing/decreasing pixel directions. The synthetic Ia accept
 three points; every point preserves its component bbox, centroid, calibrated coordinates, error,
 both CalibrationRecord identities, and source-byte hash. The result remains partial because axis
 and series semantics are manual inputs. OCR, VLM, automatic legend/axis recognition, overlapping
-series, M08/M09 region routing, and benchmark accuracy are deferred. M12 next owns scientific file
-formats.
+series, M08/M09 region routing, and benchmark accuracy are deferred.
+
+M12 accepts a content-addressed FITS scientific artifact plus an explicit HDU, variable, and row
+subset. Its optional Astropy plugin reads one binary table deterministically and emits a unified
+DatasetIR with source row coordinates, variables, original storage values, decoded physical
+values, FITS column formats and units, bounded header cards, TSCAL/TZERO transformations, and
+preserved non-finite missing values. The synthetic Ia fixture contains three variables and four
+rows; all twelve selected cells replay exactly, including one scaled magnitude variable and one
+missing uncertainty. Content-addressed DatasetIR storage, canonical checkpoints, plugin/runtime
+binding, Bronze replay, and one `dataset.parsed` event are independently verified. NetCDF, HDF5,
+GeoTIFF, FASTA, large-file Dask execution, and a full M07-M08 FITS acquisition fixture remain
+additional adapters rather than claims of this slice.
 
 M20 re-verifies the exact M19 chain and creates only quality-gated delivery artifacts. Formal Gold
 drives exact-equivalent CSV/Parquet serialization; the current Ia result has no Formal Gold, so the
@@ -133,7 +143,21 @@ a canonical file manifest, hashes, contract dictionary, provenance, quality stat
 run/runtime metadata, and an executable hash-verification notebook. FastAPI provides a usable
 input/status/download loop with short-lived content-bound HMAC tickets. The first slice uses local
 stores and an ephemeral signing key; production persistence, identity integration, live sources,
-and successful reviewed Gold publication remain future deployment/evaluation work.
+and successful reviewed Gold publication remain future deployment/evaluation work. The product UI
+projects the whole workflow into Chinese business views rather than exposing module checkpoints:
+research progress, sources and artifacts, parsing/integration details, evidence and quality, and
+delivery. Its light-curve and evidence-graph canvases use actual M11/M19 outputs.
+
+M21 adds an optional online-discovery branch in front of the unchanged deterministic parsing and
+integration chain. SerpApi is the only live search endpoint and is guarded by a host allowlist,
+timeout, retry budget, concurrency/rate limits, cache, bounded result count, and secret-free hashes.
+The returned title, URL, domain, and snippet are validated as untrusted input. Qwen then receives
+only the research goal and bounded search summaries and may return strict source relevance,
+evidence-type, rationale, and action candidates. Any extra field, duplicate/unknown URL, invalid
+JSON, or provider failure discards the assessment while retaining the validated search evidence.
+Neither branch can create, repair, select, or mutate a scientific value. The Chinese workbench now
+exposes explicit offline/online modes, runtime readiness, live results, provider proof, and honest
+degraded states. Repository acceptance uses Mock providers; real keys remain local and ignored.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

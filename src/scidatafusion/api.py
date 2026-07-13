@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import secrets
 from importlib.resources import files
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
 from fastapi import FastAPI, Path, Query, Request
@@ -13,19 +13,34 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import StringConstraints
 
-from scidatafusion.cli import _build_search_planning, _execute_offline_knowledge
+from scidatafusion.cli import (
+    _build_search_planning,
+    _execute_offline_figure,
+    _execute_offline_knowledge,
+    _execute_offline_scientific,
+)
+from scidatafusion.config import Settings, get_settings
 from scidatafusion.contracts.base import StrictContract
 from scidatafusion.contracts.delivery import DeliveryArtifact, DeliveryRequest, DeliveryResult
+from scidatafusion.contracts.online import (
+    OnlineResearchResult,
+    OnlineRuntimeStatus,
+    ResearchExecutionMode,
+)
+from scidatafusion.contracts.workbench import WorkbenchSnapshot
 from scidatafusion.delivery.downloads import DownloadTicketSigner
 from scidatafusion.delivery.fixtures import build_offline_delivery_bundle
 from scidatafusion.delivery.service import DeliveryOrchestrator
 from scidatafusion.errors import AppError, ErrorCode
+from scidatafusion.online import OnlineResearchService, build_online_runtime_status
+from scidatafusion.workbench import build_workbench_snapshot
 
 DEFAULT_GOAL = "Study Type Ia supernova light curves using multi-source data integration into CSV."
 DEFAULT_QUERY = "quality evidence observation time magnitude"
 
 
 class DemoRunRequest(StrictContract):
+    execution_mode: Literal["offline", "online"] = "offline"
     research_goal: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=10, max_length=2_000)
     ] = DEFAULT_GOAL
@@ -78,18 +93,27 @@ class DownloadTicket(StrictContract):
 
 
 class DemoDeliveryProvider:
-    """Lazily run and retain one offline M00-M20 result for the workbench."""
+    """Run the deterministic workflow with optional audited online discovery."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        settings: Settings | None = None,
+        online_service: OnlineResearchService | None = None,
+    ) -> None:
+        self.settings = settings or get_settings()
+        self._online_service = online_service or OnlineResearchService(self.settings)
         self._lock = asyncio.Lock()
         self._request: DeliveryRequest | None = None
         self._result: DeliveryResult | None = None
         self._orchestrator: DeliveryOrchestrator | None = None
+        self._workbench: WorkbenchSnapshot | None = None
 
     async def run(self, payload: DemoRunRequest) -> DeliverySummary:
         """Execute the deterministic demonstration chain and return a reduced summary."""
 
         async with self._lock:
+            execution_mode = ResearchExecutionMode(payload.execution_mode)
             phase1, planning = await asyncio.to_thread(
                 _build_search_planning,
                 payload.research_goal,
@@ -99,11 +123,24 @@ class DemoDeliveryProvider:
                 raise AppError(
                     ErrorCode.VALIDATION_FAILED, "research goal did not produce a contract"
                 )
-            knowledge_request, knowledge_result, bronze_store = await _execute_offline_knowledge(
-                phase1.confirmation.contract,
-                planning,
-                payload.retrieval_query,
+            knowledge_chain, figure_chain, scientific_chain = await asyncio.gather(
+                _execute_offline_knowledge(
+                    phase1.confirmation.contract,
+                    planning,
+                    payload.retrieval_query,
+                ),
+                _execute_offline_figure(phase1.confirmation.contract),
+                _execute_offline_scientific(phase1.confirmation.contract),
             )
+            online_result: OnlineResearchResult | None = None
+            if execution_mode is ResearchExecutionMode.ONLINE:
+                online_result = await self._online_service.run(
+                    research_goal=payload.research_goal,
+                    query=payload.retrieval_query,
+                )
+            knowledge_request, knowledge_result, bronze_store = knowledge_chain
+            _, figure_result, _ = figure_chain
+            scientific_request, scientific_result, _ = scientific_chain
             bundle = build_offline_delivery_bundle(not_before=knowledge_result.created_at)
             request = DeliveryRequest(
                 knowledge_request=knowledge_request,
@@ -117,6 +154,18 @@ class DemoDeliveryProvider:
             self._request = request
             self._result = result
             self._orchestrator = orchestrator
+            self._workbench = build_workbench_snapshot(
+                research_goal=payload.research_goal,
+                retrieval_query=payload.retrieval_query,
+                request=knowledge_request,
+                knowledge=knowledge_result,
+                figure=figure_result,
+                scientific_request=scientific_request,
+                scientific=scientific_result,
+                delivery=result,
+                execution_mode=execution_mode,
+                online_research=online_result,
+            )
             return _summary(request, result)
 
     async def current(self) -> tuple[DeliveryRequest, DeliveryResult, DeliveryOrchestrator]:
@@ -127,6 +176,15 @@ class DemoDeliveryProvider:
         if self._request is None or self._result is None or self._orchestrator is None:
             raise AppError(ErrorCode.INTERNAL_ERROR, "M20 demo state is unavailable")
         return self._request, self._result, self._orchestrator
+
+    async def workbench(self) -> WorkbenchSnapshot:
+        """Return the current complete product projection."""
+
+        if self._workbench is None:
+            await self.run(DemoRunRequest())
+        if self._workbench is None:
+            raise AppError(ErrorCode.INTERNAL_ERROR, "workbench state is unavailable")
+        return self._workbench
 
 
 def create_app(provider: DemoDeliveryProvider | None = None) -> FastAPI:
@@ -193,7 +251,11 @@ def create_app(provider: DemoDeliveryProvider | None = None) -> FastAPI:
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "service": "scidatafusion", "module": "M20"}
+        return {"status": "ok", "service": "scidatafusion", "module": "M21"}
+
+    @app.get("/api/v1/runtime", response_model=OnlineRuntimeStatus)
+    async def runtime_status() -> OnlineRuntimeStatus:
+        return build_online_runtime_status(state.settings)
 
     @app.post("/api/v1/demo/run", response_model=DeliverySummary)
     async def run_demo(payload: DemoRunRequest) -> DeliverySummary:
@@ -203,6 +265,10 @@ def create_app(provider: DemoDeliveryProvider | None = None) -> FastAPI:
     async def demo_status() -> DeliverySummary:
         request, result, _ = await state.current()
         return _summary(request, result)
+
+    @app.get("/api/v1/workbench", response_model=WorkbenchSnapshot)
+    async def workbench_snapshot() -> WorkbenchSnapshot:
+        return await state.workbench()
 
     @app.get("/api/v1/demo/issues", response_model=tuple[IssueSummary, ...])
     async def demo_issues() -> tuple[IssueSummary, ...]:

@@ -34,6 +34,11 @@ from scidatafusion.contracts.connectors import (
     ConnectorExecutionRequest,
     ConnectorExecutionResult,
 )
+from scidatafusion.contracts.datasets import (
+    ScientificParsingRequest,
+    ScientificParsingResult,
+    ScientificParsingStatus,
+)
 from scidatafusion.contracts.delivery import DeliveryRequest, DeliveryResult, DeliveryStatus
 from scidatafusion.contracts.documents import (
     DocumentParsingRequest,
@@ -116,6 +121,8 @@ from scidatafusion.parsing import ParsePlanningService
 from scidatafusion.parsing.fixtures import build_offline_parse_planning_bundle
 from scidatafusion.quality.fixtures import build_offline_quality_bundle
 from scidatafusion.quality.service import QualityAuditService
+from scidatafusion.scientific_formats.fixtures import build_offline_scientific_bundle
+from scidatafusion.scientific_formats.service import ScientificParsingService
 from scidatafusion.search import SearchPlanner, SourceCapabilityRegistryLoader, source_ids
 from scidatafusion.selection import SourceSelectionService
 from scidatafusion.tables.fixtures import build_offline_table_parsing_bundle
@@ -309,6 +316,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     figures.add_argument("--goal", required=True, help="scientific research goal")
     figures.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the confirmed contract gate",
+    )
+    scientific = subparsers.add_parser(
+        "phase7-scientific-demo",
+        help="parse a content-addressed FITS light-curve subset into DatasetIR offline",
+    )
+    scientific.add_argument("--goal", required=True, help="scientific research goal")
+    scientific.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the confirmed contract gate",
@@ -1071,6 +1088,35 @@ def build_figure_summary(result: FigureDigitizationResult) -> dict[str, object]:
     }
 
 
+def build_scientific_summary(result: ScientificParsingResult) -> dict[str, object]:
+    """Render M12 structure and fidelity metrics without scientific values."""
+
+    return {
+        "status": result.status.value,
+        "execution_mode": result.runtime.execution_mode.value,
+        "format": result.runtime.parser.supported_format.value,
+        "parser_id": result.runtime.parser.parser_id,
+        "parser_version": result.runtime.parser.parser_version,
+        "engine_name": result.runtime.parser.engine_name,
+        "engine_version": result.runtime.parser.engine_version,
+        "network_performed": False,
+        "model_performed": False,
+        "scientific_value_mutations": 0,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "contract_id": result.contract_id,
+        "dataset_id": result.dataset_ref.dataset_id,
+        "dataset_hash": result.dataset_ref.dataset_hash,
+        "dataset_artifact_sha256": result.dataset_ref.artifact_sha256,
+        "quality": result.quality.model_dump(mode="json"),
+        "metrics": result.metrics.model_dump(mode="json"),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "input_hash": result.input_hash,
+        "output_hash": result.output_hash,
+    }
+
+
 def build_delivery_summary(result: DeliveryResult) -> dict[str, object]:
     """Render M20 delivery state without scientific values or evidence content."""
 
@@ -1407,6 +1453,24 @@ async def _execute_offline_figure(
         requested_at=bundle.runtime.checked_at,
     )
     result = await FigureDigitizationService(bronze_store=store).execute(request)
+    return request, result, store
+
+
+async def _execute_offline_scientific(
+    contract: ScientificDataContract,
+) -> tuple[ScientificParsingRequest, ScientificParsingResult, MemoryBronzeStore]:
+    """Execute M12 over one immutable synthetic FITS binary-table subset."""
+
+    store = MemoryBronzeStore()
+    bundle = build_offline_scientific_bundle(contract, store)
+    request = ScientificParsingRequest(
+        artifact=bundle.artifact,
+        subset=bundle.subset,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        requested_at=bundle.runtime.checked_at,
+    )
+    result = await ScientificParsingService(bronze_store=store).execute(request)
     return request, result, store
 
 
@@ -1980,6 +2044,35 @@ def main(argv: Sequence[str] | None = None) -> int:
             return (
                 0 if figure_result.status in {FigureStatus.SUCCEEDED, FigureStatus.PARTIAL} else 3
             )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase7-scientific-demo":
+        try:
+            phase1, _ = _build_search_planning(args.goal, args.confirmed_by)
+            if phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            _, scientific_result, _ = asyncio.run(
+                _execute_offline_scientific(phase1.confirmation.contract)
+            )
+            print(
+                json.dumps(
+                    build_scientific_summary(scientific_result),
+                    ensure_ascii=True,
+                    indent=2,
+                )
+            )
+            return 0 if scientific_result.status is ScientificParsingStatus.SUCCEEDED else 3
         except (AppError, RegistryLoadError, ValidationError) as exc:
             if isinstance(exc, AppError):
                 code = exc.code.value

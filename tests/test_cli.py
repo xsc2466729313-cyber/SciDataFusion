@@ -903,3 +903,41 @@ def test_phase7_figure_demo_reports_calibration_without_scientific_values(
         "target_rgb",
     ):
         assert private_content not in captured.out
+
+
+def test_phase7_scientific_demo_reports_structure_without_scientific_values(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m12-reviewer@example.org"
+
+    exit_code = main(["phase7-scientific-demo", "--goal", goal, "--confirmed-by", reviewer])
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "succeeded"
+    assert report["execution_mode"] == "offline"
+    assert report["format"] == "fits"
+    assert report["parser_id"] == "m12.fits"
+    assert report["engine_name"] == "astropy.io.fits"
+    assert report["network_performed"] is False
+    assert report["model_performed"] is False
+    assert report["scientific_value_mutations"] == 0
+    assert report["metrics"]["selected_row_count"] == 4
+    assert report["metrics"]["selected_variable_count"] == 3
+    assert report["metrics"]["materialized_cell_count"] == 12
+    assert report["metrics"]["missing_value_count"] == 1
+    assert report["metrics"]["transformation_count"] == 1
+    assert report["quality"]["sampled_values_replay"] is True
+    assert report["event_type"] == "dataset.parsed"
+    for private_content in (
+        goal,
+        reviewer,
+        "59000",
+        "11.25",
+        "MJD",
+        "MAG_ERR",
+        "LIGHTCURVE",
+    ):
+        assert private_content not in captured.out

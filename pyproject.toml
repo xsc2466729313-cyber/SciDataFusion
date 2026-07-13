@@ -24,6 +24,9 @@ data = [
   "duckdb>=1.2,<2",
   "pyarrow>=19,<21",
 ]
+scientific = [
+  "astropy>=7.1,<8",
+]
 
 [dependency-groups]
 dev = [

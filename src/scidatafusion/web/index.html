@@ -3,119 +3,474 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SciDataFusion Workbench</title>
+  <title>SciDataFusion 科学数据融合工作台</title>
   <style>
-    :root { color-scheme: light; --ink:#18201d; --muted:#62706a; --line:#d9dfdc; --paper:#f7f9f8; --white:#fff; --green:#176b4d; --amber:#985b12; --red:#a6382d; --blue:#245a7a; }
+    :root {
+      color-scheme: light;
+      --ink:#18211d; --muted:#65716b; --line:#d9dfdc; --soft:#f4f7f5; --paper:#fbfcfb;
+      --white:#fff; --green:#176b4d; --green-soft:#e5f1ec; --blue:#27647c; --blue-soft:#e8f1f5;
+      --amber:#9b5d13; --amber-soft:#fbf0df; --red:#a33d34; --red-soft:#f8e8e6; --sidebar:#202a26;
+    }
     * { box-sizing:border-box; letter-spacing:0; }
-    body { margin:0; color:var(--ink); background:var(--paper); font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:var(--paper); font:14px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; }
     button,input,textarea { font:inherit; }
-    header { height:58px; display:flex; align-items:center; justify-content:space-between; padding:0 24px; background:var(--ink); color:white; }
-    .brand { font-size:17px; font-weight:650; }
-    .version { color:#b8c5bf; font-size:12px; }
-    main { max-width:1280px; margin:0 auto; padding:22px 24px 48px; }
-    .runbar { display:grid; grid-template-columns:minmax(300px,1.8fr) minmax(240px,1fr) auto; gap:12px; align-items:end; padding-bottom:22px; border-bottom:1px solid var(--line); }
+    button { cursor:pointer; }
+    .app { min-height:100vh; display:grid; grid-template-columns:220px minmax(0,1fr); }
+    aside { position:sticky; top:0; height:100vh; color:#eaf0ed; background:var(--sidebar); padding:20px 14px; display:flex; flex-direction:column; }
+    .brand { padding:0 10px 22px; border-bottom:1px solid #38423e; }
+    .brand strong { display:block; font-size:17px; }
+    .brand span { display:block; color:#aebbb5; font-size:12px; margin-top:3px; }
+    nav { margin-top:18px; display:grid; gap:4px; }
+    .nav-btn { width:100%; border:0; background:transparent; color:#c7d1cc; text-align:left; padding:10px 11px; border-radius:5px; display:flex; align-items:center; gap:10px; }
+    .nav-btn::before { content:""; width:7px; height:7px; border:1px solid currentColor; transform:rotate(45deg); flex:0 0 auto; }
+    .nav-btn:hover,.nav-btn.active { color:white; background:#34413b; }
+    .aside-meta { margin-top:auto; padding:14px 10px 0; border-top:1px solid #38423e; color:#aebbb5; font-size:11px; overflow-wrap:anywhere; }
+    main,.content,.view,.section,.table-wrap { min-width:0; }
+    .topbar { min-height:58px; padding:0 28px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); background:white; }
+    .topbar h1 { font-size:16px; margin:0; }
+    .runtime { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:#36a475; box-shadow:0 0 0 3px #e3f3ec; }
+    .dot.offline { background:#9b5d13; box-shadow:0 0 0 3px var(--amber-soft); }
+    .content { max-width:1500px; margin:0 auto; padding:24px 28px 48px; }
+    .query-band { display:grid; grid-template-columns:minmax(300px,1.6fr) minmax(220px,.8fr) 220px auto; gap:12px; align-items:end; padding-bottom:24px; border-bottom:1px solid var(--line); }
     label { display:block; color:var(--muted); font-size:12px; font-weight:650; margin-bottom:6px; }
-    textarea,input { width:100%; min-height:42px; border:1px solid #b9c4bf; border-radius:4px; background:white; padding:10px 11px; color:var(--ink); }
-    textarea { height:68px; resize:vertical; }
-    button,.download { min-height:42px; border:0; border-radius:4px; padding:0 15px; background:var(--green); color:white; font-weight:650; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:7px; }
-    button:disabled { cursor:wait; opacity:.65; }
-    .statusline { display:flex; align-items:center; gap:9px; margin:18px 0; min-height:28px; }
-    .pill { border-radius:999px; padding:4px 9px; font-size:12px; font-weight:700; background:#f5e9d7; color:var(--amber); }
-    .pill.good { background:#dfeee8; color:var(--green); }
-    .error { color:var(--red); }
-    .metrics { display:grid; grid-template-columns:repeat(6,minmax(110px,1fr)); border:1px solid var(--line); background:var(--white); }
-    .metric { padding:15px; border-right:1px solid var(--line); min-width:0; }
+    textarea,input { width:100%; border:1px solid #b9c4bf; border-radius:5px; background:white; color:var(--ink); padding:10px 11px; outline:none; }
+    textarea { min-height:68px; max-height:140px; resize:vertical; }
+    input { height:44px; }
+    textarea:focus,input:focus { border-color:var(--green); box-shadow:0 0 0 2px var(--green-soft); }
+    .primary { height:44px; border:0; border-radius:5px; padding:0 18px; color:white; background:var(--green); font-weight:700; white-space:nowrap; }
+    .primary:hover { background:#12583f; }
+    .primary:disabled { opacity:.6; cursor:wait; }
+    .segmented { height:44px; display:grid; grid-template-columns:1fr 1fr; padding:3px; border:1px solid #b9c4bf; border-radius:5px; background:var(--soft); }
+    .segment { position:relative; display:flex; align-items:center; justify-content:center; min-width:0; cursor:pointer; }
+    .segment input { position:absolute; width:1px; height:1px; opacity:0; }
+    .segment span { width:100%; height:36px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px; font-weight:700; border-radius:3px; white-space:nowrap; }
+    .segment input:checked + span { color:white; background:var(--green); }
+    .segment input:disabled + span { color:#98a29d; cursor:not-allowed; }
+    .run-state { min-height:50px; display:flex; gap:10px; align-items:center; justify-content:space-between; padding:12px 0; }
+    .state-copy { display:flex; align-items:center; gap:9px; min-width:0; }
+    .badge { display:inline-flex; align-items:center; min-height:24px; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap; }
+    .badge.review { background:var(--amber-soft); color:var(--amber); }
+    .badge.good { background:var(--green-soft); color:var(--green); }
+    .badge.bad { background:var(--red-soft); color:var(--red); }
+    .subtle { color:var(--muted); }
+    .ids { color:var(--muted); font:11px ui-monospace,SFMono-Regular,Consolas,monospace; white-space:nowrap; }
+    .view { display:none; }
+    .view.active { display:block; }
+    .metric-strip { display:grid; grid-template-columns:repeat(6,minmax(110px,1fr)); border:1px solid var(--line); background:white; }
+    .metric { padding:14px 16px; border-right:1px solid var(--line); min-width:0; }
     .metric:last-child { border-right:0; }
-    .metric b { display:block; font-size:22px; font-weight:650; overflow-wrap:anywhere; }
+    .metric b { display:block; font-size:22px; line-height:1.2; font-weight:680; overflow-wrap:anywhere; }
     .metric span { color:var(--muted); font-size:12px; }
-    .layout { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(300px,.75fr); gap:24px; margin-top:24px; }
-    section { min-width:0; }
-    h2 { font-size:15px; margin:0 0 12px; }
-    table { width:100%; border-collapse:collapse; background:white; border:1px solid var(--line); table-layout:fixed; }
-    th,td { text-align:left; padding:10px 11px; border-bottom:1px solid var(--line); vertical-align:top; overflow-wrap:anywhere; }
-    th { color:var(--muted); font-size:11px; text-transform:uppercase; background:#f2f5f3; }
-    tr:last-child td { border-bottom:0; }
-    .hash { font:12px ui-monospace,SFMono-Regular,Consolas,monospace; color:var(--blue); }
-    .filelink { color:var(--blue); font-weight:650; text-decoration:none; }
-    .limitations { margin:0; padding:13px 16px 13px 31px; border-left:3px solid var(--amber); background:#fffaf2; }
-    .limitations li + li { margin-top:7px; }
-    .download { margin-top:14px; width:100%; }
-    .blocked { color:var(--muted); background:#e8ecea; cursor:not-allowed; }
-    .empty { padding:22px; text-align:center; color:var(--muted); background:white; border:1px solid var(--line); }
-    @media (max-width:900px) { .runbar,.layout { grid-template-columns:1fr; } .metrics { grid-template-columns:repeat(2,1fr); } .metric:nth-child(2n) { border-right:0; } }
-    @media (max-width:520px) { header { padding:0 14px; } main { padding:16px 14px 36px; } .metrics { grid-template-columns:1fr 1fr; } th:nth-child(3),td:nth-child(3) { display:none; } }
+    .section { margin-top:26px; }
+    .section-head { display:flex; justify-content:space-between; align-items:end; gap:16px; margin-bottom:11px; }
+    .section-head h2 { margin:0; font-size:16px; }
+    .section-head p { margin:0; color:var(--muted); font-size:12px; }
+    .pipeline { display:grid; grid-template-columns:repeat(6,minmax(130px,1fr)); border:1px solid var(--line); background:white; overflow:hidden; }
+    .stage { position:relative; padding:16px; min-height:132px; border-right:1px solid var(--line); }
+    .stage:last-child { border-right:0; }
+    .stage::after { content:""; position:absolute; right:-5px; top:31px; width:8px; height:8px; border-top:1px solid #9caaa3; border-right:1px solid #9caaa3; transform:rotate(45deg); background:white; z-index:2; }
+    .stage:last-child::after { display:none; }
+    .stage-index { color:var(--muted); font-size:11px; }
+    .stage h3 { margin:5px 0 9px; font-size:14px; }
+    .stage strong { display:block; font-size:18px; color:var(--green); }
+    .stage small { color:var(--muted); }
+    .stage p { margin:9px 0 0; color:var(--muted); font-size:12px; }
+    .stage.blocked strong { color:var(--red); }
+    .stage.review strong { color:var(--amber); }
+    .dashboard-grid { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(300px,.7fr); gap:20px; }
+    .panel { border:1px solid var(--line); border-radius:6px; background:white; min-width:0; overflow:hidden; }
+    .panel-head { min-height:48px; padding:11px 14px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .panel-head h3 { margin:0; font-size:14px; }
+    .panel-body { padding:14px; }
+    canvas { width:100%; display:block; }
+    #lightcurve { height:310px; }
+    #evidence-graph { height:430px; }
+    .legend { display:flex; gap:15px; color:var(--muted); font-size:11px; }
+    .legend i { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; }
+    .quality-list { display:grid; gap:14px; }
+    .quality-row { display:grid; gap:6px; }
+    .quality-label { display:flex; justify-content:space-between; gap:12px; font-size:12px; }
+    .track { height:7px; background:#edf1ef; border-radius:999px; overflow:hidden; }
+    .bar { height:100%; background:var(--green); }
+    .bar.fail { background:var(--red); }
+    .table-wrap { overflow:auto; border:1px solid var(--line); background:white; }
+    table { width:100%; border-collapse:collapse; table-layout:auto; min-width:760px; }
+    th,td { padding:10px 12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); }
+    th { position:sticky; top:0; background:var(--soft); color:var(--muted); font-size:11px; font-weight:700; z-index:1; }
+    tbody tr:last-child td { border-bottom:0; }
+    tbody tr:hover { background:#fbfdfc; }
+    .mono { font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; color:var(--blue); overflow-wrap:anywhere; }
+    .tags { display:flex; flex-wrap:wrap; gap:5px; }
+    .tag { padding:2px 6px; border:1px solid var(--line); border-radius:3px; background:var(--soft); font-size:11px; white-space:nowrap; }
+    .status-text.good { color:var(--green); font-weight:700; }
+    .status-text.review { color:var(--amber); font-weight:700; }
+    .status-text.bad { color:var(--red); font-weight:700; }
+    .online-proof { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border:1px solid var(--line); background:white; }
+    .proof-item { padding:13px 14px; border-right:1px solid var(--line); min-width:0; }
+    .proof-item:last-child { border-right:0; }
+    .proof-item strong { display:block; font-size:14px; overflow-wrap:anywhere; }
+    .proof-item span { color:var(--muted); font-size:11px; }
+    .source-link { color:var(--blue); font-weight:700; text-decoration:none; }
+    .source-link:hover { text-decoration:underline; }
+    .issue-list { display:grid; gap:8px; }
+    .issue { padding:12px; border-left:3px solid var(--red); background:#fffafa; }
+    .issue strong { display:block; margin-bottom:4px; }
+    .issue p { margin:4px 0; color:var(--muted); }
+    .issue small { color:var(--red); }
+    .delivery-band { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:22px; }
+    .download-box { border:1px solid var(--line); border-radius:6px; background:white; padding:18px; }
+    .download-box h3 { margin:0 0 8px; }
+    .download-box p { color:var(--muted); margin:0 0 14px; }
+    .download-btn { width:100%; min-height:42px; margin-top:8px; border:0; border-radius:5px; background:var(--green); color:white; font-weight:700; }
+    .download-btn.secondary { color:var(--blue); background:var(--blue-soft); }
+    .download-btn:disabled { color:#87928d; background:#e9edeb; cursor:not-allowed; }
+    .empty { padding:28px; color:var(--muted); text-align:center; }
+    .error { color:var(--red); }
+    @media (max-width:1120px) {
+      .query-band { grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); }
+      .pipeline { grid-template-columns:repeat(3,1fr); }
+      .stage:nth-child(3) { border-right:0; }
+      .stage:nth-child(-n+3) { border-bottom:1px solid var(--line); }
+      .stage:nth-child(3)::after,.stage:nth-child(6)::after { display:none; }
+      .metric-strip { grid-template-columns:repeat(3,1fr); }
+      .metric:nth-child(3) { border-right:0; }
+      .metric:nth-child(-n+3) { border-bottom:1px solid var(--line); }
+      .online-proof { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .proof-item:nth-child(2) { border-right:0; }
+      .proof-item:nth-child(-n+2) { border-bottom:1px solid var(--line); }
+    }
+    @media (max-width:900px) {
+      .app { grid-template-columns:minmax(0,1fr); }
+      aside { position:static; height:auto; padding:12px 14px; }
+      .brand { padding:0 0 10px; }
+      nav { margin-top:10px; display:flex; overflow:auto; }
+      .nav-btn { width:auto; white-space:nowrap; }
+      .aside-meta { display:none; }
+      .query-band,.dashboard-grid,.delivery-band { grid-template-columns:minmax(0,1fr); }
+      .ids { display:none; }
+    }
+    @media (max-width:620px) {
+      .topbar { padding:0 16px; }
+      .runtime { font-size:10px; }
+      .content { padding:18px 14px 36px; }
+      .pipeline { grid-template-columns:1fr; }
+      .stage { border-right:0; border-bottom:1px solid var(--line); min-height:112px; }
+      .stage::after { display:none; }
+      .metric-strip { grid-template-columns:repeat(2,1fr); }
+      .metric { border-bottom:1px solid var(--line); }
+      .metric:nth-child(2n) { border-right:0; }
+      .online-proof { grid-template-columns:minmax(0,1fr); }
+      .proof-item { border-right:0; border-bottom:1px solid var(--line); }
+      .proof-item:last-child { border-bottom:0; }
+      .run-state { align-items:flex-start; }
+      #lightcurve { height:250px; }
+      #evidence-graph { height:340px; }
+    }
   </style>
 </head>
 <body>
-  <header><div class="brand">SciDataFusion Workbench</div><div class="version">M20 · offline evidence pipeline</div></header>
-  <main>
-    <form id="run-form" class="runbar">
-      <div><label for="goal">研究目标</label><textarea id="goal" required>Study Type Ia supernova light curves using multi-source data integration into CSV.</textarea></div>
-      <div><label for="query">证据检索查询</label><input id="query" value="quality evidence observation time magnitude" required></div>
-      <button id="run" type="submit"><span aria-hidden="true">▶</span>运行 M00-M20</button>
-    </form>
-    <div class="statusline"><span id="status" class="pill">准备中</span><span id="message">正在读取当前检查点…</span></div>
-    <div class="metrics">
-      <div class="metric"><b id="quality">—</b><span>质量分</span></div>
-      <div class="metric"><b id="issues">—</b><span>待审核问题</span></div>
-      <div class="metric"><b id="gold">—</b><span>Formal Gold 行</span></div>
-      <div class="metric"><b id="nodes">—</b><span>证据图节点</span></div>
-      <div class="metric"><b id="edges">—</b><span>证据图边</span></div>
-      <div class="metric"><b id="hits">—</b><span>检索命中</span></div>
-    </div>
-    <div class="layout">
-      <section><h2>交付产物</h2><div id="artifacts" class="empty">尚未加载</div></section>
-      <section>
-        <h2>质量门与限制</h2><ul id="limitations" class="limitations"><li>正在加载</li></ul>
-        <a id="package" class="download" href="#"><span aria-hidden="true">↓</span>下载复现包</a>
-        <a id="csv" class="download blocked" href="#" aria-disabled="true"><span aria-hidden="true">↓</span>Gold CSV 暂不可用</a>
-      </section>
-    </div>
-  </main>
+  <div class="app">
+    <aside>
+      <div class="brand"><strong>SciDataFusion</strong><span>科学数据融合工作台</span></div>
+      <nav aria-label="工作台导航">
+        <button class="nav-btn active" data-view="overview">研究总览</button>
+        <button class="nav-btn" data-view="sources">数据来源</button>
+        <button class="nav-btn" data-view="integration">解析与整合</button>
+        <button class="nav-btn" data-view="quality">证据与质量</button>
+        <button class="nav-btn" data-view="delivery">成果交付</button>
+      </nav>
+      <div class="aside-meta"><div>全链路内容寻址</div><div>证据优先 · 质量门控 · 可复现</div></div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <h1 id="page-title">研究总览</h1>
+        <div class="runtime"><i id="runtime-dot" class="dot offline"></i><span id="runtime-label">正在检查运行能力</span></div>
+      </header>
+      <div class="content">
+        <form id="run-form" class="query-band">
+          <div><label for="goal">研究目标</label><textarea id="goal" required>研究 Ia 型超新星光变曲线，查找论文、开放数据库和补充材料，整合为可追溯的结构化数据。</textarea></div>
+          <div><label for="query">证据检索重点</label><input id="query" value="质量证据 观测时间 星等 来源记录" required></div>
+          <div><label>运行模式</label><div class="segmented" role="radiogroup" aria-label="运行模式"><label class="segment"><input id="mode-offline" type="radio" name="execution-mode" value="offline" checked><span>离线复现</span></label><label id="mode-online-label" class="segment"><input id="mode-online" type="radio" name="execution-mode" value="online"><span>联网智能</span></label></div></div>
+          <button id="run" class="primary" type="submit">开始分析</button>
+        </form>
+        <div class="run-state">
+          <div class="state-copy"><span id="status" class="badge review">正在加载</span><span id="message" class="subtle">正在读取科研数据链路...</span></div>
+          <div id="ids" class="ids"></div>
+        </div>
+
+        <section id="overview" class="view active">
+          <div class="metric-strip">
+            <div class="metric"><b id="m-sources">-</b><span>选定数据源</span></div>
+            <div class="metric"><b id="m-artifacts">-</b><span>原始产物</span></div>
+            <div class="metric"><b id="m-evidence">-</b><span>字段级证据</span></div>
+            <div class="metric"><b id="m-fields">-</b><span>目标字段</span></div>
+            <div class="metric"><b id="m-quality">-</b><span>质量得分</span></div>
+            <div class="metric"><b id="m-issues">-</b><span>待审问题</span></div>
+          </div>
+          <div class="section">
+            <div class="section-head"><h2>从科学问题到可交付数据</h2><p>每一步均保留输入、决策、证据与质量状态</p></div>
+            <div id="pipeline" class="pipeline"></div>
+          </div>
+          <div class="section dashboard-grid">
+            <div class="panel">
+              <div class="panel-head"><h3>Ia 型超新星光变曲线识别结果</h3><div class="legend"><span><i style="background:#27647c"></i>识别点</span><span><i style="background:#a33d34"></i>误差范围</span></div></div>
+              <div class="panel-body"><canvas id="lightcurve" aria-label="超新星光变曲线"></canvas></div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h3>质量门状态</h3><span id="quality-summary" class="badge review">-</span></div>
+              <div class="panel-body"><div id="quality-list" class="quality-list"></div></div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-head"><h2>融合结果预览</h2><p>原值、规范值、最终选择和证据数量并列展示</p></div>
+            <div class="table-wrap"><table><thead><tr><th>字段</th><th>要求</th><th>原始值</th><th>规范化值</th><th>融合结果</th><th>决策</th><th>证据</th></tr></thead><tbody id="overview-fields"></tbody></table></div>
+          </div>
+        </section>
+
+        <section id="sources" class="view">
+          <div id="online-discovery">
+            <div class="section-head"><h2>实时联网发现</h2><p id="online-copy">本次运行使用离线复现数据</p></div>
+            <div class="online-proof">
+              <div class="proof-item"><strong id="online-status">未执行</strong><span>联网状态</span></div>
+              <div class="proof-item"><strong id="online-count">0</strong><span>实时搜索结果</span></div>
+              <div class="proof-item"><strong id="search-proof">SerpApi 未调用</strong><span>搜索调用证明</span></div>
+              <div class="proof-item"><strong id="model-proof">Qwen 未调用</strong><span>模型调用证明</span></div>
+            </div>
+            <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>排名</th><th>实时来源</th><th>搜索摘要</th><th>LLM 相关性</th><th>证据类型</th><th>建议与依据</th></tr></thead><tbody id="online-source-rows"></tbody></table></div>
+          </div>
+          <div class="section">
+          <div class="section-head"><h2>多源数据发现与选择</h2><p>来源覆盖、许可、下载就绪状态和选择评分</p></div>
+          <div class="table-wrap"><table><thead><tr><th>优先级</th><th>来源</th><th>类别</th><th>覆盖字段</th><th>许可</th><th>下载状态</th><th>评分</th></tr></thead><tbody id="source-rows"></tbody></table></div>
+          </div>
+          <div class="section">
+            <div class="section-head"><h2>原始产物与解析路由</h2><p>所有 Bronze 原始字节不可变并以 SHA-256 寻址</p></div>
+            <div class="table-wrap"><table><thead><tr><th>对象</th><th>格式</th><th>媒体类型</th><th>大小</th><th>处理方式</th><th>解析器</th><th>置信度</th><th>哈希</th></tr></thead><tbody id="artifact-rows"></tbody></table></div>
+          </div>
+        </section>
+
+        <section id="integration" class="view">
+          <div class="section-head"><h2>字段解析、对齐与融合</h2><p>不确定字段会保留待审，不会被模型直接改写</p></div>
+          <div class="table-wrap"><table><thead><tr><th>目标字段</th><th>类型 / 单位</th><th>原始值</th><th>规范化值</th><th>映射方式</th><th>映射分</th><th>融合值</th><th>状态</th></tr></thead><tbody id="field-rows"></tbody></table></div>
+          <div class="section">
+            <div class="section-head"><h2>科学文件解析</h2><p>FITS 二进制数值由确定性科学库读取，原格式元数据与变换记录完整保留</p></div>
+            <div id="scientific-dataset" class="metric-strip"></div>
+          </div>
+          <div class="section">
+            <div class="section-head"><h2>字段级证据</h2><p>定位到原始对象、表格行列和精确字节区间</p></div>
+            <div class="table-wrap"><table><thead><tr><th>字段</th><th>原始值</th><th>来源位置</th><th>字节区间</th><th>提取方法</th><th>置信度</th><th>证据 ID</th></tr></thead><tbody id="evidence-rows"></tbody></table></div>
+          </div>
+        </section>
+
+        <section id="quality" class="view">
+          <div class="dashboard-grid">
+            <div class="panel">
+              <div class="panel-head"><h3>证据关系图</h3><span id="graph-count" class="subtle"></span></div>
+              <div class="panel-body"><canvas id="evidence-graph" aria-label="证据关系图"></canvas></div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h3>待审问题</h3><span id="issue-count" class="badge bad">-</span></div>
+              <div class="panel-body"><div id="issue-list" class="issue-list"></div></div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-head"><h2>混合检索命中</h2><p>稀疏检索与证据图扩展分数分开保留</p></div>
+            <div class="table-wrap"><table><thead><tr><th>来源 ID</th><th>精确位置</th><th>稀疏得分</th><th>图得分</th><th>最终得分</th></tr></thead><tbody id="hit-rows"></tbody></table></div>
+          </div>
+        </section>
+
+        <section id="delivery" class="view">
+          <div class="delivery-band">
+            <div>
+              <div class="section-head"><h2>交付文件</h2><p>每个文件均有内容哈希并纳入可复现清单</p></div>
+              <div class="table-wrap"><table><thead><tr><th>文件名</th><th>类型</th><th>媒体类型</th><th>大小</th><th>SHA-256</th><th>操作</th></tr></thead><tbody id="delivery-rows"></tbody></table></div>
+            </div>
+            <div class="download-box">
+              <h3>可复现交付包</h3>
+              <p id="delivery-copy">包含数据字典、来源证据、质量报告、证据图、运行指标和校验 Notebook。</p>
+              <button id="download-package" class="download-btn">下载完整复现包</button>
+              <button id="download-csv" class="download-btn secondary" disabled>Gold CSV 尚未开放</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
   <script>
-    const $ = (id) => document.getElementById(id);
-    const escapeHtml = (v) => String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-    function render(data) {
-      $('status').textContent = data.status;
-      $('status').className = 'pill' + (data.status === 'succeeded' ? ' good' : '');
-      $('message').textContent = data.quality_gate_passed ? '质量门通过，可导出正式数据。' : '质量门未通过，已生成可审核、可复现的降级交付包。';
-      $('quality').textContent = Math.round(data.quality_score * 100) + '%';
-      $('issues').textContent = data.issue_count; $('gold').textContent = data.formal_gold_record_count;
-      $('nodes').textContent = data.graph_node_count; $('edges').textContent = data.graph_edge_count; $('hits').textContent = data.retrieval_hit_count;
-      $('limitations').innerHTML = (data.known_limitations.length ? data.known_limitations : ['No known delivery limitations.']).map(v => `<li>${escapeHtml(v)}</li>`).join('');
-      $('artifacts').className = '';
-      $('artifacts').innerHTML = `<table><thead><tr><th style="width:34%">文件</th><th style="width:22%">类型</th><th>SHA-256</th><th style="width:12%">大小</th></tr></thead><tbody>${data.artifacts.map(a => `<tr><td><a class="filelink signed-download" href="#" data-filename="${escapeHtml(a.filename)}">${escapeHtml(a.filename)}</a></td><td>${escapeHtml(a.kind)}</td><td class="hash">${escapeHtml(a.sha256.slice(0,16))}…</td><td>${(a.size_bytes/1024).toFixed(1)} KB</td></tr>`).join('')}</tbody></table>`;
-      $('package').href = '#'; $('package').dataset.filename = 'scidatafusion-reproduction.zip';
-      const hasCsv = data.artifacts.some(a => a.filename === 'gold.csv');
-      $('csv').className = 'download' + (hasCsv ? '' : ' blocked');
-      $('csv').textContent = hasCsv ? '↓ 下载 Gold CSV' : '↓ Gold CSV 暂不可用';
-      $('csv').href = '#'; $('csv').dataset.filename = hasCsv ? 'gold.csv' : '';
-      $('csv').setAttribute('aria-disabled', String(!hasCsv));
-    }
-    async function request(url, options) {
+    const $ = id => document.getElementById(id);
+    const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    const zh = {
+      complete:'完成', review:'待审', blocked:'阻断', required:'必填', optional:'可选', derived:'派生',
+      selected:'已采用', withheld:'待审保留', missing:'缺失', allowed:'允许', conditional:'条件许可', ready:'已就绪',
+      parse:'解析', metadata_only:'仅保留元数据', needs_review:'待人工审核', succeeded:'已完成',
+      completed:'完整完成', degraded:'部分完成', failed:'失败', inspect:'人工查阅', download:'建议下载', deprioritize:'降低优先级',
+      document:'文档', table:'表格', landing_page:'网页', scientific_file:'科学文件', archive:'压缩包',
+      data_repository:'数据仓库', domain_database:'领域数据库', literature_metadata:'论文元数据', supplement_web:'补充材料'
+    };
+    const label = value => zh[value] || String(value ?? '-');
+    let snapshot = null;
+    let delivery = null;
+    let runtime = null;
+
+    async function api(url, options) {
       const response = await fetch(url, options);
-      const body = await response.json();
+      const type = response.headers.get('content-type') || '';
+      const body = type.includes('json') ? await response.json() : await response.text();
       if (!response.ok) throw new Error(body.detail || '请求失败');
       return body;
     }
+
+    function badge(status) {
+      const cls = status === 'complete' || status === 'selected' ? 'good' : status === 'blocked' || status === 'missing' ? 'bad' : 'review';
+      return `<span class="badge ${cls}">${esc(label(status))}</span>`;
+    }
+
+    function render() {
+      if (!snapshot || !delivery) return;
+      $('status').textContent = snapshot.quality_gate_passed ? '质量门通过' : '需要人工审核';
+      $('status').className = `badge ${snapshot.quality_gate_passed ? 'good' : 'review'}`;
+      const onlineCount = snapshot.online_research ? snapshot.online_research.sources.length : 0;
+      $('message').textContent = snapshot.quality_gate_passed ? '正式数据已可交付。' : snapshot.execution_mode === 'online' ? `联网检索 ${onlineCount} 个来源并完成本地解析；正式数据因质量门未通过而暂缓发布。` : '链路执行完成，但正式数据因质量门未通过而暂缓发布。';
+      $('ids').textContent = `任务 ${snapshot.task_id.slice(0,12)}…  ·  运行 ${snapshot.run_id.slice(0,12)}…`;
+      $('m-sources').textContent = snapshot.sources.length;
+      $('m-artifacts').textContent = snapshot.artifacts.length;
+      $('m-evidence').textContent = snapshot.evidence.length;
+      $('m-fields').textContent = snapshot.fields.length;
+      $('m-quality').textContent = `${Math.round(snapshot.quality_score * 100)}%`;
+      $('m-issues').textContent = snapshot.issues.length;
+      $('mode-offline').checked = snapshot.execution_mode !== 'online';
+      $('mode-online').checked = snapshot.execution_mode === 'online';
+      renderRuntime(); renderPipeline(); renderFields(); renderSources(); renderOnline(); renderArtifacts(); renderEvidence(); renderScientific(); renderQuality(); renderIssues(); renderHits(); renderDelivery();
+      requestAnimationFrame(() => { drawLightCurve(); drawEvidenceGraph(); });
+    }
+
+    function renderPipeline() {
+      $('pipeline').innerHTML = snapshot.stages.map((stage, index) => `<article class="stage ${esc(stage.status)}"><span class="stage-index">0${index + 1}</span><h3>${esc(stage.label)}</h3><strong>${stage.primary_count}</strong><small>${esc(stage.count_label)}</small><p>${esc(stage.detail)}</p></article>`).join('');
+    }
+
+    function fieldRow(field, compact=false) {
+      const unit = field.target_unit ? ` · ${field.target_unit}` : '';
+      if (compact) return `<tr><td><strong>${esc(field.label)}</strong><div class="mono">${esc(field.name)}</div></td><td>${esc(label(field.requirement))}</td><td>${esc(field.raw_value || '-')}</td><td>${esc(field.normalized_value || '-')}</td><td>${esc(field.selected_value || '-')}</td><td>${badge(field.decision)}</td><td>${field.evidence_ids.length}</td></tr>`;
+      return `<tr><td><strong>${esc(field.label)}</strong><div class="mono">${esc(field.name)}</div></td><td>${esc(field.data_type + unit)}</td><td>${esc(field.raw_value || '-')}</td><td>${esc(field.normalized_value || '-')}</td><td>${esc(field.mapping_method || '-')}</td><td>${field.mapping_score == null ? '-' : field.mapping_score.toFixed(2)}</td><td>${esc(field.selected_value || '-')}</td><td>${badge(field.decision)}</td></tr>`;
+    }
+    function renderFields() {
+      $('overview-fields').innerHTML = snapshot.fields.map(item => fieldRow(item, true)).join('');
+      $('field-rows').innerHTML = snapshot.fields.map(item => fieldRow(item, false)).join('');
+    }
+
+    function renderSources() {
+      $('source-rows').innerHTML = snapshot.sources.map(source => `<tr><td><strong>#${source.rank}</strong>${source.primary ? '<div class="status-text good">主来源</div>' : ''}</td><td>${source.source_names.map(esc).join('<br>')}</td><td><div class="tags">${source.categories.map(item => `<span class="tag">${esc(label(item))}</span>`).join('')}</div></td><td><div class="tags">${source.covered_fields.map(item => `<span class="tag">${esc(item)}</span>`).join('')}</div></td><td>${esc(label(source.license_status))}</td><td>${esc(label(source.download_status))}</td><td>${Math.round(source.score * 100)}%</td></tr>`).join('');
+    }
+    function renderRuntime() {
+      if (!runtime) return;
+      const onlineActive = snapshot && snapshot.execution_mode === 'online';
+      $('runtime-dot').className = `dot ${runtime.online_ready ? '' : 'offline'}`;
+      $('runtime-label').textContent = onlineActive ? `实时联网 · SerpApi + ${runtime.model_id}` : runtime.online_ready ? '联网能力就绪 · 当前离线复现' : '离线复现 · 联网密钥未启用';
+      $('mode-online').disabled = !runtime.online_ready;
+      $('mode-online-label').title = runtime.online_ready ? '使用 SerpApi 实时搜索，并由 Qwen 评估来源相关性' : '需以 SCIDATA_OFFLINE_MODE=false 启动，并在本地 .env 配置 SerpApi 与百炼密钥';
+    }
+    function renderOnline() {
+      const online = snapshot.online_research;
+      if (!online) {
+        $('online-copy').textContent = '本次运行使用内容寻址的离线复现数据，未发起外部请求';
+        $('online-status').textContent = '未执行';
+        $('online-count').textContent = '0';
+        $('search-proof').textContent = 'SerpApi 未调用';
+        $('model-proof').textContent = 'Qwen 未调用';
+        $('online-source-rows').innerHTML = '<tr><td colspan="6" class="empty">离线复现模式：联网调用数为 0，全部结果可重复校验。</td></tr>';
+        return;
+      }
+      const search = online.search_invocation;
+      const model = online.model_invocation;
+      $('online-copy').textContent = online.warnings.length ? online.warnings.join('；') : '网页结果来自实时搜索；Qwen 仅评估来源相关性，不生成或改写科学数值';
+      $('online-status').textContent = label(online.status);
+      $('online-count').textContent = online.sources.length;
+      $('search-proof').textContent = search ? `${search.cached ? '缓存命中' : '实时请求'} · ${Math.round(search.latency_ms)} ms · ${search.attempt_count} 次` : 'SerpApi 未完成';
+      $('model-proof').textContent = model ? `${model.actual_model} · ${Math.round(model.latency_ms)} ms · ${model.usage.input_tokens + model.usage.output_tokens} tokens` : 'Qwen 未完成';
+      $('online-source-rows').innerHTML = online.sources.length ? online.sources.map(item => {
+        const assessment = item.assessment;
+        const types = assessment ? assessment.evidence_types.map(type => `<span class="tag">${esc(type)}</span>`).join('') : '-';
+        const decision = assessment ? `<strong>${esc(Math.round(assessment.relevance_score * 100))}%</strong>` : '-';
+        const rationale = assessment ? `<span class="status-text ${assessment.recommended_action === 'deprioritize' ? 'review' : 'good'}">${esc(label(assessment.recommended_action))}</span><br>${esc(assessment.rationale)}` : '模型评估未采用';
+        return `<tr><td>#${item.search.position}</td><td><a class="source-link" href="${esc(item.search.url)}" target="_blank" rel="noopener noreferrer">${esc(item.search.title)}</a><div class="mono">${esc(item.search.source_domain)}</div></td><td>${esc(item.search.snippet)}</td><td>${decision}</td><td><div class="tags">${types}</div></td><td>${rationale}</td></tr>`;
+      }).join('') : '<tr><td colspan="6" class="empty">实时搜索未返回可验证来源。</td></tr>';
+    }
+    function renderArtifacts() {
+      $('artifact-rows').innerHTML = snapshot.artifacts.map(item => `<tr><td class="mono">${esc(item.object_id.slice(0,16))}…</td><td>${esc(item.format)}</td><td>${esc(item.media_type)}</td><td>${formatBytes(item.size_bytes)}</td><td>${esc(label(item.disposition))}</td><td>${esc(item.parser || '-')}</td><td>${Math.round(item.confidence * 100)}%</td><td class="mono">${esc(item.sha256.slice(0,14))}…</td></tr>`).join('');
+    }
+    function renderEvidence() {
+      $('evidence-rows').innerHTML = snapshot.evidence.map(item => `<tr><td>${esc(item.field_name)}</td><td><strong>${esc(item.raw_value)}</strong></td><td>${esc(item.source_location)}</td><td>${esc(item.byte_range)}</td><td>${esc(item.method)}</td><td>${Math.round(item.confidence * 100)}%</td><td class="mono">${esc(item.evidence_id)}</td></tr>`).join('');
+    }
+    function renderScientific() {
+      const item=snapshot.scientific_dataset;
+      $('scientific-dataset').innerHTML=`<div class="metric"><b>${esc(item.format.toUpperCase())}</b><span>文件格式</span></div><div class="metric"><b>${item.selected_row_count}</b><span>选取行数</span></div><div class="metric"><b>${item.variable_names.length}</b><span>变量 ${esc(item.variable_names.join(' / '))}</span></div><div class="metric"><b>${item.materialized_cell_count}</b><span>确定性读取值</span></div><div class="metric"><b>${item.transformation_count}</b><span>显式缩放变换</span></div><div class="metric"><b>${item.missing_value_count}</b><span>保留缺失值</span></div>`;
+    }
+    function renderQuality() {
+      $('quality-summary').textContent = `${snapshot.gates.filter(item => item.passed).length} / ${snapshot.gates.length} 通过`;
+      $('quality-summary').className = `badge ${snapshot.quality_gate_passed ? 'good' : 'review'}`;
+      $('quality-list').innerHTML = snapshot.gates.map(gate => `<div class="quality-row"><div class="quality-label"><span><strong>${esc(gate.label)}</strong><br><span class="subtle">${esc(gate.fields.join('、'))}</span></span><span class="status-text ${gate.passed ? 'good' : 'bad'}">${gate.passed ? '通过' : '未通过'}</span></div><div class="track"><div class="bar ${gate.passed ? '' : 'fail'}" style="width:${Math.max(3,gate.score * 100)}%"></div></div><div class="quality-label subtle"><span>得分 ${Math.round(gate.score * 100)}%</span><span>阈值 ${Math.round(gate.threshold * 100)}%</span></div></div>`).join('');
+    }
+    function renderIssues() {
+      $('issue-count').textContent = `${snapshot.issues.length} 项`;
+      $('issue-list').innerHTML = snapshot.issues.length ? snapshot.issues.map(issue => `<div class="issue"><strong>${esc(issue.fields.join('、'))}</strong><small>${esc(issue.severity)} · ${esc(issue.code)}</small><p>${esc(issue.detail)}</p><span class="subtle">关联 ${issue.evidence_count} 条证据 · 建议 ${esc(issue.action)}</span></div>`).join('') : '<div class="empty">没有待审问题</div>';
+      $('graph-count').textContent = `${snapshot.graph_nodes.length} 个节点 · ${snapshot.graph_edges.length} 条关系`;
+    }
+    function renderHits() {
+      $('hit-rows').innerHTML = snapshot.hits.map(hit => `<tr><td class="mono">${esc(hit.source_id)}</td><td>${esc(hit.location)}</td><td>${hit.sparse_score.toFixed(3)}</td><td>${hit.graph_score.toFixed(3)}</td><td><strong>${hit.final_score.toFixed(3)}</strong></td></tr>`).join('');
+    }
+    function renderDelivery() {
+      $('delivery-rows').innerHTML = delivery.artifacts.map(item => `<tr><td><strong>${esc(item.filename)}</strong></td><td>${esc(item.kind)}</td><td>${esc(item.media_type)}</td><td>${formatBytes(item.size_bytes)}</td><td class="mono">${esc(item.sha256.slice(0,16))}…</td><td><button class="nav-btn signed" data-file="${esc(item.filename)}" style="color:#27647c;padding:4px 0">下载</button></td></tr>`).join('');
+      $('download-package').dataset.file = snapshot.package_filename;
+      const csv = delivery.artifacts.some(item => item.filename === 'gold.csv');
+      $('download-csv').disabled = !csv;
+      $('download-csv').textContent = csv ? '下载 Gold CSV' : 'Gold CSV 尚未开放';
+      $('download-csv').dataset.file = csv ? 'gold.csv' : '';
+    }
+    function formatBytes(bytes) { return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`; }
+
+    function setupCanvas(canvas) {
+      const ratio = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.max(1, Math.round(rect.width * ratio)); canvas.height = Math.max(1, Math.round(rect.height * ratio));
+      const ctx = canvas.getContext('2d'); ctx.setTransform(ratio,0,0,ratio,0,0); return {ctx,w:rect.width,h:rect.height};
+    }
+    function drawLightCurve() {
+      if (!snapshot || !snapshot.chart_points.length || $('overview').classList.contains('active') === false) return;
+      const {ctx,w,h} = setupCanvas($('lightcurve')); const p={l:52,r:20,t:18,b:42};
+      const points=snapshot.chart_points.map(item=>({x:Number(item.x),y:Number(item.y),ex:Number(item.error_x),ey:Number(item.error_y)}));
+      const xs=points.map(p=>p.x), ys=points.map(p=>p.y); const xmin=Math.min(...xs)-.3,xmax=Math.max(...xs)+.3,ymin=Math.min(...ys)-.3,ymax=Math.max(...ys)+.3;
+      const X=x=>p.l+(x-xmin)/(xmax-xmin)*(w-p.l-p.r); const Y=y=>p.t+(y-ymin)/(ymax-ymin)*(h-p.t-p.b);
+      ctx.clearRect(0,0,w,h); ctx.strokeStyle='#d9dfdc'; ctx.fillStyle='#65716b'; ctx.font='11px system-ui'; ctx.lineWidth=1;
+      for(let i=0;i<=4;i++){const x=p.l+i*(w-p.l-p.r)/4;ctx.beginPath();ctx.moveTo(x,p.t);ctx.lineTo(x,h-p.b);ctx.stroke();const v=xmin+i*(xmax-xmin)/4;ctx.fillText(v.toFixed(1),x-15,h-18);}
+      for(let i=0;i<=4;i++){const y=p.t+i*(h-p.t-p.b)/4;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();const v=ymin+i*(ymax-ymin)/4;ctx.fillText(v.toFixed(1),8,y+4);}
+      ctx.fillStyle='#18211d';ctx.fillText('观测时间 (day)',w/2-38,h-3);ctx.save();ctx.translate(12,h/2+35);ctx.rotate(-Math.PI/2);ctx.fillText('星等 (mag，数值越小越亮)',0,0);ctx.restore();
+      ctx.strokeStyle='#27647c';ctx.lineWidth=2;ctx.beginPath();points.forEach((pt,i)=>i?ctx.lineTo(X(pt.x),Y(pt.y)):ctx.moveTo(X(pt.x),Y(pt.y)));ctx.stroke();
+      points.forEach(pt=>{ctx.strokeStyle='#a33d34';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(X(pt.x),Y(pt.y-pt.ey));ctx.lineTo(X(pt.x),Y(pt.y+pt.ey));ctx.stroke();ctx.fillStyle='#27647c';ctx.beginPath();ctx.arc(X(pt.x),Y(pt.y),4.5,0,Math.PI*2);ctx.fill();ctx.strokeStyle='white';ctx.stroke();});
+    }
+    function drawEvidenceGraph() {
+      if (!snapshot || $('quality').classList.contains('active') === false) return;
+      const {ctx,w,h}=setupCanvas($('evidence-graph')); const nodes=snapshot.graph_nodes; if(!nodes.length)return;
+      const center={x:w/2,y:h/2}, radius=Math.max(90,Math.min(w,h)*.37); const pos=new Map();
+      nodes.forEach((node,i)=>{const a=(Math.PI*2*i/nodes.length)-Math.PI/2;pos.set(node.node_id,{x:center.x+Math.cos(a)*radius,y:center.y+Math.sin(a)*radius});});
+      ctx.clearRect(0,0,w,h);ctx.strokeStyle='#d5ddd9';ctx.globalAlpha=.7;ctx.lineWidth=1;
+      snapshot.graph_edges.forEach(edge=>{const a=pos.get(edge.source),b=pos.get(edge.target);if(a&&b){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}});ctx.globalAlpha=1;
+      const colors={evidence:'#27647c',field:'#176b4d',quality_gate:'#9b5d13',quality_issue:'#a33d34'};
+      nodes.forEach(node=>{const p=pos.get(node.node_id);ctx.fillStyle=colors[node.kind]||'#65716b';ctx.beginPath();ctx.arc(p.x,p.y,node.trusted?7:5,0,Math.PI*2);ctx.fill();});
+      ctx.fillStyle='#65716b';ctx.font='11px system-ui';ctx.fillText('节点颜色表示证据、字段、质量门与问题；连线表示可追溯关系',12,h-10);
+    }
+
     async function signedDownload(filename) {
-      if (!filename) return;
-      const ticket = await request(`/api/v1/demo/download-tickets/${encodeURIComponent(filename)}`, {method:'POST'});
+      const ticket = await api(`/api/v1/demo/download-tickets/${encodeURIComponent(filename)}`, {method:'POST'});
       window.location.assign(ticket.download_url);
     }
-    document.addEventListener('click', async (event) => {
-      const target = event.target.closest('.signed-download, #package, #csv');
-      if (!target || target.getAttribute('aria-disabled') === 'true') return;
-      event.preventDefault();
-      try { await signedDownload(target.dataset.filename); } catch (e) { $('message').textContent = e.message; $('message').className = 'error'; }
-    });
-    async function load() { try { render(await request('/api/v1/demo/status')); } catch (e) { $('message').textContent = e.message; $('message').className = 'error'; } }
-    $('run-form').addEventListener('submit', async (event) => {
-      event.preventDefault(); $('run').disabled = true; $('message').textContent = '正在执行确定性离线链路…'; $('message').className = '';
-      try { render(await request('/api/v1/demo/run', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({research_goal:$('goal').value, retrieval_query:$('query').value})})); }
-      catch (e) { $('message').textContent = e.message; $('message').className = 'error'; }
-      finally { $('run').disabled = false; }
-    });
+    async function load() {
+      try { [snapshot,delivery,runtime]=await Promise.all([api('/api/v1/workbench'),api('/api/v1/demo/status'),api('/api/v1/runtime')]); render(); }
+      catch(error){$('message').textContent=error.message;$('message').className='error';}
+    }
+    $('run-form').addEventListener('submit',async event=>{event.preventDefault();$('run').disabled=true;const mode=document.querySelector('input[name="execution-mode"]:checked').value;$('message').textContent=mode==='online'?'正在联网搜索，并调用 Qwen 评估来源后执行解析与质量校验...':'正在解析、整合并校验可复现科学数据...';try{await api('/api/v1/demo/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_mode:mode,research_goal:$('goal').value,retrieval_query:$('query').value})});await load();}catch(error){$('message').textContent=error.message;$('message').className='error';}finally{$('run').disabled=false;}});
+    document.addEventListener('click',async event=>{const nav=event.target.closest('.nav-btn[data-view]');if(nav){document.querySelectorAll('.nav-btn[data-view]').forEach(item=>item.classList.toggle('active',item===nav));document.querySelectorAll('.view').forEach(item=>item.classList.toggle('active',item.id===nav.dataset.view));$('page-title').textContent=nav.textContent;requestAnimationFrame(()=>{drawLightCurve();drawEvidenceGraph();});return;}const button=event.target.closest('.signed,#download-package,#download-csv');if(button&&!button.disabled){try{await signedDownload(button.dataset.file);}catch(error){$('message').textContent=error.message;$('message').className='error';}}});
+    window.addEventListener('resize',()=>{drawLightCurve();drawEvidenceGraph();});
     load();
   </script>
 </body>

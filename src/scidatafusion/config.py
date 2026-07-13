@@ -52,6 +52,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DASHSCOPE_API_KEY", "SCIDATA_DASHSCOPE_API_KEY"),
         repr=False,
     )
+    serpapi_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("SERPAPI_API_KEY", "SCIDATA_SERPAPI_API_KEY"),
+        repr=False,
+    )
     bailian_region: BailianRegion = BailianRegion.CN_BEIJING
     bailian_workspace_id: WorkspaceId | None = None
     qwen_base_url_override: HttpUrl | None = Field(
@@ -64,6 +69,12 @@ class Settings(BaseSettings):
     model_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     model_max_retries: int = Field(default=2, ge=0, le=8)
     model_max_concurrency: int = Field(default=4, ge=1, le=64)
+    search_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    search_max_retries: int = Field(default=2, ge=0, le=8)
+    search_max_concurrency: int = Field(default=2, ge=1, le=16)
+    search_min_interval_seconds: float = Field(default=0.25, ge=0, le=10)
+    search_cache_ttl_seconds: int = Field(default=900, ge=1, le=86_400)
+    search_max_results: int = Field(default=10, ge=1, le=10)
 
     default_max_sources: int = Field(default=50, ge=1, le=1000)
     default_max_download_bytes: int = Field(default=500 * 1024 * 1024, ge=1)
@@ -77,7 +88,7 @@ class Settings(BaseSettings):
         if self.dashscope_api_key is None:
             problems.append("DASHSCOPE_API_KEY is required")
         if self.resolved_qwen_base_url is None:
-            problems.append("SCIDATA_BAILIAN_WORKSPACE_ID is required for this region")
+            problems.append("an official Bailian endpoint is required for this region")
         if self.qwen_base_url_override is not None and not self._is_allowed_online_endpoint(
             self.qwen_base_url_override
         ):
@@ -98,10 +109,14 @@ class Settings(BaseSettings):
 
         if self.qwen_base_url_override is not None:
             return str(self.qwen_base_url_override).rstrip("/")
-        if self.bailian_region is BailianRegion.US_VIRGINIA:
-            return "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
+        shared_hosts = {
+            BailianRegion.CN_BEIJING: "dashscope.aliyuncs.com",
+            BailianRegion.US_VIRGINIA: "dashscope-us.aliyuncs.com",
+            BailianRegion.AP_SINGAPORE: "dashscope-intl.aliyuncs.com",
+        }
         if self.bailian_workspace_id is None:
-            return None
+            host = shared_hosts.get(self.bailian_region)
+            return None if host is None else f"https://{host}/compatible-mode/v1"
         hosts = {
             BailianRegion.CN_BEIJING: "cn-beijing.maas.aliyuncs.com",
             BailianRegion.AP_SINGAPORE: "ap-southeast-1.maas.aliyuncs.com",
@@ -135,6 +150,7 @@ class Settings(BaseSettings):
             "qwen_base_url": self.resolved_qwen_base_url,
             "planner_model_id": self.planner_model_id,
             "credentials_configured": self.dashscope_api_key is not None,
+            "serpapi_configured": self.serpapi_api_key is not None,
         }
 
 
