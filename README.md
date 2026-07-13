@@ -98,7 +98,16 @@ provenance-preserving unified document IR; and M10 recovers native tables with c
   remain blocked when M13 has no corresponding value evidence;
 - an offline Ia M14 result with four accepted exact mappings, four mapping-evidence records, 100%
   evidence coverage and acceptance, one retained upstream gap, and zero network, model, embedding,
-  cost, M15, Gold, or scientific-value mutation operations.
+  cost, M15, Gold, or scientific-value mutation operations;
+- M15 strict request, policy, runtime, normalized-record, transformation, issue, metric, result,
+  checkpoint, and `record.normalized` event contracts bound to the exact M13-M14 lineage;
+- exact finite-decimal parsing with preserved lexical input, fixed-point output, precision metadata,
+  formula, runtime library/version, reversibility, and evidence for every non-identity change;
+- no-guess scientific context gates that retain target-unit intent but block M16 eligibility when
+  source units or astronomical time scale are not independently evidenced;
+- an offline Ia M15 result with four retained fields, two reversible exact-decimal transformations,
+  three explicit context issues, two M16-eligible identity fields, and zero model, network, LLM
+  value mutation, cost, Gold, or scientific unit/time conversion operations.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -109,8 +118,10 @@ retains controlled source bytes but does not parse scientific values. M08 classi
 M09 parses supported documents into document IR but does not extract scientific fields. M10 parses
 the native CSV slice into table IR without changing scientific values. M13 extracts only explicit,
 exact-header table candidates and never writes Gold. M14 revalidates exact canonical mappings and
-retains unevidenced alias headers without auto-acceptance. M15 normalization, later fusion,
-deferred complex document/table formats, and the web workbench remain future checkpoints.
+retains unevidenced alias headers without auto-acceptance. M15 performs traceable exact parsing,
+retains ambiguous fields with explicit issues, and refuses to infer source units or time scales.
+M16 conflict-preserving fusion, deferred complex document/table formats, and the web workbench
+remain future checkpoints.
 
 ## Quick start
 
@@ -128,6 +139,7 @@ uv run scidatafusion phase3-document-demo --goal "Study Type Ia supernova light 
 uv run scidatafusion phase3-table-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase4-extract-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase4-map-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase4-normalize-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -193,6 +205,14 @@ the aggregate `partial`. Registered aliases are deterministic suggestions only w
 value evidence; they are retained in `UnmappedFieldSet` and cannot auto-map. The summary contains
 no values, header text, locations, URLs, goal, or reviewer identity. Embedding retrieval, LLM
 judgment, automatic alias mapping, normalization, and benchmark accuracy remain deferred.
+
+`phase4-normalize-demo` consumes the exact M14 request/result and retains all four mapped values.
+It parses the two numeric lexemes with exact decimal arithmetic and records both non-identity
+changes. Because the source cells contain no unit or time-scale annotation, it emits three blocking
+issues and does not claim that either number has been converted to the contract target unit. The
+summary contains counts, statuses, identifiers, and hashes only; it omits values, units, evidence
+content, goal text, and reviewer identity. Unit/time conversion, coordinate systems, uncertainty,
+entity conflict handling, and Gold writes remain deferred.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported

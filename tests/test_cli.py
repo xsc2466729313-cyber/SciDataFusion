@@ -639,3 +639,33 @@ def test_phase4_map_demo_produces_safe_threshold_and_evidence_summary(
         "filter",
     ):
         assert secret_or_content not in captured.out
+
+
+def test_phase4_normalize_demo_reports_traceability_without_values(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m15-reviewer@example.org"
+
+    exit_code = main(["phase4-normalize-demo", "--goal", goal, "--confirmed-by", reviewer])
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "partial"
+    assert report["execution_mode"] == "offline"
+    assert report["network_performed"] is False
+    assert report["model_performed"] is False
+    assert report["llm_value_mutations"] == 0
+    assert report["gold_writes"] == 0
+    assert report["metrics"]["normalized_field_count"] == 4
+    assert report["metrics"]["transformation_count"] == 2
+    assert report["metrics"]["issue_count"] == 3
+    assert report["metrics"]["m16_eligible_field_count"] == 2
+    assert report["field_statuses"] == {"needs_review": 2, "normalized": 2}
+    assert report["value_kinds"] == {"decimal": 2, "string": 2}
+    assert report["transformation_kinds"] == {"parse_decimal_exact": 2}
+    assert report["issue_codes"] == {"source_unit_missing": 2, "time_scale_missing": 1}
+    assert report["event_type"] == "record.normalized"
+    for private_content in (goal, reviewer, "SN-A", "59000.1", "12.3", "MJD", "mag"):
+        assert private_content not in captured.out

@@ -8,7 +8,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 1 | M00-M03 | research goal to confirmed data contract | complete |
 | 2 | M04-M06 | federated discovery, coverage, selected sources | complete |
 | 3 | M07-M10 | immutable download, document and table IR | complete (first offline vertical slice) |
-| 4 | M13-M15 | field evidence, mapping, unit/time normalization | in progress (M13-M14 complete) |
+| 4 | M13-M15 | field evidence, mapping, unit/time normalization | complete (first offline vertical slice) |
 | 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | pending |
 | 6 | M19 | hybrid retrieval and evidence graph | pending |
 | 7 | M11-M12 | chart digitization and scientific formats | pending |
@@ -71,8 +71,14 @@ contract field only after contract-hash, type-label, value-evidence, entity-evid
 threshold checks. The Ia fixture accepts four mappings for M15 and retains the missing-required
 upstream gap, so it remains partial. Unknown source headers are preserved with exact header-cell
 lineage and registered-alias suggestions, but cannot auto-map without M13 value evidence. This
-first slice performs no embedding, LLM, network, value transformation, or Gold write. M15 next owns
-numeric, unit, time, coordinate, and uncertainty normalization with transformation provenance.
+first slice performs no embedding, LLM, network, value transformation, or Gold write.
+
+M15 re-verifies M13-M14 and retains every mapped field. It parses finite numeric lexemes through
+exact decimal arithmetic and records every non-identity change with formula, library version,
+precision metadata, reversibility, and evidence. Because the Ia source cells do not evidence source
+units or a time scale, M15 does not treat target units as source context and does not claim an MJD
+or magnitude conversion. It emits three blocking issues, keeps two identity fields eligible for
+M16, and remains partial without model, network, guessing, Gold writes, or binary-float coercion.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

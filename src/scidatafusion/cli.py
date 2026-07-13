@@ -45,6 +45,11 @@ from scidatafusion.contracts.extraction import (
     ExtractionStatus,
 )
 from scidatafusion.contracts.mapping import MappingRequest, MappingResult, MappingStatus
+from scidatafusion.contracts.normalization import (
+    NormalizationRequest,
+    NormalizationResult,
+    NormalizationStatus,
+)
 from scidatafusion.contracts.parsing import (
     ParsePlanningRequest,
     ParsePlanningResult,
@@ -76,6 +81,8 @@ from scidatafusion.extraction.fixtures import build_offline_extraction_bundle
 from scidatafusion.extraction.service import EvidenceFirstExtractionService
 from scidatafusion.mapping.fixtures import build_offline_mapping_bundle
 from scidatafusion.mapping.service import FieldMappingService
+from scidatafusion.normalization.fixtures import build_offline_normalization_bundle
+from scidatafusion.normalization.service import ScientificNormalizationService
 from scidatafusion.parsing import ParsePlanningService
 from scidatafusion.parsing.fixtures import build_offline_parse_planning_bundle
 from scidatafusion.search import SearchPlanner, SourceCapabilityRegistryLoader, source_ids
@@ -199,6 +206,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     mapping.add_argument("--goal", required=True, help="scientific research goal")
     mapping.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    normalization = subparsers.add_parser(
+        "phase4-normalize-demo",
+        help="run M00-M15 with exact parsing and no scientific-context guessing offline",
+    )
+    normalization.add_argument("--goal", required=True, help="scientific research goal")
+    normalization.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -680,6 +697,47 @@ def build_mapping_summary(result: MappingResult) -> dict[str, object]:
     }
 
 
+def build_normalization_summary(result: NormalizationResult) -> dict[str, object]:
+    """Render M15 traceability gates without raw or normalized scientific values."""
+
+    fields = tuple(field for record in result.record_set.records for field in record.fields)
+    return {
+        "status": result.status.value,
+        "execution_mode": result.runtime.execution_mode.value,
+        "network_performed": False,
+        "model_performed": False,
+        "llm_value_mutations": 0,
+        "gold_writes": 0,
+        "m16_conflict_executions": 0,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "contract_id": result.contract_id,
+        "contract_hash": result.contract_hash,
+        "upstream_mapping_output_hash": result.upstream_mapping_output_hash,
+        "record_set_id": result.record_set.record_set_id,
+        "record_set_hash": result.record_set.record_set_hash,
+        "transformation_set_id": result.transformation_set.transformation_set_id,
+        "transformation_set_hash": result.transformation_set.transformation_set_hash,
+        "issue_set_id": result.issue_set.issue_set_id,
+        "issue_set_hash": result.issue_set.issue_set_hash,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "field_statuses": dict(sorted(Counter(item.status.value for item in fields).items())),
+        "value_kinds": dict(
+            sorted(Counter(item.value_kind.value for item in fields if item.value_kind).items())
+        ),
+        "transformation_kinds": dict(
+            sorted(Counter(item.kind.value for item in result.transformation_set.records).items())
+        ),
+        "issue_codes": dict(
+            sorted(Counter(item.code.value for item in result.issue_set.issues).items())
+        ),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "input_hash": result.input_hash,
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -861,6 +919,25 @@ async def _execute_offline_mapping(
         requested_at=bundle.runtime.checked_at,
     )
     result = await FieldMappingService(bronze_store=store).execute(request)
+    return request, result, store
+
+
+async def _execute_offline_normalization(
+    contract: ScientificDataContract,
+    planning: SearchPlanningResult,
+) -> tuple[NormalizationRequest, NormalizationResult, MemoryBronzeStore]:
+    """Execute M15 over the exact offline M14 result without network or model calls."""
+
+    mapping_request, mapping_result, store = await _execute_offline_mapping(contract, planning)
+    bundle = build_offline_normalization_bundle(not_before=mapping_result.created_at)
+    request = NormalizationRequest(
+        mapping_request=mapping_request,
+        mapping_result=mapping_result,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        requested_at=bundle.runtime.checked_at,
+    )
+    result = await ScientificNormalizationService(bronze_store=store).execute(request)
     return request, result, store
 
 
@@ -1224,6 +1301,39 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(
                 json.dumps({"status": "error", "error": code}, ensure_ascii=True),
                 file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase4-normalize-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            _, normalization_result, _ = asyncio.run(
+                _execute_offline_normalization(phase1.confirmation.contract, planning)
+            )
+            print(
+                json.dumps(
+                    build_normalization_summary(normalization_result),
+                    ensure_ascii=True,
+                    indent=2,
+                )
+            )
+            return (
+                0
+                if normalization_result.status
+                in {NormalizationStatus.SUCCEEDED, NormalizationStatus.PARTIAL}
+                else 3
+            )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True), file=sys.stderr
             )
             return 2
     return 2
