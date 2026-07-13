@@ -10,7 +10,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 3 | M07-M10 | immutable download, document and table IR | complete (first offline vertical slice) |
 | 4 | M13-M15 | field evidence, mapping, unit/time normalization | complete (first offline vertical slice) |
 | 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | complete (first offline vertical slice) |
-| 6 | M19 | hybrid retrieval and evidence graph | pending |
+| 6 | M19 | hybrid retrieval and evidence graph | complete (first offline vertical slice) |
 | 7 | M11-M12 | chart digitization and scientific formats | pending |
 | 8 | M20 | FastAPI, interactive workbench, exports, reproduction bundle | pending |
 | 9 | evaluation | three domains, held-out domain, ablations, demo package | pending |
@@ -106,6 +106,16 @@ any-of gate, so the result contains three Critical issues and no formal Gold. No
 the before/after score remains unchanged, and no scientific value is mutated. Domain validators,
 statistical anomaly benchmarks, reviewer resolution, local retry execution, and approved export
 remain future slices. Phase 6 next begins M19 hybrid retrieval and evidence graph work.
+
+M19 re-verifies the exact M18 chain and projects M13 EvidenceAtoms plus M18 quality gates and issues
+into ten task-private index documents. A `rank-bm25` sparse channel runs after task/permission
+filtering, while one-hop graph expansion contributes a separate score. Every retrieval hit retains
+source identity, location, index version, and channel scores. The evidence graph contains eighteen
+nodes and thirty-three edges and participates in evidence-lineage validation, retrieval expansion,
+and memory admission. Since M18 produced no formal Gold, the sole task memory is quarantined and
+non-reusable; immutable revocation creates a successor that preserves the prior memory hash. Dense
+embedding, Qwen reranking, cross-task retrieval, document-block indexing, and benchmark metrics are
+deferred. Phase 7 next begins M11 chart digitization and M12 scientific-format parsing.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

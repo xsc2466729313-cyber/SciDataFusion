@@ -795,3 +795,70 @@ def test_phase5_audit_demo_reports_review_queue_without_scientific_values(
         "band",
     ):
         assert private_content not in captured.out
+
+
+def test_phase6_knowledge_demo_reports_sparse_graph_and_quarantine_privately(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    query = "quality evidence observation time magnitude"
+    reviewer = "private-m19-reviewer@example.org"
+
+    exit_code = main(
+        [
+            "phase6-knowledge-demo",
+            "--goal",
+            goal,
+            "--query",
+            query,
+            "--confirmed-by",
+            reviewer,
+        ]
+    )
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "partial"
+    assert report["execution_mode"] == "offline"
+    assert report["network_performed"] is False
+    assert report["dense_embedding_performed"] is False
+    assert report["model_rerank_performed"] is False
+    assert report["cross_task_retrieval_performed"] is False
+    assert report["index_mode"] == "sparse_only"
+    assert report["metrics"]["index_document_count"] == 10
+    assert report["metrics"]["graph_node_count"] == 18
+    assert report["metrics"]["graph_edge_count"] == 33
+    assert report["metrics"]["graph_decision_count"] == 3
+    assert report["metrics"]["retrieval_hit_count"] == 10
+    assert report["metrics"]["quarantined_memory_count"] == 1
+    assert report["metrics"]["knowledge_pollution_count"] == 0
+    assert report["indexed_kinds"] == {
+        "evidence": 4,
+        "quality_gate": 3,
+        "quality_issue": 3,
+    }
+    assert report["retrieved_kinds"] == report["indexed_kinds"]
+    assert report["graph_decisions"] == {
+        "evidence_lineage_validated": 1,
+        "memory_admission_decided": 1,
+        "retrieval_context_expanded": 1,
+    }
+    assert report["memory_statuses"] == {"quarantined": 1}
+    assert report["event_type"] == "knowledge.updated"
+    for private_content in (
+        goal,
+        query,
+        reviewer,
+        "SN-A",
+        "59000.1",
+        "12.3",
+        "object_id",
+        "source_record_id",
+        "observation_time",
+        "magnitude",
+        "band",
+        "evi_",
+        "table:",
+    ):
+        assert private_content not in captured.out

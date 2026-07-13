@@ -50,6 +50,7 @@ from scidatafusion.contracts.extraction import (
     ExtractionStatus,
 )
 from scidatafusion.contracts.fusion import FusionRequest, FusionResult, FusionStatus
+from scidatafusion.contracts.knowledge import KnowledgeRequest, KnowledgeResult, KnowledgeStatus
 from scidatafusion.contracts.mapping import MappingRequest, MappingResult, MappingStatus
 from scidatafusion.contracts.normalization import (
     NormalizationRequest,
@@ -94,6 +95,8 @@ from scidatafusion.extraction.fixtures import build_offline_extraction_bundle
 from scidatafusion.extraction.service import EvidenceFirstExtractionService
 from scidatafusion.fusion.fixtures import build_offline_fusion_bundle
 from scidatafusion.fusion.service import ConflictPreservingFusionService
+from scidatafusion.knowledge.fixtures import build_offline_knowledge_bundle
+from scidatafusion.knowledge.service import KnowledgeService
 from scidatafusion.mapping.fixtures import build_offline_mapping_bundle
 from scidatafusion.mapping.service import FieldMappingService
 from scidatafusion.normalization.fixtures import build_offline_normalization_bundle
@@ -263,6 +266,17 @@ def _parser() -> argparse.ArgumentParser:
     )
     quality.add_argument("--goal", required=True, help="scientific research goal")
     quality.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    knowledge = subparsers.add_parser(
+        "phase6-knowledge-demo",
+        help="run M00-M19 with task-private BM25, evidence graph, and memory quarantine offline",
+    )
+    knowledge.add_argument("--goal", required=True, help="scientific research goal")
+    knowledge.add_argument("--query", required=True, help="task-local knowledge retrieval query")
+    knowledge.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -926,6 +940,57 @@ def build_quality_summary(result: QualityAuditResult) -> dict[str, object]:
     }
 
 
+def build_knowledge_summary(result: KnowledgeResult) -> dict[str, object]:
+    """Render M19 retrieval and memory states without query, source, location, or graph labels."""
+
+    documents = {item.document_id: item for item in result.index_manifest.documents}
+    return {
+        "status": result.status.value,
+        "execution_mode": result.runtime.execution_mode.value,
+        "network_performed": False,
+        "dense_embedding_performed": False,
+        "model_rerank_performed": False,
+        "cross_task_retrieval_performed": False,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "contract_id": result.contract_id,
+        "contract_hash": result.contract_hash,
+        "upstream_quality_output_hash": result.upstream_quality_output_hash,
+        "index_manifest_id": result.index_manifest.index_manifest_id,
+        "index_manifest_hash": result.index_manifest.index_manifest_hash,
+        "index_version": result.index_manifest.index_version,
+        "index_mode": result.index_manifest.mode.value,
+        "graph_id": result.graph.graph_id,
+        "graph_hash": result.graph.graph_hash,
+        "graph_topology_hash": result.graph.topology_hash,
+        "retrieval_result_id": result.retrieval.retrieval_result_id,
+        "retrieval_result_hash": result.retrieval.retrieval_result_hash,
+        "memory_set_id": result.memory_set.memory_set_id,
+        "memory_set_hash": result.memory_set.memory_set_hash,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "indexed_kinds": dict(
+            sorted(Counter(item.kind.value for item in result.index_manifest.documents).items())
+        ),
+        "retrieved_kinds": dict(
+            sorted(
+                Counter(
+                    documents[item.document_id].kind.value for item in result.retrieval.hits
+                ).items()
+            )
+        ),
+        "graph_decisions": dict(
+            sorted(Counter(item.kind.value for item in result.graph.decisions).items())
+        ),
+        "memory_statuses": dict(
+            sorted(Counter(item.status.value for item in result.memory_set.entries).items())
+        ),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "input_hash": result.input_hash,
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -1187,6 +1252,30 @@ async def _execute_offline_quality_audit(
         requested_at=bundle.runtime.checked_at,
     )
     result = await QualityAuditService(bronze_store=store).execute(request)
+    return request, result, store
+
+
+async def _execute_offline_knowledge(
+    contract: ScientificDataContract,
+    planning: SearchPlanningResult,
+    query: str,
+) -> tuple[KnowledgeRequest, KnowledgeResult, MemoryBronzeStore]:
+    """Execute M19 over the exact offline M18 result without network or model calls."""
+
+    quality_request, quality_result, store = await _execute_offline_quality_audit(
+        contract, planning
+    )
+    bundle = build_offline_knowledge_bundle(not_before=quality_result.created_at)
+    request = KnowledgeRequest(
+        quality_request=quality_request,
+        quality_result=quality_result,
+        query_text=query,
+        query_task_id=quality_result.task_id,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        requested_at=bundle.runtime.checked_at,
+    )
+    result = await KnowledgeService(bronze_store=store).execute(request)
     return request, result, store
 
 
@@ -1669,6 +1758,43 @@ def main(argv: Sequence[str] | None = None) -> int:
             return (
                 0
                 if quality_result.status in {QualityStatus.SUCCEEDED, QualityStatus.PARTIAL}
+                else 3
+            )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase6-knowledge-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            _, knowledge_result, _ = asyncio.run(
+                _execute_offline_knowledge(
+                    phase1.confirmation.contract,
+                    planning,
+                    args.query,
+                )
+            )
+            print(
+                json.dumps(
+                    build_knowledge_summary(knowledge_result),
+                    ensure_ascii=True,
+                    indent=2,
+                )
+            )
+            return (
+                0
+                if knowledge_result.status in {KnowledgeStatus.SUCCEEDED, KnowledgeStatus.PARTIAL}
                 else 3
             )
         except (AppError, RegistryLoadError, ValidationError) as exc:

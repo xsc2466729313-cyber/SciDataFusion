@@ -131,7 +131,15 @@ provenance-preserving unified document IR; and M10 recovers native tables with c
   scores, issue severity, evidence references, impact analysis, and whitelist repair actions;
 - an offline Ia M18 result with three failed blocking gates, three Critical issues, three
   `request_human` plans, three pending review items, zero executed repairs, and no formal Gold,
-  model, network, cost, or scientific-value mutation.
+  model, network, cost, or scientific-value mutation;
+- M19 strict request, policy, runtime, sparse-index, graph-node/edge/decision, retrieval-hit,
+  task-memory, metric, checkpoint, and `knowledge.updated` event contracts bound to the exact M18
+  result;
+- task-private BM25 retrieval using `rank-bm25`, metadata permission filtering, one-hop evidence
+  graph expansion, and source/location/index-version traceability for every hit;
+- an offline Ia M19 result with ten indexed and retrieved documents, eighteen graph nodes,
+  thirty-three evidence edges, three graph-backed decisions, one quarantined memory, zero knowledge
+  pollution, and zero dense-vector, model-rerank, network, or cost operations.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -147,8 +155,9 @@ retains ambiguous fields with explicit issues, and refuses to infer source units
 M16 creates conservative evidence-backed entity clusters without fuzzy or model decisions. M17
 retains every field candidate and permits a Gold candidate value only for one eligible value or
 exact eligible consensus. M18 executes the confirmed contract's quality gates and blocks formal
-Gold while unresolved required, any-of, or provenance issues remain. M19 retrieval/evidence graph,
-deferred complex document/table formats, and the web workbench remain future checkpoints.
+Gold while unresolved required, any-of, or provenance issues remain. M19 adds task-private sparse
+retrieval, an evidence graph, and quarantined task memory without promoting unreviewed experience.
+M11-M12 scientific media/format parsing and the web workbench remain future checkpoints.
 
 ## Quick start
 
@@ -170,6 +179,7 @@ uv run scidatafusion phase4-normalize-demo --goal "Study Type Ia supernova light
 uv run scidatafusion phase5-resolve-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase5-fuse-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase5-audit-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase6-knowledge-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --query "quality evidence observation time magnitude" --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -268,6 +278,16 @@ routes each to `request_human`. No automatic repair executes, the before/after s
 unchanged, and formal Gold is absent. The summary exposes only counts, gate/issue/action classes,
 opaque identifiers, and hashes. Domain validators, statistical anomaly detection, safe local retry
 execution, reviewer resolution, benchmark recall, and quality-approved export remain deferred.
+
+`phase6-knowledge-demo` consumes the exact M18 request/result and creates task-private index
+documents from M13 EvidenceAtoms plus M18 gate and Issue metadata. `rank-bm25` provides sparse
+scores; task/permission filters run before scoring; one-hop graph neighbors contribute a separately
+recorded graph score. Every hit retains source identity, source location, index version, and channel
+scores in the strict artifact, while the CLI summary omits those private details. The graph records
+three decisions: evidence-lineage validation, retrieval-context expansion, and memory admission.
+Because M18 has no formal Gold, the task memory is quarantined and cannot be reused. Dense vectors,
+Qwen reranking, cross-task retrieval, DocumentIR indexing, benchmark Recall@20/nDCG, and published
+long-term memory remain deferred.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported
