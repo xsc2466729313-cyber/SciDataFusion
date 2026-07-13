@@ -11,7 +11,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 4 | M13-M15 | field evidence, mapping, unit/time normalization | complete (first offline vertical slice) |
 | 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | complete (first offline vertical slice) |
 | 6 | M19 | hybrid retrieval and evidence graph | complete (first offline vertical slice) |
-| 7 | M11-M12 | chart digitization and scientific formats | pending |
+| 7 | M11-M12 | chart digitization and scientific formats | in progress (M11 complete) |
 | 8 | M20 | FastAPI, interactive workbench, exports, reproduction bundle | pending |
 | 9 | evaluation | three domains, held-out domain, ablations, demo package | pending |
 
@@ -116,6 +116,15 @@ and memory admission. Since M18 produced no formal Gold, the sole task memory is
 non-reusable; immutable revocation creates a successor that preserves the prior memory hash. Dense
 embedding, Qwen reranking, cross-task retrieval, document-block indexing, and benchmark metrics are
 deferred. Phase 7 next begins M11 chart digitization and M12 scientific-format parsing.
+
+M11 accepts a content-addressed direct figure plus explicitly confirmed two-tick calibrations. Its
+bounded P6 PPM adapter extracts exact-color connected components and uses Decimal transforms for
+linear/log10 and increasing/decreasing pixel directions. The synthetic Ia acceptance raster yields
+three points; every point preserves its component bbox, centroid, calibrated coordinates, error,
+both CalibrationRecord identities, and source-byte hash. The result remains partial because axis
+and series semantics are manual inputs. OCR, VLM, automatic legend/axis recognition, overlapping
+series, M08/M09 region routing, and benchmark accuracy are deferred. M12 next owns scientific file
+formats.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

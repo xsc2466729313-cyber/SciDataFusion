@@ -49,6 +49,12 @@ from scidatafusion.contracts.extraction import (
     ExtractionResult,
     ExtractionStatus,
 )
+from scidatafusion.contracts.figures import (
+    FigureDigitizationRequest,
+    FigureDigitizationResult,
+    FigureStatus,
+    FigureType,
+)
 from scidatafusion.contracts.fusion import FusionRequest, FusionResult, FusionStatus
 from scidatafusion.contracts.knowledge import KnowledgeRequest, KnowledgeResult, KnowledgeStatus
 from scidatafusion.contracts.mapping import MappingRequest, MappingResult, MappingStatus
@@ -93,6 +99,8 @@ from scidatafusion.entity_resolution.service import EntityResolutionService
 from scidatafusion.errors import AppError
 from scidatafusion.extraction.fixtures import build_offline_extraction_bundle
 from scidatafusion.extraction.service import EvidenceFirstExtractionService
+from scidatafusion.figures.fixtures import build_offline_figure_bundle
+from scidatafusion.figures.service import FigureDigitizationService
 from scidatafusion.fusion.fixtures import build_offline_fusion_bundle
 from scidatafusion.fusion.service import ConflictPreservingFusionService
 from scidatafusion.knowledge.fixtures import build_offline_knowledge_bundle
@@ -280,6 +288,16 @@ def _parser() -> argparse.ArgumentParser:
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
+    )
+    figures = subparsers.add_parser(
+        "phase7-figure-demo",
+        help="run M11 over a content-addressed calibrated offline scatter-chart fixture",
+    )
+    figures.add_argument("--goal", required=True, help="scientific research goal")
+    figures.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the confirmed contract gate",
     )
     return parser
 
@@ -991,6 +1009,54 @@ def build_knowledge_summary(result: KnowledgeResult) -> dict[str, object]:
     }
 
 
+def build_figure_summary(result: FigureDigitizationResult) -> dict[str, object]:
+    """Render M11 calibration evidence without scientific values or pixel colors."""
+
+    return {
+        "status": result.status.value,
+        "execution_mode": result.runtime.execution_mode.value,
+        "network_performed": False,
+        "model_performed": False,
+        "ocr_performed": False,
+        "vlm_performed": False,
+        "automatic_legend_inference": False,
+        "scientific_value_mutations": 0,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "contract_id": result.contract_id,
+        "contract_hash": result.contract_hash,
+        "figure_source_id": result.figure_ir.source.figure_source_id,
+        "figure_source_hash": result.figure_ir.source.source_hash,
+        "figure_ir_id": result.figure_ir.figure_ir_id,
+        "figure_ir_hash": result.figure_ir.figure_ir_hash,
+        "point_set_id": result.figure_ir.point_set.point_set_id,
+        "point_set_hash": result.figure_ir.point_set.point_set_hash,
+        "quality_report_id": result.quality_report.quality_report_id,
+        "quality_report_hash": result.quality_report.quality_report_hash,
+        "figure_type": result.figure_ir.figure_type.value,
+        "axis_scales": dict(
+            sorted(Counter(item.scale.value for item in result.figure_ir.calibrations).items())
+        ),
+        "inverted_axis_count": sum(item.inverted for item in result.figure_ir.calibrations),
+        "calibration_methods": dict(
+            sorted(Counter(item.method.value for item in result.figure_ir.calibrations).items())
+        ),
+        "quality": {
+            "calibration_complete": result.quality_report.calibration_complete,
+            "all_points_in_calibrated_bounds": result.quality_report.all_points_in_calibrated_bounds,
+            "point_calibration_coverage": result.quality_report.point_calibration_coverage,
+            "normalized_anchor_roundtrip_mae": result.quality_report.normalized_anchor_roundtrip_mae,
+            "supported": result.quality_report.supported,
+            "warning_count": len(result.quality_report.warnings),
+        },
+        "metrics": result.metrics.model_dump(mode="json"),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "input_hash": result.input_hash,
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -1276,6 +1342,28 @@ async def _execute_offline_knowledge(
         requested_at=bundle.runtime.checked_at,
     )
     result = await KnowledgeService(bronze_store=store).execute(request)
+    return request, result, store
+
+
+async def _execute_offline_figure(
+    contract: ScientificDataContract,
+) -> tuple[FigureDigitizationRequest, FigureDigitizationResult, MemoryBronzeStore]:
+    """Execute M11 over one immutable synthetic chart without network or model calls."""
+
+    store = MemoryBronzeStore()
+    bundle = build_offline_figure_bundle(contract, store)
+    request = FigureDigitizationRequest(
+        contract=contract,
+        source=bundle.source,
+        figure_type=FigureType.SCATTER,
+        x_axis=bundle.x_axis,
+        y_axis=bundle.y_axis,
+        marker=bundle.marker,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        requested_at=bundle.runtime.checked_at,
+    )
+    result = await FigureDigitizationService(bronze_store=store).execute(request)
     return request, result, store
 
 
@@ -1796,6 +1884,35 @@ def main(argv: Sequence[str] | None = None) -> int:
                 0
                 if knowledge_result.status in {KnowledgeStatus.SUCCEEDED, KnowledgeStatus.PARTIAL}
                 else 3
+            )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase7-figure-demo":
+        try:
+            phase1, _ = _build_search_planning(args.goal, args.confirmed_by)
+            if phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            _, figure_result, _ = asyncio.run(_execute_offline_figure(phase1.confirmation.contract))
+            print(
+                json.dumps(
+                    build_figure_summary(figure_result),
+                    ensure_ascii=True,
+                    indent=2,
+                )
+            )
+            return (
+                0 if figure_result.status in {FigureStatus.SUCCEEDED, FigureStatus.PARTIAL} else 3
             )
         except (AppError, RegistryLoadError, ValidationError) as exc:
             if isinstance(exc, AppError):

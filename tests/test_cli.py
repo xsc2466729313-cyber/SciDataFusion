@@ -862,3 +862,44 @@ def test_phase6_knowledge_demo_reports_sparse_graph_and_quarantine_privately(
         "table:",
     ):
         assert private_content not in captured.out
+
+
+def test_phase7_figure_demo_reports_calibration_without_scientific_values(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m11-reviewer@example.org"
+
+    exit_code = main(["phase7-figure-demo", "--goal", goal, "--confirmed-by", reviewer])
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "partial"
+    assert report["execution_mode"] == "offline"
+    assert report["network_performed"] is False
+    assert report["model_performed"] is False
+    assert report["ocr_performed"] is False
+    assert report["vlm_performed"] is False
+    assert report["automatic_legend_inference"] is False
+    assert report["scientific_value_mutations"] == 0
+    assert report["figure_type"] == "scatter"
+    assert report["axis_scales"] == {"linear": 2}
+    assert report["inverted_axis_count"] == 1
+    assert report["calibration_methods"] == {"manual_two_tick": 2}
+    assert report["metrics"]["digitized_point_count"] == 3
+    assert report["metrics"]["m13_eligible_point_count"] == 3
+    assert report["quality"]["point_calibration_coverage"] == 1.0
+    assert report["quality"]["supported"] is True
+    assert report["event_type"] == "figure.digitized"
+    for private_content in (
+        goal,
+        reviewer,
+        "59000",
+        "59004",
+        "observation_time",
+        "magnitude",
+        "synthetic_ia_series",
+        "target_rgb",
+    ):
+        assert private_content not in captured.out

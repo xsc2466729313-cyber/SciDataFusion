@@ -10,7 +10,7 @@ The source package is being built phase by phase from the
 
 ## Current checkpoint
 
-Phases 1-4 are complete and Phase 5 has accepted its first M16-M18 offline slice. Phase 1 turns an accepted research goal into a
+Phases 1-6 are complete and Phase 7 has accepted its first M11 offline slice. Phase 1 turns an accepted research goal into a
 confirmed scientific data contract; M04-M06 discover and select evidence-backed sources; M07
 preserves authorized bytes in immutable Bronze storage; M08 creates an explainable,
 registry-bound downstream parse plan; M09 executes eligible document routes into a
@@ -139,7 +139,14 @@ provenance-preserving unified document IR; and M10 recovers native tables with c
   graph expansion, and source/location/index-version traceability for every hit;
 - an offline Ia M19 result with ten indexed and retrieved documents, eighteen graph nodes,
   thirty-three evidence edges, three graph-backed decisions, one quarantined memory, zero knowledge
-  pollution, and zero dense-vector, model-rerank, network, or cost operations.
+  pollution, and zero dense-vector, model-rerank, network, or cost operations;
+- M11 strict request, source, manual-axis, calibration, series, point, FigureIR, quality, metric,
+  checkpoint, and `figure.digitized` event contracts over immutable raster bytes;
+- bounded P6 PPM decoding, exact-color connected-component segmentation, Decimal linear/log10
+  transforms, explicit inverted-axis handling, and calibrated point errors;
+- an offline synthetic Ia chart result with one 64-by-64 content-addressed raster, two confirmed
+  calibrations, one inverted magnitude axis, three digitized points, 100% calibration coverage,
+  and zero OCR, VLM, network, model, cost, or scientific-value mutation operations.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -157,7 +164,9 @@ retains every field candidate and permits a Gold candidate value only for one el
 exact eligible consensus. M18 executes the confirmed contract's quality gates and blocks formal
 Gold while unresolved required, any-of, or provenance issues remain. M19 adds task-private sparse
 retrieval, an evidence graph, and quarantined task memory without promoting unreviewed experience.
-M11-M12 scientific media/format parsing and the web workbench remain future checkpoints.
+M11 adds manually calibrated deterministic scatter-chart digitization without pretending to have
+OCR or semantic legend inference. M12 scientific-format parsing and the web workbench remain future
+checkpoints.
 
 ## Quick start
 
@@ -180,6 +189,7 @@ uv run scidatafusion phase5-resolve-demo --goal "Study Type Ia supernova light c
 uv run scidatafusion phase5-fuse-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase5-audit-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase6-knowledge-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --query "quality evidence observation time magnitude" --confirmed-by "demo-reviewer"
+uv run scidatafusion phase7-figure-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -288,6 +298,15 @@ three decisions: evidence-lineage validation, retrieval-context expansion, and m
 Because M18 has no formal Gold, the task memory is quarantined and cannot be reused. Dense vectors,
 Qwen reranking, cross-task retrieval, DocumentIR indexing, benchmark Recall@20/nDCG, and published
 long-term memory remain deferred.
+
+`phase7-figure-demo` uses a confirmed Ia contract and a content-addressed synthetic P6 PPM chart.
+Two explicitly confirmed tick anchors per axis define Decimal calibration records; the service then
+segments real marker pixels, maps their centroids into data coordinates, and derives errors from
+component extent. The magnitude axis is explicitly inverted. Every digitized point links to both
+calibrations and the immutable raster hash. The summary omits pixel colors, field names, values,
+goal text, and reviewer identity. This first slice is `partial` because calibration and series
+semantics are supplied manually; OCR, automatic chart/axis/legend recognition, overlapping-line
+separation, document-region routing, and representative-image accuracy benchmarks remain deferred.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported

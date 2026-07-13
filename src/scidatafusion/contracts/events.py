@@ -46,6 +46,7 @@ class EventType(StrEnum):
     FUSION_COMPLETED = "fusion.completed"
     QUALITY_GATED = "quality.gated"
     KNOWLEDGE_UPDATED = "knowledge.updated"
+    FIGURE_DIGITIZED = "figure.digitized"
     QUALITY_ISSUE_CREATED = "quality.issue.created"
     REVIEW_RESOLVED = "review.resolved"
     DELIVERY_COMPLETED = "delivery.completed"
