@@ -27,6 +27,7 @@ from scidatafusion.contracts.extraction import (
     ExtractionRuntimeSnapshot,
     ExtractionStatus,
 )
+from scidatafusion.contracts.mapping import MappingDecision, MappingRequest, MappingStatus
 from scidatafusion.contracts.parsing import ParsePlanningRequest
 from scidatafusion.contracts.selection import SourceSelectionRequest
 from scidatafusion.contracts.tables import TableParsingRequest, TableValueKind
@@ -39,6 +40,8 @@ from scidatafusion.extraction.integrity import (
     verify_extraction_result_hashes,
 )
 from scidatafusion.extraction.service import EvidenceFirstExtractionService
+from scidatafusion.mapping.fixtures import build_offline_mapping_bundle
+from scidatafusion.mapping.service import FieldMappingService
 from scidatafusion.parsing.fixtures import build_offline_parse_planning_bundle
 from scidatafusion.parsing.service import ParsePlanningService
 from scidatafusion.selection import SourceSelectionService
@@ -318,6 +321,85 @@ def test_alias_headers_are_not_silently_mapped_and_have_distinct_gap_evidence() 
     assert len(unmapped) == 2
     assert len({item.gap_id for item in unmapped}) == 2
     assert all(item.source_cell_id is not None for item in unmapped)
+
+
+def test_m14_retains_alias_headers_but_blocks_mapping_without_value_evidence() -> None:
+    chain = _build_chain(replacement_csv=b"object_id,mjd,filter,magnitude\nSN-A,59000.1,B,12.3\n")
+    extraction = asyncio.run(
+        EvidenceFirstExtractionService(bronze_store=chain.store).execute(chain.request)
+    )
+    mapping_time = extraction.created_at + timedelta(seconds=1)
+    bundle = build_offline_mapping_bundle(
+        not_before=extraction.created_at,
+        clock=lambda: mapping_time,
+    )
+    request = MappingRequest(
+        extraction_request=chain.request,
+        extraction_result=extraction,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        requested_at=bundle.runtime.checked_at,
+    )
+    result = asyncio.run(FieldMappingService(bronze_store=chain.store).execute(request))
+
+    assert result.status is MappingStatus.PARTIAL
+    assert result.metrics.input_candidate_count == result.metrics.auto_accepted_count
+    assert result.metrics.input_candidate_count > 0
+    assert result.metrics.unmapped_field_count >= 2
+    assert result.metrics.alias_suggestion_count == result.metrics.unmapped_field_count
+    unmapped_table_ids = {item.source_table_id for item in result.unmapped_set.fields}
+    candidates = {item.candidate_id: item for item in extraction.candidate_set.candidates}
+    alias_table_targets = {
+        item.target_field_name
+        for item in result.mapping_set.mappings
+        if candidates[item.source_candidate_id].source_table_id in unmapped_table_ids
+    }
+    assert alias_table_targets == {
+        "object_id",
+        "magnitude",
+    }
+    assert {item.suggested_field_names for item in result.unmapped_set.fields} == {
+        ("observation_time",),
+        ("band",),
+    }
+    assert len({item.unmapped_field_id for item in result.unmapped_set.fields}) == len(
+        result.unmapped_set.fields
+    )
+    assert all(item.source_header_cell_id for item in result.unmapped_set.fields)
+
+
+def test_m14_blocks_numeric_field_with_text_value_kind_from_m15() -> None:
+    chain = _build_chain(
+        replacement_csv=(b"object_id,observation_time,band,magnitude\nSN-A,not-a-number,B,12.3\n")
+    )
+    extraction = asyncio.run(
+        EvidenceFirstExtractionService(bronze_store=chain.store).execute(chain.request)
+    )
+    mapping_time = extraction.created_at + timedelta(seconds=1)
+    bundle = build_offline_mapping_bundle(
+        not_before=extraction.created_at,
+        clock=lambda: mapping_time,
+    )
+    request = MappingRequest(
+        extraction_request=chain.request,
+        extraction_result=extraction,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        requested_at=bundle.runtime.checked_at,
+    )
+    result = asyncio.run(FieldMappingService(bronze_store=chain.store).execute(request))
+    candidates = {item.candidate_id: item for item in extraction.candidate_set.candidates}
+    blocked = tuple(
+        item
+        for item in result.mapping_set.mappings
+        if item.target_field_name == "observation_time"
+        and candidates[item.source_candidate_id].value_kind is TableValueKind.TEXT
+    )
+
+    assert blocked
+    assert all(not item.type_compatible for item in blocked)
+    assert all(item.decision is MappingDecision.BLOCKED_TYPE_CONFLICT for item in blocked)
+    assert all(not item.eligible_for_m15 for item in blocked)
 
 
 def test_runtime_and_result_tampering_fail_closed(

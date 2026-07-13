@@ -40,6 +40,7 @@ class EventType(StrEnum):
     DOCUMENT_PARSED = "document.parsed"
     TABLE_PARSED = "table.parsed"
     FIELD_EXTRACTED = "field.extracted"
+    FIELD_MAPPED = "field.mapped"
     RECORD_NORMALIZED = "record.normalized"
     FUSION_COMPLETED = "fusion.completed"
     QUALITY_ISSUE_CREATED = "quality.issue.created"

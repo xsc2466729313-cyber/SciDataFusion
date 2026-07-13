@@ -577,3 +577,65 @@ def test_phase4_extract_demo_produces_safe_evidence_coverage_summary(
         "deterministic_exact_header_table_cell",
     ):
         assert secret_or_content not in captured.out
+
+
+def test_phase4_map_demo_produces_safe_threshold_and_evidence_summary(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    goal = "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    reviewer = "private-m14-reviewer@example.org"
+
+    exit_code = main(["phase4-map-demo", "--goal", goal, "--confirmed-by", reviewer])
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert report["status"] == "partial"
+    assert report["execution_mode"] == "offline"
+    assert report["network_performed"] is False
+    assert report["model_performed"] is False
+    assert report["embedding_performed"] is False
+    assert report["gold_writes"] == 0
+    assert report["m15_normalization_executions"] == 0
+    assert report["metrics"] == {
+        "input_candidate_count": 4,
+        "mapping_count": 4,
+        "auto_accepted_count": 4,
+        "blocked_mapping_count": 0,
+        "unmapped_field_count": 0,
+        "alias_suggestion_count": 0,
+        "upstream_gap_count": 1,
+        "mapping_evidence_count": 4,
+        "evidence_coverage": 1.0,
+        "automatic_acceptance_rate": 1.0,
+        "m15_eligible_count": 4,
+        "model_attempt_count": 0,
+        "embedding_attempt_count": 0,
+        "network_attempt_count": 0,
+        "actual_cost_micro_usd": 0,
+    }
+    assert report["mapping_methods"] == {"exact_contract_field": 4}
+    assert report["mapping_decisions"] == {"auto_accepted": 4}
+    assert report["eligible_target_fields"] == {
+        "band": 1,
+        "magnitude": 1,
+        "object_id": 1,
+        "observation_time": 1,
+    }
+    assert report["unmapped_reasons"] == {}
+    assert report["event_type"] == "field.mapped"
+    assert report["event_count"] == 1
+    for secret_or_content in (
+        goal,
+        reviewer,
+        "evil.example",
+        "malware.exe",
+        "offline-fixture:",
+        "https://",
+        "SN-A",
+        "59000.1",
+        "12.3",
+        "mjd",
+        "filter",
+    ):
+        assert secret_or_content not in captured.out

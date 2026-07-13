@@ -8,7 +8,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 1 | M00-M03 | research goal to confirmed data contract | complete |
 | 2 | M04-M06 | federated discovery, coverage, selected sources | complete |
 | 3 | M07-M10 | immutable download, document and table IR | complete (first offline vertical slice) |
-| 4 | M13-M15 | field evidence, mapping, unit/time normalization | in progress (M13 complete) |
+| 4 | M13-M15 | field evidence, mapping, unit/time normalization | in progress (M13-M14 complete) |
 | 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | pending |
 | 6 | M19 | hybrid retrieval and evidence graph | pending |
 | 7 | M11-M12 | chart digitization and scientific formats | pending |
@@ -64,7 +64,15 @@ whose headers exactly equal contract fields. Every candidate references a minima
 EvidenceAtom that replays to immutable Bronze bytes and same-row evidence for every entity key. The
 Ia fixture yields four evidence-bound candidates and remains partial because one required field is
 absent. It performs no semantic alias mapping, inference, derivation, normalization, model or
-network execution, or Gold write. M14 next owns registered field mapping and ambiguity handling.
+network execution, or Gold write.
+
+M14 re-verifies the exact M13 request/result and maps every existing candidate to the same canonical
+contract field only after contract-hash, type-label, value-evidence, entity-evidence, score, and
+threshold checks. The Ia fixture accepts four mappings for M15 and retains the missing-required
+upstream gap, so it remains partial. Unknown source headers are preserved with exact header-cell
+lineage and registered-alias suggestions, but cannot auto-map without M13 value evidence. This
+first slice performs no embedding, LLM, network, value transformation, or Gold write. M15 next owns
+numeric, unit, time, coordinate, and uncertainty normalization with transformation provenance.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

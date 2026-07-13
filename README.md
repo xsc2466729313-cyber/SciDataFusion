@@ -89,7 +89,16 @@ provenance-preserving unified document IR; and M10 recovers native tables with c
   unsupported header structure, and source-cell-bound unmapped headers;
 - an offline Ia M13 result with four explicit candidates, four exact evidence atoms, 100% evidence
   coverage, one honest missing-required-field gap, and zero network, model, cost, M14, Gold, or
-  Bronze-write operations.
+  Bronze-write operations;
+- M14 strict request, policy, runtime, mapping evidence, mapping, unmapped-field, metric, result,
+  checkpoint, and `field.mapped` event contracts bound to the exact M13 request and result;
+- deterministic exact-field mapping with independent contract-hash, type-compatibility, evidence,
+  entity-binding, score, and automatic-threshold verification before M15 eligibility;
+- source-cell-bound retention of unknown headers, including registered-alias suggestions that
+  remain blocked when M13 has no corresponding value evidence;
+- an offline Ia M14 result with four accepted exact mappings, four mapping-evidence records, 100%
+  evidence coverage and acceptance, one retained upstream gap, and zero network, model, embedding,
+  cost, M15, Gold, or scientific-value mutation operations.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -99,9 +108,9 @@ correctly remains partial because record-level scope and reuse permission are no
 retains controlled source bytes but does not parse scientific values. M08 classifies and plans only;
 M09 parses supported documents into document IR but does not extract scientific fields. M10 parses
 the native CSV slice into table IR without changing scientific values. M13 extracts only explicit,
-exact-header table candidates and never writes Gold. M14 semantic mapping, later
-normalization/fusion, deferred complex document/table formats, and the web workbench remain future
-checkpoints.
+exact-header table candidates and never writes Gold. M14 revalidates exact canonical mappings and
+retains unevidenced alias headers without auto-acceptance. M15 normalization, later fusion,
+deferred complex document/table formats, and the web workbench remain future checkpoints.
 
 ## Quick start
 
@@ -118,6 +127,7 @@ uv run scidatafusion phase3-parse-plan-demo --goal "Study Type Ia supernova ligh
 uv run scidatafusion phase3-document-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase3-table-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase4-extract-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase4-map-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
@@ -175,6 +185,14 @@ The Ia fixture emits four explicit candidates and remains `partial` because
 `source_record_id` is absent; it does not invent the field. The summary omits values, lexemes,
 locations, URLs, goal text, and reviewer identity. Alias mapping, inference, normalization,
 DocumentIR/FigureIR/DatasetIR extraction, Gold writes, and judged-corpus accuracy remain deferred.
+
+`phase4-map-demo` consumes the exact M13 request/result and independently verifies each candidate,
+its value and entity evidence, canonical field contract hash, M10 type label, score, and acceptance
+threshold. Four exact Ia mappings become eligible for M15, while the absent required field keeps
+the aggregate `partial`. Registered aliases are deterministic suggestions only when M13 lacks
+value evidence; they are retained in `UnmappedFieldSet` and cannot auto-map. The summary contains
+no values, header text, locations, URLs, goal, or reviewer identity. Embedding retrieval, LLM
+judgment, automatic alias mapping, normalization, and benchmark accuracy remain deferred.
 
 Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
 not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported

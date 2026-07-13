@@ -44,6 +44,7 @@ from scidatafusion.contracts.extraction import (
     ExtractionResult,
     ExtractionStatus,
 )
+from scidatafusion.contracts.mapping import MappingRequest, MappingResult, MappingStatus
 from scidatafusion.contracts.parsing import (
     ParsePlanningRequest,
     ParsePlanningResult,
@@ -73,6 +74,8 @@ from scidatafusion.domain.registry import RegistryLoadError
 from scidatafusion.errors import AppError
 from scidatafusion.extraction.fixtures import build_offline_extraction_bundle
 from scidatafusion.extraction.service import EvidenceFirstExtractionService
+from scidatafusion.mapping.fixtures import build_offline_mapping_bundle
+from scidatafusion.mapping.service import FieldMappingService
 from scidatafusion.parsing import ParsePlanningService
 from scidatafusion.parsing.fixtures import build_offline_parse_planning_bundle
 from scidatafusion.search import SearchPlanner, SourceCapabilityRegistryLoader, source_ids
@@ -186,6 +189,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     extraction.add_argument("--goal", required=True, help="scientific research goal")
     extraction.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    mapping = subparsers.add_parser(
+        "phase4-map-demo",
+        help="run M00-M14 and validate evidence-backed canonical field mappings offline",
+    )
+    mapping.add_argument("--goal", required=True, help="scientific research goal")
+    mapping.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -621,6 +634,52 @@ def build_extraction_summary(result: ExtractionResult) -> dict[str, object]:
     }
 
 
+def build_mapping_summary(result: MappingResult) -> dict[str, object]:
+    """Render M14 mapping gates without raw values, headers, URLs, or source content."""
+
+    return {
+        "status": result.status.value,
+        "execution_mode": result.runtime.execution_mode.value,
+        "network_performed": False,
+        "model_performed": False,
+        "embedding_performed": False,
+        "gold_writes": 0,
+        "m15_normalization_executions": 0,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "contract_id": result.contract_id,
+        "contract_hash": result.contract_hash,
+        "upstream_extraction_output_hash": result.upstream_extraction_output_hash,
+        "mapping_set_id": result.mapping_set.mapping_set_id,
+        "mapping_set_hash": result.mapping_set.mapping_set_hash,
+        "unmapped_set_id": result.unmapped_set.unmapped_set_id,
+        "unmapped_set_hash": result.unmapped_set.unmapped_set_hash,
+        "metrics": result.metrics.model_dump(mode="json"),
+        "mapping_methods": dict(
+            sorted(Counter(item.method.value for item in result.mapping_set.mappings).items())
+        ),
+        "mapping_decisions": dict(
+            sorted(Counter(item.decision.value for item in result.mapping_set.mappings).items())
+        ),
+        "eligible_target_fields": dict(
+            sorted(
+                Counter(
+                    item.target_field_name
+                    for item in result.mapping_set.mappings
+                    if item.eligible_for_m15
+                ).items()
+            )
+        ),
+        "unmapped_reasons": dict(
+            sorted(Counter(item.reason.value for item in result.unmapped_set.fields).items())
+        ),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "input_hash": result.input_hash,
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -731,6 +790,78 @@ async def _execute_offline_artifacts_with_request(
         return request, await service.execute(request)
     finally:
         await service.aclose()
+
+
+async def _execute_offline_extraction(
+    contract: ScientificDataContract,
+    planning: SearchPlanningResult,
+) -> tuple[ExtractionRequest, ExtractionResult, MemoryBronzeStore]:
+    """Execute the exact offline M00-M13 tail and retain its immutable request chain."""
+
+    selection = await _execute_offline_selection(contract, planning)
+    store = MemoryBronzeStore()
+    download_request, download_result = await _execute_offline_artifacts_with_request(
+        selection,
+        store=store,
+    )
+    parse_bundle = build_offline_parse_planning_bundle()
+    parse_request = ParsePlanningRequest(
+        contract=contract,
+        download_request=download_request,
+        download_result=download_result,
+        capability_registry=parse_bundle.registry,
+        policy=parse_bundle.policy,
+        runtime=parse_bundle.runtime,
+        requested_at=parse_bundle.runtime.checked_at,
+    )
+    parse_result = await ParsePlanningService(store=store).execute(parse_request)
+    table_bundle = build_offline_table_parsing_bundle(
+        parse_result.plan.capability_registry,
+        parse_result.plan.runtime,
+    )
+    table_request = TableParsingRequest(
+        parse_planning_request=parse_request,
+        parse_planning_result=parse_result,
+        policy=table_bundle.policy,
+        runtime=table_bundle.runtime,
+        requested_at=table_bundle.runtime.checked_at,
+    )
+    table_result = await TableParsingService(bronze_store=store).execute(table_request)
+    extraction_bundle = build_offline_extraction_bundle(not_before=table_result.created_at)
+    extraction_request = ExtractionRequest(
+        contract=contract,
+        table_parsing_request=table_request,
+        table_parsing_result=table_result,
+        policy=extraction_bundle.policy,
+        runtime=extraction_bundle.runtime,
+        requested_at=extraction_bundle.runtime.checked_at,
+    )
+    extraction_result = await EvidenceFirstExtractionService(bronze_store=store).execute(
+        extraction_request
+    )
+    return extraction_request, extraction_result, store
+
+
+async def _execute_offline_mapping(
+    contract: ScientificDataContract,
+    planning: SearchPlanningResult,
+) -> tuple[MappingRequest, MappingResult, MemoryBronzeStore]:
+    """Execute M14 over the exact offline M13 result without network or model calls."""
+
+    extraction_request, extraction_result, store = await _execute_offline_extraction(
+        contract,
+        planning,
+    )
+    bundle = build_offline_mapping_bundle(not_before=extraction_result.created_at)
+    request = MappingRequest(
+        extraction_request=extraction_request,
+        extraction_result=extraction_result,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        requested_at=bundle.runtime.checked_at,
+    )
+    result = await FieldMappingService(bronze_store=store).execute(request)
+    return request, result, store
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1042,48 +1173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
                 return 3
             contract = phase1.confirmation.contract
-            selection = asyncio.run(_execute_offline_selection(contract, planning))
-            store = MemoryBronzeStore()
-            download_request, download_result = asyncio.run(
-                _execute_offline_artifacts_with_request(selection, store=store)
-            )
-            parse_bundle = build_offline_parse_planning_bundle()
-            parse_request = ParsePlanningRequest(
-                contract=contract,
-                download_request=download_request,
-                download_result=download_result,
-                capability_registry=parse_bundle.registry,
-                policy=parse_bundle.policy,
-                runtime=parse_bundle.runtime,
-                requested_at=parse_bundle.runtime.checked_at,
-            )
-            parse_result = asyncio.run(ParsePlanningService(store=store).execute(parse_request))
-            table_bundle = build_offline_table_parsing_bundle(
-                parse_result.plan.capability_registry,
-                parse_result.plan.runtime,
-            )
-            table_request = TableParsingRequest(
-                parse_planning_request=parse_request,
-                parse_planning_result=parse_result,
-                policy=table_bundle.policy,
-                runtime=table_bundle.runtime,
-                requested_at=table_bundle.runtime.checked_at,
-            )
-            table_result = asyncio.run(
-                TableParsingService(bronze_store=store).execute(table_request)
-            )
-            extraction_bundle = build_offline_extraction_bundle(not_before=table_result.created_at)
-            extraction_request = ExtractionRequest(
-                contract=contract,
-                table_parsing_request=table_request,
-                table_parsing_result=table_result,
-                policy=extraction_bundle.policy,
-                runtime=extraction_bundle.runtime,
-                requested_at=extraction_bundle.runtime.checked_at,
-            )
-            extraction_result = asyncio.run(
-                EvidenceFirstExtractionService(bronze_store=store).execute(extraction_request)
-            )
+            _, extraction_result, _ = asyncio.run(_execute_offline_extraction(contract, planning))
             print(
                 json.dumps(
                     build_extraction_summary(extraction_result),
@@ -1095,6 +1185,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                 0
                 if extraction_result.status
                 in {ExtractionStatus.SUCCEEDED, ExtractionStatus.PARTIAL}
+                else 3
+            )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase4-map-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            _, mapping_result, _ = asyncio.run(
+                _execute_offline_mapping(phase1.confirmation.contract, planning)
+            )
+            print(json.dumps(build_mapping_summary(mapping_result), ensure_ascii=True, indent=2))
+            return (
+                0
+                if mapping_result.status in {MappingStatus.SUCCEEDED, MappingStatus.PARTIAL}
                 else 3
             )
         except (AppError, RegistryLoadError, ValidationError) as exc:
