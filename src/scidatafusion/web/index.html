@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SciDataFusion Workbench</title>
+  <style>
+    :root { color-scheme: light; --ink:#18201d; --muted:#62706a; --line:#d9dfdc; --paper:#f7f9f8; --white:#fff; --green:#176b4d; --amber:#985b12; --red:#a6382d; --blue:#245a7a; }
+    * { box-sizing:border-box; letter-spacing:0; }
+    body { margin:0; color:var(--ink); background:var(--paper); font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    button,input,textarea { font:inherit; }
+    header { height:58px; display:flex; align-items:center; justify-content:space-between; padding:0 24px; background:var(--ink); color:white; }
+    .brand { font-size:17px; font-weight:650; }
+    .version { color:#b8c5bf; font-size:12px; }
+    main { max-width:1280px; margin:0 auto; padding:22px 24px 48px; }
+    .runbar { display:grid; grid-template-columns:minmax(300px,1.8fr) minmax(240px,1fr) auto; gap:12px; align-items:end; padding-bottom:22px; border-bottom:1px solid var(--line); }
+    label { display:block; color:var(--muted); font-size:12px; font-weight:650; margin-bottom:6px; }
+    textarea,input { width:100%; min-height:42px; border:1px solid #b9c4bf; border-radius:4px; background:white; padding:10px 11px; color:var(--ink); }
+    textarea { height:68px; resize:vertical; }
+    button,.download { min-height:42px; border:0; border-radius:4px; padding:0 15px; background:var(--green); color:white; font-weight:650; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:7px; }
+    button:disabled { cursor:wait; opacity:.65; }
+    .statusline { display:flex; align-items:center; gap:9px; margin:18px 0; min-height:28px; }
+    .pill { border-radius:999px; padding:4px 9px; font-size:12px; font-weight:700; background:#f5e9d7; color:var(--amber); }
+    .pill.good { background:#dfeee8; color:var(--green); }
+    .error { color:var(--red); }
+    .metrics { display:grid; grid-template-columns:repeat(6,minmax(110px,1fr)); border:1px solid var(--line); background:var(--white); }
+    .metric { padding:15px; border-right:1px solid var(--line); min-width:0; }
+    .metric:last-child { border-right:0; }
+    .metric b { display:block; font-size:22px; font-weight:650; overflow-wrap:anywhere; }
+    .metric span { color:var(--muted); font-size:12px; }
+    .layout { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(300px,.75fr); gap:24px; margin-top:24px; }
+    section { min-width:0; }
+    h2 { font-size:15px; margin:0 0 12px; }
+    table { width:100%; border-collapse:collapse; background:white; border:1px solid var(--line); table-layout:fixed; }
+    th,td { text-align:left; padding:10px 11px; border-bottom:1px solid var(--line); vertical-align:top; overflow-wrap:anywhere; }
+    th { color:var(--muted); font-size:11px; text-transform:uppercase; background:#f2f5f3; }
+    tr:last-child td { border-bottom:0; }
+    .hash { font:12px ui-monospace,SFMono-Regular,Consolas,monospace; color:var(--blue); }
+    .filelink { color:var(--blue); font-weight:650; text-decoration:none; }
+    .limitations { margin:0; padding:13px 16px 13px 31px; border-left:3px solid var(--amber); background:#fffaf2; }
+    .limitations li + li { margin-top:7px; }
+    .download { margin-top:14px; width:100%; }
+    .blocked { color:var(--muted); background:#e8ecea; cursor:not-allowed; }
+    .empty { padding:22px; text-align:center; color:var(--muted); background:white; border:1px solid var(--line); }
+    @media (max-width:900px) { .runbar,.layout { grid-template-columns:1fr; } .metrics { grid-template-columns:repeat(2,1fr); } .metric:nth-child(2n) { border-right:0; } }
+    @media (max-width:520px) { header { padding:0 14px; } main { padding:16px 14px 36px; } .metrics { grid-template-columns:1fr 1fr; } th:nth-child(3),td:nth-child(3) { display:none; } }
+  </style>
+</head>
+<body>
+  <header><div class="brand">SciDataFusion Workbench</div><div class="version">M20 · offline evidence pipeline</div></header>
+  <main>
+    <form id="run-form" class="runbar">
+      <div><label for="goal">研究目标</label><textarea id="goal" required>Study Type Ia supernova light curves using multi-source data integration into CSV.</textarea></div>
+      <div><label for="query">证据检索查询</label><input id="query" value="quality evidence observation time magnitude" required></div>
+      <button id="run" type="submit"><span aria-hidden="true">▶</span>运行 M00-M20</button>
+    </form>
+    <div class="statusline"><span id="status" class="pill">准备中</span><span id="message">正在读取当前检查点…</span></div>
+    <div class="metrics">
+      <div class="metric"><b id="quality">—</b><span>质量分</span></div>
+      <div class="metric"><b id="issues">—</b><span>待审核问题</span></div>
+      <div class="metric"><b id="gold">—</b><span>Formal Gold 行</span></div>
+      <div class="metric"><b id="nodes">—</b><span>证据图节点</span></div>
+      <div class="metric"><b id="edges">—</b><span>证据图边</span></div>
+      <div class="metric"><b id="hits">—</b><span>检索命中</span></div>
+    </div>
+    <div class="layout">
+      <section><h2>交付产物</h2><div id="artifacts" class="empty">尚未加载</div></section>
+      <section>
+        <h2>质量门与限制</h2><ul id="limitations" class="limitations"><li>正在加载</li></ul>
+        <a id="package" class="download" href="#"><span aria-hidden="true">↓</span>下载复现包</a>
+        <a id="csv" class="download blocked" href="#" aria-disabled="true"><span aria-hidden="true">↓</span>Gold CSV 暂不可用</a>
+      </section>
+    </div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const escapeHtml = (v) => String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    function render(data) {
+      $('status').textContent = data.status;
+      $('status').className = 'pill' + (data.status === 'succeeded' ? ' good' : '');
+      $('message').textContent = data.quality_gate_passed ? '质量门通过，可导出正式数据。' : '质量门未通过，已生成可审核、可复现的降级交付包。';
+      $('quality').textContent = Math.round(data.quality_score * 100) + '%';
+      $('issues').textContent = data.issue_count; $('gold').textContent = data.formal_gold_record_count;
+      $('nodes').textContent = data.graph_node_count; $('edges').textContent = data.graph_edge_count; $('hits').textContent = data.retrieval_hit_count;
+      $('limitations').innerHTML = (data.known_limitations.length ? data.known_limitations : ['No known delivery limitations.']).map(v => `<li>${escapeHtml(v)}</li>`).join('');
+      $('artifacts').className = '';
+      $('artifacts').innerHTML = `<table><thead><tr><th style="width:34%">文件</th><th style="width:22%">类型</th><th>SHA-256</th><th style="width:12%">大小</th></tr></thead><tbody>${data.artifacts.map(a => `<tr><td><a class="filelink signed-download" href="#" data-filename="${escapeHtml(a.filename)}">${escapeHtml(a.filename)}</a></td><td>${escapeHtml(a.kind)}</td><td class="hash">${escapeHtml(a.sha256.slice(0,16))}…</td><td>${(a.size_bytes/1024).toFixed(1)} KB</td></tr>`).join('')}</tbody></table>`;
+      $('package').href = '#'; $('package').dataset.filename = 'scidatafusion-reproduction.zip';
+      const hasCsv = data.artifacts.some(a => a.filename === 'gold.csv');
+      $('csv').className = 'download' + (hasCsv ? '' : ' blocked');
+      $('csv').textContent = hasCsv ? '↓ 下载 Gold CSV' : '↓ Gold CSV 暂不可用';
+      $('csv').href = '#'; $('csv').dataset.filename = hasCsv ? 'gold.csv' : '';
+      $('csv').setAttribute('aria-disabled', String(!hasCsv));
+    }
+    async function request(url, options) {
+      const response = await fetch(url, options);
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail || '请求失败');
+      return body;
+    }
+    async function signedDownload(filename) {
+      if (!filename) return;
+      const ticket = await request(`/api/v1/demo/download-tickets/${encodeURIComponent(filename)}`, {method:'POST'});
+      window.location.assign(ticket.download_url);
+    }
+    document.addEventListener('click', async (event) => {
+      const target = event.target.closest('.signed-download, #package, #csv');
+      if (!target || target.getAttribute('aria-disabled') === 'true') return;
+      event.preventDefault();
+      try { await signedDownload(target.dataset.filename); } catch (e) { $('message').textContent = e.message; $('message').className = 'error'; }
+    });
+    async function load() { try { render(await request('/api/v1/demo/status')); } catch (e) { $('message').textContent = e.message; $('message').className = 'error'; } }
+    $('run-form').addEventListener('submit', async (event) => {
+      event.preventDefault(); $('run').disabled = true; $('message').textContent = '正在执行确定性离线链路…'; $('message').className = '';
+      try { render(await request('/api/v1/demo/run', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({research_goal:$('goal').value, retrieval_query:$('query').value})})); }
+      catch (e) { $('message').textContent = e.message; $('message').className = 'error'; }
+      finally { $('run').disabled = false; }
+    });
+    load();
+  </script>
+</body>
+</html>

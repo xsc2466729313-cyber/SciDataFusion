@@ -147,6 +147,13 @@ provenance-preserving unified document IR; and M10 recovers native tables with c
 - an offline synthetic Ia chart result with one 64-by-64 content-addressed raster, two confirmed
   calibrations, one inverted magnitude axis, three digitized points, 100% calibration coverage,
   and zero OCR, VLM, network, model, cost, or scientific-value mutation operations.
+- M20 strict delivery contracts, Formal-Gold-only CSV/Parquet serialization, content-addressed
+  artifacts, canonical manifests, deterministic UTF-8 ZIP packaging, and checkpoint replay;
+- a FastAPI workbench with offline M00-M20 execution, reduced quality/graph metrics, review issues,
+  short-lived content-bound download tickets, and structured `409`/`403` failure responses;
+- an offline Ia M20 review package containing dictionary, provenance, quality, evidence graph,
+  runtime metrics, reproduction metadata, and an executable verification notebook, while correctly
+  withholding CSV/Parquet because the M18 quality gate has not passed.
 
 M04 does not access the network. M05 implements a live-capable but default-offline transport
 boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
@@ -165,8 +172,9 @@ exact eligible consensus. M18 executes the confirmed contract's quality gates an
 Gold while unresolved required, any-of, or provenance issues remain. M19 adds task-private sparse
 retrieval, an evidence graph, and quarantined task memory without promoting unreviewed experience.
 M11 adds manually calibrated deterministic scatter-chart digitization without pretending to have
-OCR or semantic legend inference. M12 scientific-format parsing and the web workbench remain future
-checkpoints.
+OCR or semantic legend inference. M20 adds the usable delivery workbench and reproduction package
+without pretending that the unresolved Ia candidate is Formal Gold. M12 scientific-format parsing,
+review resolution, and production deployment remain future checkpoints.
 
 ## Quick start
 
@@ -190,6 +198,8 @@ uv run scidatafusion phase5-fuse-demo --goal "Study Type Ia supernova light curv
 uv run scidatafusion phase5-audit-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
 uv run scidatafusion phase6-knowledge-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --query "quality evidence observation time magnitude" --confirmed-by "demo-reviewer"
 uv run scidatafusion phase7-figure-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
+uv run scidatafusion phase8-delivery-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --query "quality evidence observation time magnitude" --confirmed-by "demo-reviewer"
+uv run uvicorn scidatafusion.api:app --host 127.0.0.1 --port 8000
 uv run pytest tests/test_search_planning.py -q --no-cov
 uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
 uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov

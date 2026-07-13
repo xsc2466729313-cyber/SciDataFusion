@@ -34,6 +34,7 @@ from scidatafusion.contracts.connectors import (
     ConnectorExecutionRequest,
     ConnectorExecutionResult,
 )
+from scidatafusion.contracts.delivery import DeliveryRequest, DeliveryResult, DeliveryStatus
 from scidatafusion.contracts.documents import (
     DocumentParsingRequest,
     DocumentParsingResult,
@@ -91,6 +92,8 @@ from scidatafusion.contracts.tables import (
 )
 from scidatafusion.contracts.task import TaskIntakeRequest
 from scidatafusion.contracts.workflow import Phase1Status, Phase1WorkflowResult
+from scidatafusion.delivery.fixtures import build_offline_delivery_bundle
+from scidatafusion.delivery.service import DeliveryOrchestrator
 from scidatafusion.documents.fixtures import build_offline_document_parsing_bundle
 from scidatafusion.documents.service import DocumentParsingService
 from scidatafusion.domain.registry import RegistryLoadError
@@ -285,6 +288,17 @@ def _parser() -> argparse.ArgumentParser:
     knowledge.add_argument("--goal", required=True, help="scientific research goal")
     knowledge.add_argument("--query", required=True, help="task-local knowledge retrieval query")
     knowledge.add_argument(
+        "--confirmed-by",
+        required=True,
+        help="explicit reviewer identity required by the M04 contract gate",
+    )
+    delivery = subparsers.add_parser(
+        "phase8-delivery-demo",
+        help="run M00-M20 and build a quality-gated reproduction package offline",
+    )
+    delivery.add_argument("--goal", required=True, help="scientific research goal")
+    delivery.add_argument("--query", required=True, help="task-local knowledge retrieval query")
+    delivery.add_argument(
         "--confirmed-by",
         required=True,
         help="explicit reviewer identity required by the M04 contract gate",
@@ -1057,6 +1071,35 @@ def build_figure_summary(result: FigureDigitizationResult) -> dict[str, object]:
     }
 
 
+def build_delivery_summary(result: DeliveryResult) -> dict[str, object]:
+    """Render M20 delivery state without scientific values or evidence content."""
+
+    return {
+        "status": result.status.value,
+        "execution_mode": result.runtime.execution_mode.value,
+        "network_performed": False,
+        "model_performed": False,
+        "scientific_value_mutations": 0,
+        "task_id": result.task_id,
+        "run_id": result.run_id,
+        "contract_id": result.contract_id,
+        "contract_version": result.contract_version,
+        "manifest_id": result.manifest.manifest_id,
+        "manifest_hash": result.manifest.manifest_hash,
+        "package_sha256": result.package.sha256,
+        "package_size_bytes": result.package.size_bytes,
+        "artifact_kinds": dict(
+            sorted(Counter(item.kind.value for item in result.manifest.files).items())
+        ),
+        "known_limitation_count": len(result.manifest.known_limitations),
+        "metrics": result.metrics.model_dump(mode="json"),
+        "event_type": result.event.event_type.value,
+        "event_count": 1,
+        "input_hash": result.input_hash,
+        "output_hash": result.output_hash,
+    }
+
+
 def _build_search_planning(
     goal: str, confirmed_by: str
 ) -> tuple[Phase1WorkflowResult, SearchPlanningResult | None]:
@@ -1365,6 +1408,29 @@ async def _execute_offline_figure(
     )
     result = await FigureDigitizationService(bronze_store=store).execute(request)
     return request, result, store
+
+
+async def _execute_offline_delivery(
+    contract: ScientificDataContract,
+    planning: SearchPlanningResult,
+    query: str,
+) -> tuple[DeliveryRequest, DeliveryResult, MemoryBronzeStore, DeliveryOrchestrator]:
+    """Execute M20 over the exact offline M19 result without network or model calls."""
+
+    knowledge_request, knowledge_result, store = await _execute_offline_knowledge(
+        contract, planning, query
+    )
+    bundle = build_offline_delivery_bundle(not_before=knowledge_result.created_at)
+    request = DeliveryRequest(
+        knowledge_request=knowledge_request,
+        knowledge_result=knowledge_result,
+        policy=bundle.policy,
+        runtime=bundle.runtime,
+        requested_at=bundle.runtime.checked_at,
+    )
+    service = DeliveryOrchestrator(bronze_store=store)
+    result = await service.execute(request)
+    return request, result, store, service
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1913,6 +1979,43 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return (
                 0 if figure_result.status in {FigureStatus.SUCCEEDED, FigureStatus.PARTIAL} else 3
+            )
+        except (AppError, RegistryLoadError, ValidationError) as exc:
+            if isinstance(exc, AppError):
+                code = exc.code.value
+            elif isinstance(exc, RegistryLoadError):
+                code = "configuration_error"
+            else:
+                code = "validation_failed"
+            print(
+                json.dumps({"status": "error", "error": code}, ensure_ascii=True),
+                file=sys.stderr,
+            )
+            return 2
+    if args.command == "phase8-delivery-demo":
+        try:
+            phase1, planning = _build_search_planning(args.goal, args.confirmed_by)
+            if planning is None or phase1.confirmation is None:
+                print(json.dumps(build_phase1_summary(phase1), ensure_ascii=True, indent=2))
+                return 3
+            _, delivery_result, _, _ = asyncio.run(
+                _execute_offline_delivery(
+                    phase1.confirmation.contract,
+                    planning,
+                    args.query,
+                )
+            )
+            print(
+                json.dumps(
+                    build_delivery_summary(delivery_result),
+                    ensure_ascii=True,
+                    indent=2,
+                )
+            )
+            return (
+                0
+                if delivery_result.status in {DeliveryStatus.SUCCEEDED, DeliveryStatus.NEEDS_REVIEW}
+                else 3
             )
         except (AppError, RegistryLoadError, ValidationError) as exc:
             if isinstance(exc, AppError):

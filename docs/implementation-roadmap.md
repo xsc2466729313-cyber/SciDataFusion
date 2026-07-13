@@ -12,7 +12,7 @@ The V4 specification is implemented as independently accepted checkpoints.
 | 5 | M16-M18 | entity resolution, conflict-preserving fusion, repair/HITL | complete (first offline vertical slice) |
 | 6 | M19 | hybrid retrieval and evidence graph | complete (first offline vertical slice) |
 | 7 | M11-M12 | chart digitization and scientific formats | in progress (M11 complete) |
-| 8 | M20 | FastAPI, interactive workbench, exports, reproduction bundle | pending |
+| 8 | M20 | FastAPI, interactive workbench, exports, reproduction bundle | complete (first offline vertical slice) |
 | 9 | evaluation | three domains, held-out domain, ablations, demo package | pending |
 
 ## Vertical-slice order
@@ -125,6 +125,15 @@ both CalibrationRecord identities, and source-byte hash. The result remains part
 and series semantics are manual inputs. OCR, VLM, automatic legend/axis recognition, overlapping
 series, M08/M09 region routing, and benchmark accuracy are deferred. M12 next owns scientific file
 formats.
+
+M20 re-verifies the exact M19 chain and creates only quality-gated delivery artifacts. Formal Gold
+drives exact-equivalent CSV/Parquet serialization; the current Ia result has no Formal Gold, so the
+workbench and CLI withhold those files and expose three review items. The deterministic ZIP retains
+a canonical file manifest, hashes, contract dictionary, provenance, quality state, evidence graph,
+run/runtime metadata, and an executable hash-verification notebook. FastAPI provides a usable
+input/status/download loop with short-lived content-bound HMAC tickets. The first slice uses local
+stores and an ephemeral signing key; production persistence, identity integration, live sources,
+and successful reviewed Gold publication remain future deployment/evaluation work.
 
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

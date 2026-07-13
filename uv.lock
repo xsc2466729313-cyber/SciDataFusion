@@ -1331,19 +1331,17 @@ name = "scidatafusion"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fastapi" },
     { name = "httpx" },
     { name = "polars" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pypdf" },
     { name = "rank-bm25" },
+    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.optional-dependencies]
-api = [
-    { name = "fastapi" },
-    { name = "uvicorn", extra = ["standard"] },
-]
 data = [
     { name = "duckdb" },
     { name = "pyarrow" },
@@ -1362,7 +1360,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "duckdb", marker = "extra == 'data'", specifier = ">=1.2,<2" },
-    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115,<1" },
+    { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "polars", specifier = ">=1.22,<2" },
     { name = "pyarrow", marker = "extra == 'data'", specifier = ">=19,<21" },
@@ -1370,9 +1368,9 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.7,<3" },
     { name = "pypdf", specifier = ">=6.14,<7" },
     { name = "rank-bm25", specifier = ">=0.2.2,<0.3" },
-    { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.34,<1" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34,<1" },
 ]
-provides-extras = ["api", "data"]
+provides-extras = ["data"]
 
 [package.metadata.requires-dev]
 dev = [
