@@ -45,6 +45,7 @@ class LocalOnlineConfigurationStore:
     def _non_secret_values(update: OnlineConfigurationUpdate) -> dict[str, str]:
         return {
             "SCIDATA_OFFLINE_MODE": str(not update.online_enabled).lower(),
+            "SCIDATA_QWEN_BASE_URL": str(update.qwen_base_url).rstrip("/"),
             "SCIDATA_BAILIAN_REGION": update.bailian_region,
             "SCIDATA_BAILIAN_WORKSPACE_ID": update.bailian_workspace_id or "",
             "SCIDATA_SEARCH_ENGINE": update.search_engine,

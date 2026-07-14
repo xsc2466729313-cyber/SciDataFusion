@@ -21,7 +21,9 @@ from scidatafusion.contracts.online import (
     LiveSearchBatch,
     LiveSearchResult,
     OnlineResearchResult,
+    OnlineSourceRecord,
     PlannedSearchQuery,
+    QualityIssueInput,
     SearchExecutionRecord,
     SearchInvocationRecord,
     SearchQueryPlan,
@@ -138,6 +140,89 @@ class _ModelClient:
     async def complete(self, request: StructuredModelRequest) -> StructuredModelCompletion:
         self.requests.append(request)
         return _completion(self.content, request)
+
+
+def test_qwen_quality_review_covers_every_issue_without_mutating_values() -> None:
+    async def scenario() -> None:
+        content = json.dumps(
+            {
+                "summary": "已为缺失字段规划自动补证。",
+                "decisions": [
+                    {
+                        "issue_id": "issue-required-field",
+                        "action": "search_more",
+                        "rationale": "需要查找包含来源记录编号的原始表格。",
+                        "evidence_query": "Ia supernova source record identifier table",
+                        "candidate_source_urls": ["https://example.org/data-release"],
+                    }
+                ],
+            }
+        )
+        model = _ModelClient(content)
+        service = OnlineResearchService(_settings(), model_client=model)
+        review = await service.review_quality(
+            research_goal="Study Type Ia supernova light curves.",
+            issues=(
+                QualityIssueInput(
+                    issue_id="issue-required-field",
+                    code="required_field_missing",
+                    fields=("source_record_id",),
+                    detail="The required source record identifier is missing.",
+                    evidence_count=1,
+                ),
+            ),
+            sources=(OnlineSourceRecord(search=_search_batch().results[0], assessment=None),),
+        )
+
+        assert review.status == "completed"
+        assert review.human_review_required is False
+        assert review.unresolved_issue_count == 1
+        assert review.decisions[0].action == "search_more"
+        assert model.requests[0].role == ModelRole.CRITIC
+        assert model.requests[0].schema_name == "AutomatedQualityReviewProposal"
+        assert "source_record_id" in model.requests[0].user_prompt
+
+    asyncio.run(scenario())
+
+
+def test_qwen_quality_review_rejects_unknown_issue_and_degrades_safely() -> None:
+    async def scenario() -> None:
+        model = _ModelClient(
+            json.dumps(
+                {
+                    "summary": "invalid",
+                    "decisions": [
+                        {
+                            "issue_id": "invented-issue",
+                            "action": "reparse_source",
+                            "rationale": "invalid issue reference",
+                            "candidate_source_urls": [],
+                        }
+                    ],
+                }
+            )
+        )
+        service = OnlineResearchService(_settings(), model_client=model)
+        review = await service.review_quality(
+            research_goal="Study Type Ia supernova light curves.",
+            issues=(
+                QualityIssueInput(
+                    issue_id="real-issue",
+                    code="required_field_missing",
+                    fields=("source_record_id",),
+                    detail="The required source record identifier is missing.",
+                    evidence_count=1,
+                ),
+            ),
+            sources=(),
+        )
+
+        assert review.status == "degraded"
+        assert review.decisions[0].issue_id == "real-issue"
+        assert review.decisions[0].action == "keep_blocked"
+        assert review.model_invocation is None
+
+    asyncio.run(scenario())
 
 
 def test_serpapi_search_retries_caches_and_redacts_key() -> None:
@@ -366,6 +451,9 @@ def test_online_runtime_requires_both_providers_without_exposing_secrets() -> No
     serialized = configuration.model_dump_json()
     assert configuration.search_engine == "google_scholar"
     assert configuration.max_search_queries == 4
+    assert str(configuration.model_base_url).rstrip("/") == (
+        "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    )
     assert all(item.configured for item in configuration.credentials)
     assert "test-dashscope-key" not in serialized
     assert "test-serpapi-key" not in serialized
@@ -731,6 +819,7 @@ def test_local_configuration_api_writes_env_applies_settings_and_redacts_keys(
         assert "SCIDATA_LOG_LEVEL=DEBUG" in stored
         assert "SERPAPI_API_KEY=test-serpapi-key-material" in stored
         assert "DASHSCOPE_API_KEY=test-dashscope-key-material" in stored
+        assert "SCIDATA_QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1" in stored
         assert not (tmp_path / "..env.scidatafusion.tmp").exists()
 
     asyncio.run(scenario())
@@ -768,6 +857,51 @@ def test_configuration_api_rejects_malformed_secret(tmp_path: Path) -> None:
                 },
             )
         assert response.status_code == 422
+        assert not (tmp_path / ".env").exists()
+
+    asyncio.run(scenario())
+
+
+def test_configuration_api_accepts_minimal_client_fields(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = create_app(configuration_store=LocalOnlineConfigurationStore(tmp_path / ".env"))
+        transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 54321))
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://127.0.0.1",
+        ) as client:
+            response = await client.put(
+                "/api/v1/online/configuration",
+                json={
+                    "online_enabled": True,
+                    "serpapi_api_key": "test-serpapi-key-material",
+                    "dashscope_api_key": "test-dashscope-key-material",
+                    "qwen_base_url": ("https://dashscope.aliyuncs.com/compatible-mode/v1"),
+                },
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["online_ready"] is True
+
+    asyncio.run(scenario())
+
+
+def test_configuration_api_rejects_non_bailian_base_url(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = create_app(configuration_store=LocalOnlineConfigurationStore(tmp_path / ".env"))
+        transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 54321))
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://127.0.0.1",
+        ) as client:
+            response = await client.put(
+                "/api/v1/online/configuration",
+                json={
+                    "online_enabled": False,
+                    "qwen_base_url": "https://example.com/v1",
+                },
+            )
+        assert response.status_code == 422
+        assert "阿里云百炼官方" in response.text
         assert not (tmp_path / ".env").exists()
 
     asyncio.run(scenario())

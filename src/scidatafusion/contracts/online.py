@@ -67,6 +67,7 @@ class OnlineConfigurationView(StrictContract):
     max_search_queries: int = Field(ge=1, le=4)
     max_search_results: int = Field(ge=1, le=10)
     model_provider: Literal["bailian_openai_compatible"] = "bailian_openai_compatible"
+    model_base_url: HttpUrl | None
     model_endpoint_host: OnlineShortText | None
     bailian_region: Literal["cn-beijing", "us-virginia", "ap-southeast-1", "ap-northeast-1"]
     bailian_workspace_id: OnlineShortText | None
@@ -82,6 +83,7 @@ class OnlineConfigurationUpdate(StrictContract):
     dashscope_api_key: SecretStr | None = Field(default=None, repr=False)
     clear_serpapi_api_key: bool = False
     clear_dashscope_api_key: bool = False
+    qwen_base_url: HttpUrl = HttpUrl("https://dashscope.aliyuncs.com/compatible-mode/v1")
     bailian_region: Literal["cn-beijing", "us-virginia", "ap-southeast-1", "ap-northeast-1"] = (
         "cn-beijing"
     )
@@ -140,6 +142,25 @@ class OnlineConfigurationUpdate(StrictContract):
         if not 8 <= len(normalized) <= 512 or any(char.isspace() for char in normalized):
             raise ValueError("API key has an invalid format")
         return normalized
+
+    @field_validator("qwen_base_url")
+    @classmethod
+    def validate_qwen_base_url(cls, value: HttpUrl) -> HttpUrl:
+        host = value.host or ""
+        official_host = host in {
+            "dashscope.aliyuncs.com",
+            "dashscope-us.aliyuncs.com",
+            "dashscope-intl.aliyuncs.com",
+        } or host.endswith(".maas.aliyuncs.com")
+        if (
+            value.scheme != "https"
+            or not official_host
+            or not str(value).rstrip("/").endswith("/compatible-mode/v1")
+        ):
+            raise ValueError(
+                "必须使用阿里云百炼官方 HTTPS Base URL; URL 需以 /compatible-mode/v1 结尾"
+            )
+        return value
 
     @model_validator(mode="after")
     def secret_actions_are_unambiguous(self) -> OnlineConfigurationUpdate:
@@ -247,6 +268,49 @@ class SourceAssessmentBatch(StrictContract):
 class OnlineSourceRecord(StrictContract):
     search: LiveSearchResult
     assessment: SourceAssessment | None
+
+
+class QualityIssueInput(StrictContract):
+    issue_id: OnlineShortText
+    code: OnlineShortText
+    fields: tuple[OnlineShortText, ...] = Field(min_length=1, max_length=32)
+    detail: OnlineText
+    evidence_count: int = Field(ge=0)
+
+
+class AutomatedReviewDecision(StrictContract):
+    issue_id: OnlineShortText
+    action: Literal["search_more", "reparse_source", "keep_blocked", "request_human"]
+    rationale: OnlineShortText
+    evidence_query: OnlineShortText | None = None
+    candidate_source_urls: tuple[HttpUrl, ...] = Field(max_length=10)
+
+    @model_validator(mode="after")
+    def search_actions_require_a_query(self) -> AutomatedReviewDecision:
+        if self.action == "search_more" and self.evidence_query is None:
+            raise ValueError("search_more requires an evidence query")
+        return self
+
+
+class AutomatedQualityReview(StrictContract):
+    status: Literal["completed", "degraded"]
+    summary: OnlineShortText
+    decisions: tuple[AutomatedReviewDecision, ...] = Field(max_length=100)
+    unresolved_issue_count: int = Field(ge=0)
+    human_review_required: bool
+    model_invocation: ModelInvocationRecord | None
+    warnings: tuple[OnlineShortText, ...] = Field(max_length=8)
+
+    @model_validator(mode="after")
+    def model_proof_is_consistent(self) -> AutomatedQualityReview:
+        if (self.model_invocation is not None) != (self.status == "completed"):
+            raise ValueError("completed automated review requires model invocation proof")
+        return self
+
+
+class AutomatedQualityReviewProposal(StrictContract):
+    summary: OnlineShortText
+    decisions: tuple[AutomatedReviewDecision, ...] = Field(max_length=100)
 
 
 class OnlineResearchResult(StrictContract):

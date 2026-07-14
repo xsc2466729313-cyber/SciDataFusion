@@ -27,6 +27,11 @@ and secret-free configuration snapshots.
   immediately without a server restart.
 - [x] Configuration writes reject non-loopback clients; secret values are write-only, blank values
   retain existing secrets, and explicit clear controls remove them.
+- [x] The client form exposes only the online switch, SerpApi key, Bailian key, and the full
+  allowlisted Bailian Base URL; stable search and model defaults do not block a new operator.
+- [x] Online runs ask Qwen for one strict remediation decision per quality issue. Unknown issue IDs
+  or source URLs are rejected, model decisions never count as evidence, and only genuine unresolved
+  semantic conflicts may be routed to a human.
 - [x] Strict contracts prevent the planning model from creating scientific values or mutating the
   deterministic evidence, normalization, fusion, quality, and delivery chain.
 - [x] Mock tests cover locale parameters, configuration redaction, multi-query planning, duplicate

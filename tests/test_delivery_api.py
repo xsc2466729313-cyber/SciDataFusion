@@ -6,11 +6,13 @@ import asyncio
 
 import httpx
 
-from scidatafusion.api import create_app
+from scidatafusion.api import DemoDeliveryProvider, create_app
+from scidatafusion.config import Settings
 
 
 async def _exercise_api() -> None:
-    transport = httpx.ASGITransport(app=create_app())
+    provider = DemoDeliveryProvider(settings=Settings(_env_file=None))
+    transport = httpx.ASGITransport(app=create_app(provider))
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         health = await client.get("/api/health")
         assert health.status_code == 200
@@ -25,7 +27,11 @@ async def _exercise_api() -> None:
         assert "实时联网发现" in page.text
         assert "联网配置" in page.text
         assert 'id="config-form"' in page.text
+        assert 'id="cfg-base-url"' in page.text
+        assert "https://dashscope.aliyuncs.com/compatible-mode/v1" in page.text
         assert "保存并应用" in page.text
+        assert "规划模型" not in page.text
+        assert "国家代码" not in page.text
         assert "M00-M20" not in page.text
 
         runtime = await client.get("/api/v1/runtime")

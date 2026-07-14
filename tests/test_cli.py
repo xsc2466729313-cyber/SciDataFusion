@@ -34,9 +34,11 @@ def test_doctor_command_prints_json(
 
 
 def test_doctor_command_reports_invalid_configuration(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("SCIDATA_OFFLINE_MODE", "false")
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
     monkeypatch.delenv("SCIDATA_DASHSCOPE_API_KEY", raising=False)

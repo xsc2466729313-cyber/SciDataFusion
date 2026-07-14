@@ -10,7 +10,11 @@ from scidatafusion.contracts.fusion import FusedField
 from scidatafusion.contracts.knowledge import KnowledgeRequest, KnowledgeResult
 from scidatafusion.contracts.mapping import FieldMapping
 from scidatafusion.contracts.normalization import NormalizedField
-from scidatafusion.contracts.online import OnlineResearchResult, ResearchExecutionMode
+from scidatafusion.contracts.online import (
+    AutomatedQualityReview,
+    OnlineResearchResult,
+    ResearchExecutionMode,
+)
 from scidatafusion.contracts.scientific import FieldContract
 from scidatafusion.contracts.workbench import (
     WorkbenchArtifact,
@@ -55,6 +59,7 @@ def build_workbench_snapshot(
     delivery: DeliveryResult,
     execution_mode: ResearchExecutionMode = ResearchExecutionMode.OFFLINE,
     online_research: OnlineResearchResult | None = None,
+    automated_quality_review: AutomatedQualityReview | None = None,
 ) -> WorkbenchSnapshot:
     """Project immutable workflow artifacts into a bounded UI read model."""
 
@@ -293,6 +298,7 @@ def build_workbench_snapshot(
             dataset_hash=scientific.dataset_ref.dataset_hash,
         ),
         online_research=online_research,
+        automated_quality_review=automated_quality_review,
         delivery_artifact_count=delivery.metrics.artifact_count,
         package_filename=delivery.package.filename,
         formal_gold_available=quality.formal_gold_dataset is not None,

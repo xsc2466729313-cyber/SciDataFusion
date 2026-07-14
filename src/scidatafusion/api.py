@@ -25,10 +25,12 @@ from scidatafusion.config import Settings, get_settings
 from scidatafusion.contracts.base import StrictContract
 from scidatafusion.contracts.delivery import DeliveryArtifact, DeliveryRequest, DeliveryResult
 from scidatafusion.contracts.online import (
+    AutomatedQualityReview,
     OnlineConfigurationUpdate,
     OnlineConfigurationView,
     OnlineResearchResult,
     OnlineRuntimeStatus,
+    QualityIssueInput,
     ResearchExecutionMode,
 )
 from scidatafusion.contracts.workbench import WorkbenchSnapshot
@@ -160,6 +162,23 @@ class DemoDeliveryProvider:
             )
             orchestrator = DeliveryOrchestrator(bronze_store=bronze_store)
             result = await orchestrator.execute(request)
+            quality = knowledge_request.quality_result
+            automated_review: AutomatedQualityReview | None = None
+            if execution_mode is ResearchExecutionMode.ONLINE and online_result is not None:
+                automated_review = await self._online_service.review_quality(
+                    research_goal=payload.research_goal,
+                    issues=tuple(
+                        QualityIssueInput(
+                            issue_id=item.issue_id,
+                            code=item.code.value,
+                            fields=item.affected_field_names,
+                            detail=item.detail,
+                            evidence_count=len(item.evidence_refs),
+                        )
+                        for item in quality.issue_set.issues
+                    ),
+                    sources=online_result.sources,
+                )
             self._request = request
             self._result = result
             self._orchestrator = orchestrator
@@ -174,6 +193,7 @@ class DemoDeliveryProvider:
                 delivery=result,
                 execution_mode=execution_mode,
                 online_research=online_result,
+                automated_quality_review=automated_review,
             )
             return _summary(request, result)
 

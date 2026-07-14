@@ -36,6 +36,11 @@ model permission to browse arbitrary endpoints or alter scientific values.
    removes it.
 8. Query planning may create search strings and evidence-type expectations only. It cannot create
    citations, URLs, scientific measurements, evidence atoms, field mappings, repairs, or Gold data.
+9. After deterministic quality gates run, Qwen may propose one bounded remediation decision per
+   existing issue: search for more evidence, reparse an already discovered source, keep the issue
+   blocked, or request human confirmation. The application validates all issue IDs and source URLs.
+   A model decision is workflow guidance, never an EvidenceAtom and never sufficient to publish
+   Gold data.
 
 ## Consequences
 

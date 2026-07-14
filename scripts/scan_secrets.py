@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED_DIRS = {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "var"}
-EXCLUDED_FILES = {Path(__file__).resolve(), ROOT / "uv.lock"}
+EXCLUDED_FILES = {Path(__file__).resolve(), ROOT / ".env", ROOT / "uv.lock"}
 MAX_FILE_BYTES = 2 * 1024 * 1024
 
 

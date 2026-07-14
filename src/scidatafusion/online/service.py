@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlparse
 
-from pydantic import ValidationError
+from pydantic import HttpUrl, ValidationError
 
 from scidatafusion.config import Settings
 from scidatafusion.contracts.model import (
@@ -18,6 +18,9 @@ from scidatafusion.contracts.model import (
     StructuredModelRequest,
 )
 from scidatafusion.contracts.online import (
+    AutomatedQualityReview,
+    AutomatedQualityReviewProposal,
+    AutomatedReviewDecision,
     CredentialConfigurationStatus,
     LiveSearchBatch,
     LiveSearchResult,
@@ -26,6 +29,7 @@ from scidatafusion.contracts.online import (
     OnlineRuntimeStatus,
     OnlineSourceRecord,
     PlannedSearchQuery,
+    QualityIssueInput,
     SearchExecutionRecord,
     SearchQueryPlan,
     SourceAssessmentBatch,
@@ -91,6 +95,11 @@ def build_online_configuration(settings: Settings) -> OnlineConfigurationView:
         query_planning_enabled=settings.search_query_planning_enabled,
         max_search_queries=settings.search_max_queries,
         max_search_results=settings.search_max_results,
+        model_base_url=(
+            None
+            if settings.resolved_qwen_base_url is None
+            else HttpUrl(settings.resolved_qwen_base_url)
+        ),
         model_endpoint_host=runtime.model_endpoint_host,
         bailian_region=settings.bailian_region.value,
         bailian_workspace_id=settings.bailian_workspace_id,
@@ -119,6 +128,7 @@ class OnlineResearchService:
         model_client: ModelClient | None = None,
         assessment_prompt_path: Path | None = None,
         planning_prompt_path: Path | None = None,
+        quality_prompt_path: Path | None = None,
     ) -> None:
         self._settings = settings
         self._search = search_client or SerpApiSearchClient(settings)
@@ -128,6 +138,9 @@ class OnlineResearchService:
         )
         self._planning_prompt_path = (
             planning_prompt_path or _PROJECT_ROOT / "prompts" / "online_search_planning.md"
+        )
+        self._quality_prompt_path = (
+            quality_prompt_path or _PROJECT_ROOT / "prompts" / "online_quality_review.md"
         )
 
     async def run(self, *, research_goal: str, query: str) -> OnlineResearchResult:
@@ -222,6 +235,74 @@ class OnlineResearchService:
                 network_performed=True,
                 model_performed=completion is not None,
                 warnings=tuple(warnings),
+            )
+
+    async def review_quality(
+        self,
+        *,
+        research_goal: str,
+        issues: tuple[QualityIssueInput, ...],
+        sources: tuple[OnlineSourceRecord, ...],
+    ) -> AutomatedQualityReview:
+        """Ask Qwen for bounded remediation decisions without treating them as evidence."""
+
+        if not issues:
+            return AutomatedQualityReview(
+                status="degraded",
+                summary="质量门已通过, 无需执行 AI 补证。",
+                decisions=(),
+                unresolved_issue_count=0,
+                human_review_required=False,
+                model_invocation=None,
+                warnings=("没有需要处理的质量问题。",),
+            )
+        completion: StructuredModelCompletion | None = None
+        try:
+            completion = await self._review_quality(research_goal, issues, sources)
+            proposed = AutomatedQualityReviewProposal.model_validate_json(completion.content)
+            issue_ids = {item.issue_id for item in issues}
+            source_urls = {str(item.search.url) for item in sources}
+            decisions = {item.issue_id: item for item in proposed.decisions}
+            if set(decisions) != issue_ids:
+                raise ValueError("automated review must decide every supplied issue exactly once")
+            if any(
+                str(url) not in source_urls
+                for item in proposed.decisions
+                for url in item.candidate_source_urls
+            ):
+                raise ValueError("automated review referenced an unknown source URL")
+            unresolved = sum(
+                item.action in {"search_more", "keep_blocked", "request_human"}
+                for item in proposed.decisions
+            )
+            return AutomatedQualityReview(
+                status="completed",
+                summary=proposed.summary,
+                decisions=proposed.decisions,
+                unresolved_issue_count=unresolved,
+                human_review_required=any(
+                    item.action == "request_human" for item in proposed.decisions
+                ),
+                model_invocation=completion.invocation,
+                warnings=(),
+            )
+        except (AppError, ValidationError, ValueError):
+            return AutomatedQualityReview(
+                status="degraded",
+                summary="AI 自动质检未完成, 已保留质量门和原始问题。",
+                decisions=tuple(
+                    AutomatedReviewDecision(
+                        issue_id=item.issue_id,
+                        action="keep_blocked",
+                        rationale="当前证据不足, 不允许自动生成科学值。",
+                        candidate_source_urls=(),
+                    )
+                    for item in issues
+                ),
+                unresolved_issue_count=len(issues),
+                human_review_required=False,
+                model_invocation=None,
+                warnings=("Qwen 自动质检输出未通过严格校验。",),
             )
 
     async def _build_search_plan(
@@ -363,6 +444,42 @@ class OnlineResearchService:
             user_prompt=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
             prompt_version="1.0.0",
             schema_name="SourceAssessmentBatch",
+            temperature=0.0,
+            max_tokens=4096,
+        )
+        return await self._model.complete(request)
+
+    async def _review_quality(
+        self,
+        research_goal: str,
+        issues: tuple[QualityIssueInput, ...],
+        sources: tuple[OnlineSourceRecord, ...],
+    ) -> StructuredModelCompletion:
+        system_prompt = self._quality_prompt_path.read_text(encoding="utf-8")
+        payload = {
+            "research_goal": research_goal,
+            "quality_issues": [item.model_dump(mode="json") for item in issues],
+            "discovered_sources": [
+                {
+                    "url": str(item.search.url),
+                    "title": item.search.title,
+                    "source_domain": item.search.source_domain,
+                    "snippet": item.search.snippet,
+                    "assessment": (
+                        None if item.assessment is None else item.assessment.model_dump(mode="json")
+                    ),
+                }
+                for item in sources
+            ],
+            "output_schema": AutomatedQualityReviewProposal.model_json_schema(),
+        }
+        request = StructuredModelRequest(
+            role=ModelRole.CRITIC,
+            model_id=self._settings.critic_model_id,
+            system_prompt=system_prompt,
+            user_prompt=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            prompt_version="1.0.0",
+            schema_name="AutomatedQualityReviewProposal",
             temperature=0.0,
             max_tokens=4096,
         )

@@ -7,7 +7,11 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints
 
 from scidatafusion.contracts.base import ContentHash, StrictContract
-from scidatafusion.contracts.online import OnlineResearchResult, ResearchExecutionMode
+from scidatafusion.contracts.online import (
+    AutomatedQualityReview,
+    OnlineResearchResult,
+    ResearchExecutionMode,
+)
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=256)]
 DetailText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1024)]
@@ -157,6 +161,7 @@ class WorkbenchSnapshot(StrictContract):
     chart_points: tuple[WorkbenchChartPoint, ...]
     scientific_dataset: WorkbenchScientificDataset
     online_research: OnlineResearchResult | None
+    automated_quality_review: AutomatedQualityReview | None = None
     delivery_artifact_count: int = Field(ge=0)
     package_filename: str
     formal_gold_available: bool
