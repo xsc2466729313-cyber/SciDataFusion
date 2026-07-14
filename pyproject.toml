@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "scidatafusion"
-version = "0.1.0"
+version = "1.0.0"
 description = "Evidence-first AI workflow for finding, parsing, and integrating scientific data"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -33,6 +33,7 @@ dev = [
   "bandit>=1.8,<2",
   "mypy>=1.15,<2",
   "pip-audit>=2.8,<3",
+  "pyinstaller>=6.14,<7",
   "pytest>=9.0.3,<10",
   "pytest-cov>=6,<7",
   "ruff>=0.11,<1",
@@ -40,6 +41,7 @@ dev = [
 
 [project.scripts]
 scidatafusion = "scidatafusion.cli:main"
+scidatafusion-desktop = "scidatafusion.desktop:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/scidatafusion"]

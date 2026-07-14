@@ -10,6 +10,19 @@
 
 ![研究总览](docs/assets/workbench-overview.jpg)
 
+## 直接下载运行
+
+Windows 10/11 64 位用户可以在
+[GitHub Releases](https://github.com/xsc2466729313-cyber/SciDataFusion/releases/latest)
+下载 `SciDataFusion-1.0.0-windows-x64.zip`：
+
+1. 完整解压 ZIP。
+2. 双击 `SciDataFusion.exe` 或 `Start-SciDataFusion.bat`。
+3. 保持启动窗口开启，浏览器会自动打开中文工作台。
+
+便携版已经包含 Python 和运行依赖，不需要安装 Python、uv 或 Git。首次运行默认进入离线演示；
+联网搜索所需的 API Key 可在页面“联网配置”中填写，只保存在解压目录的本机 `.env`。
+
 ## 能做什么
 
 - 根据自然语言研究目标，规划论文、数据库、补充材料和图表的检索方向。
@@ -33,7 +46,7 @@
 | 成果交付 | 数据字典、证据图、质量报告和可复现文件 |
 | 联网配置 | SerpApi、百炼、搜索策略和模型设置 |
 
-## 快速开始
+## 源码运行
 
 需要 Python 3.11+、[uv](https://docs.astral.sh/uv/) 和 PowerShell：
 
