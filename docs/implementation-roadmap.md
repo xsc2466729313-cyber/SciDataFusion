@@ -159,5 +159,15 @@ Neither branch can create, repair, select, or mutate a scientific value. The Chi
 exposes explicit offline/online modes, runtime readiness, live results, provider proof, and honest
 degraded states. Repository acceptance uses Mock providers; real keys remain local and ignored.
 
+M22 turns that one-query branch into a configurable research strategy. Operators can choose Google
+or Google Scholar, locale, optional country, automatic Qwen planning, one to four queries, and the
+retained-result bound. Qwen planning uses its own versioned prompt and strict schema; the user's seed
+query is always retained, duplicate proposals are removed, and each planned query receives an
+ordered success/failure record. Partial failures preserve successful results, which are URL-deduped
+before the separate source assessment call. A secret-free configuration API and Chinese
+`联网配置` view expose the effective provider, endpoint host, models, strategy, limits, and credential
+readiness. Endpoint allowlists and the prohibition on model-created scientific values remain
+unchanged.
+
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

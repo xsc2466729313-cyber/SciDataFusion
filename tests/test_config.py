@@ -97,6 +97,24 @@ def test_online_mode_rejects_non_qwen_core_model() -> None:
         )
 
 
+def test_online_search_strategy_is_bounded_and_normalized() -> None:
+    settings = Settings(
+        _env_file=None,
+        search_engine="google_scholar",
+        search_language="ZH-CN",
+        search_country="CN",
+        search_max_queries=4,
+    )
+
+    assert settings.search_engine == "google_scholar"
+    assert settings.search_language == "zh-cn"
+    assert settings.search_country == "cn"
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, search_max_queries=5)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, search_country="china")
+
+
 def test_get_settings_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCIDATA_OFFLINE_MODE", "true")
     get_settings.cache_clear()

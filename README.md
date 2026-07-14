@@ -1,386 +1,107 @@
 # SciDataFusion
 
-SciDataFusion is an evidence-first AI data scientist for the 2026 Challenge Cup Alibaba
-Cloud topic, Track 2 / Direction 1A: scientific data discovery, parsing, and integration.
-It turns a natural-language research goal into an analysis-ready, traceable, reproducible,
-and correctable scientific dataset.
+面向科学研究的数据发现与整合工作台。输入一个研究目标，系统可以从论文、开放数据库、表格、附件和图表中整理候选数据，保留来源与证据，完成解析、字段对齐、质量检查，并输出可复现的交付包。
 
-The source package is being built phase by phase from the
-[V4 specification package](./%E9%9C%80%E6%B1%82%E5%88%86%E6%9E%90/AI_Data_Scientist_Codex_Documentation_V4/README.md).
+它适合需要把“研究问题”快速变成“可检查数据”的研究人员、数据工程师和科研团队。默认离线运行，配置密钥后可切换到联网搜索与百炼 Qwen 智能规划。
 
-## Current checkpoint
+![研究总览](docs/assets/workbench-overview.jpg)
 
-Phases 1-8 now have a connected Ia supernova vertical slice with offline replay and an optional
-audited online-discovery mode. Phase 1 turns an accepted research goal into a
-confirmed scientific data contract; M04-M06 discover and select evidence-backed sources; M07
-preserves authorized bytes in immutable Bronze storage; M08 creates an explainable,
-registry-bound downstream parse plan; M09 executes eligible document routes into a
-provenance-preserving unified document IR; and M10 recovers native tables with cell-level evidence:
+## 能做什么
 
-- M00 security, privacy, upload, and finite-budget intake gates;
-- M01 evidence-grounded problem compilation with deterministic fallback and a validated Qwen
-  provider boundary;
-- M02 replayable domain/task routing with fail-closed runtime capabilities;
-- M03 content-addressed Schema Packs, conflict-preserving field composition, JSON Schema, and
-  immutable contract confirmation;
-- an idempotent M00-M03 workflow with ordered causal checkpoints and a no-network Ia supernova
-  demonstration command;
-- M04 strict search contracts, evidence-grounded research concepts, deterministic query families,
-  field/source coverage templates, budget allocation, and unit-testable stop decisions;
-- a content-addressed source-capability registry whose declarations are kept separate from the
-  runtime health snapshot. The runtime default supplies zero capabilities and fails closed;
-- M05 strict Connector contracts, a content-addressed registry, fixed HTTPS endpoints, credential
-  environment references, bounded HTTP execution with identity-only responses, cross-call circuit
-  recovery, deterministic batch byte allocation, raw-page manifests, and structured run logs;
-- VizieR TAP, OpenAlex, Zenodo, and Crossref-backed supplement adapters that are fully exercised
-  with Mock transport, plus deterministic candidate normalization, provenance, conflict retention,
-  parser-version-bound cache replay and origin tracking, initial coverage claims, and source
-  assessment;
-- an offline Ia acceptance fixture that executes eight planned queries over nine pages and reduces
-  eight raw hits to five provenance-rich candidates with zero confirmed-live and zero
-  unknown-network attempts;
-- M06 strict candidate-coverage, selected-source, gap, progress, metric, and event contracts with
-  canonical upstream/output integrity verification;
-- deterministic replica-aware selection that balances Required/optional fields, primary sources,
-  source categories/types, locator readiness, conservative license decisions, and explicit
-  unknown-size byte reservations;
-- a complete candidate-only report over contract fields, entity keys, quality gates, selection
-  constraints, M04 cells, and source types, plus reproducible gap directives and stop decisions;
-- M07 per-hop locator authorization, controlled HTTPS/DNS-pinned downloads, bounded retries and
-  byte budgets, byte-based media inspection, safe ZIP extraction, and exact failure accounting;
-- SHA-256 Bronze storage, cross-source deduplication, root/attachment/archive provenance,
-  deterministic events, single-flight execution, and durable complete-result checkpoints;
-- an offline Ia acquisition fixture with five unique Bronze objects, six provenance acquisitions,
-  no external network, and a privacy-reduced `phase3-download-demo` summary;
-- M08 strict classification, capability-registry, runtime, policy, page-scope, route, gap, metric,
-  aggregate-plan, checkpoint, and `parse.plan.created` event contracts bound to the exact M07
-  request, result, completion event, and Bronze hashes;
-- signature-first bounded classification with conservative structural facts, low-cost-first parser
-  selection, quality-gated OCR fallback planning, explicit unknown/capability gaps, and no raw-byte
-  or scientific-value retention;
-- a content-addressed parser registry separated from its runtime availability snapshot, plus
-  immutable complete-result checkpoints and single-flight execution;
-- an offline Ia M08 fixture result with five classifications and five plan entries: four executable
-  routes, one archive metadata-only disposition, one conditional PDF OCR fallback, and zero
-  network, model-classification, downstream-parser, or Bronze-write operations;
-- M09 strict document request, runtime, parser-attempt, quality, candidate, comparison, gap,
-  `DocumentIR`, `PageIR`, `BlockIR`, result, checkpoint, and `document.parsed` event contracts;
-- deterministic local pypdf, HTML, and plain-text adapters that preserve source-byte lineage,
-  retain exact source spans where available, label pypdf coordinates as approximate, and annotate
-  repeated PDF headers and footers without discarding their text;
-- content-addressed document IR storage, complete-result checkpoints, exact upstream and output
-  integrity verification, single-flight execution, cancellation isolation, and quality-triggered
-  fallback controls;
-- an offline Ia M09 result with three eligible document routes, two successful document IRs, one
-  honest PDF review outcome, a blocked unavailable OCR fallback, and zero network, model, M10,
-  M11, M13, or Bronze-write operations;
-- M10 strict table request, runtime, cell, header, quality, attempt, gap, route, `TableIR`, result,
-  checkpoint, and `table.parsed` event contracts bound to the exact M07-M08 chain;
-- bounded UTF-8 CSV/TSV parsing with exact per-cell byte spans, preserved lexical and decoded text,
-  non-mutating type labels, deterministic header/structure/evidence gates, and explicit review;
-- canonical content-addressed TableIR storage, immutable complete-result replay, and stable raw-text
-  row and all-String Polars projections;
-- an offline Ia M10 result with one successful 2-by-4 TableIR, eight exact cell evidence anchors,
-  one completion event, and zero network, model, cost, M13, or Bronze-write operations;
-- M13 strict request, runtime, evidence, candidate, gap, metric, result, checkpoint, and
-  `field.extracted` event contracts bound to the confirmed contract and exact M10 lineage;
-- evidence-first exact-header extraction in which every candidate retains unchanged source text,
-  exact Bronze-replayable cell evidence, and same-row entity-key evidence;
-- explicit gaps for missing headers or values, absent entity bindings, failed table quality,
-  unsupported header structure, and source-cell-bound unmapped headers;
-- an offline Ia M13 result with four explicit candidates, four exact evidence atoms, 100% evidence
-  coverage, one honest missing-required-field gap, and zero network, model, cost, M14, Gold, or
-  Bronze-write operations;
-- M14 strict request, policy, runtime, mapping evidence, mapping, unmapped-field, metric, result,
-  checkpoint, and `field.mapped` event contracts bound to the exact M13 request and result;
-- deterministic exact-field mapping with independent contract-hash, type-compatibility, evidence,
-  entity-binding, score, and automatic-threshold verification before M15 eligibility;
-- source-cell-bound retention of unknown headers, including registered-alias suggestions that
-  remain blocked when M13 has no corresponding value evidence;
-- an offline Ia M14 result with four accepted exact mappings, four mapping-evidence records, 100%
-  evidence coverage and acceptance, one retained upstream gap, and zero network, model, embedding,
-  cost, M15, Gold, or scientific-value mutation operations;
-- M15 strict request, policy, runtime, normalized-record, transformation, issue, metric, result,
-  checkpoint, and `record.normalized` event contracts bound to the exact M13-M14 lineage;
-- exact finite-decimal parsing with preserved lexical input, fixed-point output, precision metadata,
-  formula, runtime library/version, reversibility, and evidence for every non-identity change;
-- no-guess scientific context gates that retain target-unit intent but block M16 eligibility when
-  source units or astronomical time scale are not independently evidenced;
-- an offline Ia M15 result with four retained fields, two reversible exact-decimal transformations,
-  three explicit context issues, two M16-eligible identity fields, and zero model, network, LLM
-  value mutation, cost, Gold, or scientific unit/time conversion operations;
-- M16 strict request, policy, runtime, resolution-evidence, entity-cluster, duplicate-group,
-  metric, result, checkpoint, and `entity.resolved` event contracts bound to the exact M15 result;
-- exact stable-identifier blocking over evidence-backed entity-key hashes, with bucket-local pair
-  accounting, score/threshold 1.0, and separate exact eligible-field duplicate fingerprints;
-- an offline Ia M16 result with one evidenced singleton cluster, zero candidate pairs, zero
-  automatic merges, zero duplicate groups, and zero fuzzy, model, network, cost, Gold, or
-  scientific-value mutation operations;
-- M17 strict request, policy, runtime, retained-candidate, fused-record, conflict, resolution,
-  Gold-candidate, metric, result, checkpoint, and `fusion.completed` event contracts bound to the
-  exact M16 result;
-- deterministic single-value and exact-consensus selection that retains every normalized candidate
-  and its evidence, while withholding unresolved or context-blocked values from the Gold candidate
-  view;
-- an offline Ia M17 result with four retained candidates, two evidence-complete Gold candidate
-  fields, two explicitly withheld fields, zero conflicts, zero silent overwrites, and zero model,
-  network, tolerance aggregation, source-priority selection, or final-Gold operations;
-- M18 strict request, policy, runtime, gate-evaluation, quality-issue, repair-plan, review-queue,
-  report, formal-Gold, metric, checkpoint, and `quality.gated` event contracts bound to the exact
-  M17 result;
-- contract-driven required-field, any-of-field, and field-provenance validators with deterministic
-  scores, issue severity, evidence references, impact analysis, and whitelist repair actions;
-- an offline Ia M18 result with three failed blocking gates, three Critical issues, three
-  `request_human` plans, three pending review items, zero executed repairs, and no formal Gold,
-  model, network, cost, or scientific-value mutation;
-- M19 strict request, policy, runtime, sparse-index, graph-node/edge/decision, retrieval-hit,
-  task-memory, metric, checkpoint, and `knowledge.updated` event contracts bound to the exact M18
-  result;
-- task-private BM25 retrieval using `rank-bm25`, metadata permission filtering, one-hop evidence
-  graph expansion, and source/location/index-version traceability for every hit;
-- an offline Ia M19 result with ten indexed and retrieved documents, eighteen graph nodes,
-  thirty-three evidence edges, three graph-backed decisions, one quarantined memory, zero knowledge
-  pollution, and zero dense-vector, model-rerank, network, or cost operations;
-- M11 strict request, source, manual-axis, calibration, series, point, FigureIR, quality, metric,
-  checkpoint, and `figure.digitized` event contracts over immutable raster bytes;
-- bounded P6 PPM decoding, exact-color connected-component segmentation, Decimal linear/log10
-  transforms, explicit inverted-axis handling, and calibrated point errors;
-- an offline synthetic Ia chart result with one 64-by-64 content-addressed raster, two confirmed
-  calibrations, one inverted magnitude axis, three digitized points, 100% calibration coverage,
-  and zero OCR, VLM, network, model, cost, or scientific-value mutation operations.
-- M12 strict scientific-artifact, subset, plugin-runtime, DatasetIR, variable, coordinate, format
-  metadata, quality, metric, checkpoint, and `dataset.parsed` contracts;
-- an optional Astropy FITS plugin that deterministically reads a bounded binary-table subset,
-  retains raw and physical values, TSCAL/TZERO transformations, units, headers, source row indexes,
-  and non-finite missing values without model or network execution;
-- an offline Ia FITS result with three variables, four selected rows, twelve materialized cells,
-  one explicit scale/offset transformation, one preserved missing value, and content-addressed
-  DatasetIR replay;
-- M20 strict delivery contracts, Formal-Gold-only CSV/Parquet serialization, content-addressed
-  artifacts, canonical manifests, deterministic UTF-8 ZIP packaging, and checkpoint replay;
-- a Chinese FastAPI scientific-data workbench organized by the complete research workflow, with
-  multi-source details, parser routing, field alignment, raw/normalized/fused values, evidence
-  locations, quality gates, review issues, a light-curve chart, an evidence graph, delivery files,
-  short-lived content-bound download tickets, and structured `409`/`403` failure responses;
-- an offline Ia M20 review package containing dictionary, provenance, quality, evidence graph,
-  runtime metrics, reproduction metadata, and an executable verification notebook, while correctly
-  withholding CSV/Parquet because the M18 quality gate has not passed.
-- M21 controlled live discovery through the allowlisted SerpApi Google Search endpoint, with
-  bounded retries, rate limiting, concurrency, cache replay, response validation, and secret-free
-  invocation proof;
-- Qwen source relevance assessment through Alibaba Cloud Bailian's OpenAI-compatible endpoint,
-  with a versioned external prompt and strict `extra="forbid"` output contracts. The model may
-  classify likely evidence and recommend inspection, but cannot create or mutate scientific data;
-- a Chinese `离线复现 / 联网智能` segmented mode control plus live-source titles, domains,
-  snippets, relevance, evidence types, recommendations, provider latency, attempts, cache state,
-  and model token counts in the product workbench.
+- 根据自然语言研究目标，规划论文、数据库、补充材料和图表的检索方向。
+- 展示每个来源、原始产物、解析路线、表格单元格和字段证据。
+- 并列查看原始值、规范化值、融合结果和待审核冲突。
+- 用质量门阻止缺少必填字段或证据不足的数据直接发布。
+- 提供 light-curve 图表、证据关系图、数据字典、质量报告和复现包。
 
-M04 does not access the network. M05 implements a live-capable but default-offline transport
-boundary; repository acceptance uses only offline fixtures and Mock transport with no real API
-credentials or external-source calls. M06 adds no network or model call. In the Ia fixture it
-selects three source categories with full Required/entity/source-type candidate coverage, then
-correctly remains partial because record-level scope and reuse permission are not yet proven. M07
-retains controlled source bytes but does not parse scientific values. M08 classifies and plans only;
-M09 parses supported documents into document IR but does not extract scientific fields. M10 parses
-the native CSV slice into table IR without changing scientific values. M13 extracts only explicit,
-exact-header table candidates and never writes Gold. M14 revalidates exact canonical mappings and
-retains unevidenced alias headers without auto-acceptance. M15 performs traceable exact parsing,
-retains ambiguous fields with explicit issues, and refuses to infer source units or time scales.
-M16 creates conservative evidence-backed entity clusters without fuzzy or model decisions. M17
-retains every field candidate and permits a Gold candidate value only for one eligible value or
-exact eligible consensus. M18 executes the confirmed contract's quality gates and blocks formal
-Gold while unresolved required, any-of, or provenance issues remain. M19 adds task-private sparse
-retrieval, an evidence graph, and quarantined task memory without promoting unreviewed experience.
-M11 adds manually calibrated deterministic scatter-chart digitization without pretending to have
-OCR or semantic legend inference. M12 adds deterministic FITS subset parsing through an optional
-scientific-format plugin without claiming support for every format. M20 adds the connected Chinese
-workbench and reproduction package without pretending that the unresolved Ia candidate is Formal
-Gold. M21 adds optional real web search and Qwen source assessment without weakening the immutable
-offline scientific-value pipeline. Review resolution, representative multi-domain evaluation, and
-production deployment remain future checkpoints.
+## 工作方式
 
-## Quick start
+`研究目标 → 多源发现 → 解析提取 → 清洗整合 → 证据与质量 → 成果交付`
+
+页面中的六个视图对应这条主线：
+
+| 页面 | 你可以看到 |
+| --- | --- |
+| 研究总览 | 研究目标、运行模式、流程状态和结果预览 |
+| 数据来源 | 来源类型、覆盖字段、许可、评分和检索结果 |
+| 解析与整合 | 文档/表格/图像路线、字段值和融合决策 |
+| 证据与质量 | 字段证据、质量门、问题和审核动作 |
+| 成果交付 | 数据字典、证据图、质量报告和可复现文件 |
+| 联网配置 | SerpApi、百炼、搜索策略和模型设置 |
+
+## 快速开始
+
+需要 Python 3.11+、[uv](https://docs.astral.sh/uv/) 和 PowerShell：
 
 ```powershell
 uv sync --python 3.11 --group dev --extra scientific
 Copy-Item .env.example .env
-uv run scidatafusion doctor
-uv run scidatafusion phase1-demo --goal "Integrate multi-source Type Ia supernova light curves into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase2-plan-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase2-connect-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase2-select-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase3-download-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase3-parse-plan-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase3-document-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase3-table-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase4-extract-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase4-map-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase4-normalize-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase5-resolve-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase5-fuse-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase5-audit-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase6-knowledge-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --query "quality evidence observation time magnitude" --confirmed-by "demo-reviewer"
-uv run scidatafusion phase7-figure-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase7-scientific-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --confirmed-by "demo-reviewer"
-uv run scidatafusion phase8-delivery-demo --goal "Study Type Ia supernova light curves using multi-source data integration into CSV." --query "quality evidence observation time magnitude" --confirmed-by "demo-reviewer"
 uv run uvicorn scidatafusion.api:app --host 127.0.0.1 --port 8000
-uv run pytest tests/test_search_planning.py -q --no-cov
-uv run pytest tests/test_connector_contracts.py tests/test_connector_registry.py tests/test_connector_normalizer.py tests/test_connector_http.py tests/test_connector_execution.py -q --no-cov
-uv run pytest tests/test_selection_contracts.py tests/test_selection_integrity.py -q --no-cov
-uv run powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
-The default `.env` remains offline and deterministic. To enable the `联网智能` option, set these
-values only in the ignored local `.env`, then restart Uvicorn:
+打开 [http://127.0.0.1:8000](http://127.0.0.1:8000)。首次启动会进入离线复现模式，不需要任何密钥。
 
-```dotenv
-SCIDATA_OFFLINE_MODE=false
-SERPAPI_API_KEY=
-DASHSCOPE_API_KEY=
-SCIDATA_BAILIAN_REGION=cn-beijing
-```
-
-For Beijing, the default model endpoint is the official shared
-`https://dashscope.aliyuncs.com/compatible-mode/v1`. A workspace-specific official
-`*.maas.aliyuncs.com/compatible-mode/v1` endpoint can still be selected with
-`SCIDATA_BAILIAN_WORKSPACE_ID`. `/api/v1/runtime` reports capability readiness without returning
-key material. Online search results and Qwen assessments augment source discovery; all parsing,
-normalization, fusion, evidence, quality gates, and delivery rules remain deterministic and
-evidence-bound.
-
-`doctor` never prints secret values. The default configuration is offline and does not call
-Alibaba Cloud or any external data source. `phase1-demo` also stays offline and labels its
-capability snapshot as `simulated_demo`; it is an engineering demonstration, not a production
-Connector health claim. `phase2-plan-demo` similarly selects `simulated_demo` explicitly for its
-fixture capabilities; loading either static registry alone never marks a source healthy. M05 tests
-and `phase2-connect-demo` inject `offline_fixture` or Mock runtime state and never treat those
-results as live-source proof. The Connector demo drives the real four adapter parsers using
-packaged response bytes; its summary omits research text, reviewer identity, candidate content,
-URLs, and untrusted excerpts.
-
-`phase2-select-demo` carries the same offline proof through M06. It exposes only opaque candidate
-IDs, aggregate candidate coverage, reason codes, license/readiness states, gap codes, and immutable
-hashes. `candidate_covered` is a discovery claim, not parsed-field or scientific-value proof. M07
-retains immutable bytes; M08 and later parsing stages must re-evaluate coverage from those bytes.
-
-`phase3-download-demo` drives the same M07 contracts, downloader, archive inspection, Bronze store,
-manifest, run log, and event construction used by the service. Its output omits URLs, filenames,
-approval references, source content, the research goal, and reviewer identity. Acceptance is
-offline only: it does not claim real-source availability, legal approval, mid-download resume, M00
-upload ingestion, or parsed Silver/Gold data.
-
-`phase3-parse-plan-demo` carries the exact M07 request, result, completion event, and in-memory
-Bronze bytes into M08. Its privacy-reduced output reports format families, route dispositions,
-downstream module families, parser identifiers, costs, gaps, and hashes. M08 performs no parser,
-OCR, VLM, network, or model call and writes no Bronze bytes. The packaged Ia PDF is intentionally
-minimal, so this checkpoint does not claim the specification's file/page accuracy or latency
-targets; those require a versioned judged routing corpus and representative mixed-page PDFs.
-
-`phase3-document-demo` carries that exact chain into M09 and executes only `m09.pdf_text`,
-`m09.html`, and `m09.text`. The HTML and text artifacts produce validated content-addressed IR;
-the page-less packaged PDF fails honestly and its unavailable OCR fallback is recorded as blocked,
-so the aggregate result is `partial`. The summary contains only hashes, statuses, parser IDs,
-quality counts, and aggregate metrics. It exposes no document body, URL, reviewer identity, or
-scientific value and performs no network or model call. A separate valid two-page PDF fixture
-checks local pypdf extraction, approximate normalized coordinates, and non-destructive repeated
-header/footer annotation. This slice does not establish the representative-corpus fidelity,
-reading-order, heading, bbox, failure-rate, or latency targets.
-
-`phase3-table-demo` executes only the M08 `m10.csv` route. It preserves every CSV cell as exact
-lexical text, decoded text, and a Bronze byte span, then emits one content-addressed TableIR. The Ia
-fixture produces two rows, four columns, and eight exact cell anchors; Polars projection keeps every
-column as `String`. The summary exposes no cell value or source location. XLSX, HTML/PDF/image table
-recovery, page bbox, merged cells, footnotes, multi-level headers, cross-page merging, and the
-representative 100-table accuracy benchmark remain deferred.
-
-`phase4-extract-demo` consumes that exact M10 result. It creates a field candidate only after an
-exact table-cell `EvidenceAtom` exists and binds every candidate to same-row entity-key evidence.
-The Ia fixture emits four explicit candidates and remains `partial` because
-`source_record_id` is absent; it does not invent the field. The summary omits values, lexemes,
-locations, URLs, goal text, and reviewer identity. Alias mapping, inference, normalization,
-DocumentIR/FigureIR/DatasetIR extraction, Gold writes, and judged-corpus accuracy remain deferred.
-
-`phase4-map-demo` consumes the exact M13 request/result and independently verifies each candidate,
-its value and entity evidence, canonical field contract hash, M10 type label, score, and acceptance
-threshold. Four exact Ia mappings become eligible for M15, while the absent required field keeps
-the aggregate `partial`. Registered aliases are deterministic suggestions only when M13 lacks
-value evidence; they are retained in `UnmappedFieldSet` and cannot auto-map. The summary contains
-no values, header text, locations, URLs, goal, or reviewer identity. Embedding retrieval, LLM
-judgment, automatic alias mapping, normalization, and benchmark accuracy remain deferred.
-
-`phase4-normalize-demo` consumes the exact M14 request/result and retains all four mapped values.
-It parses the two numeric lexemes with exact decimal arithmetic and records both non-identity
-changes. Because the source cells contain no unit or time-scale annotation, it emits three blocking
-issues and does not claim that either number has been converted to the contract target unit. The
-summary contains counts, statuses, identifiers, and hashes only; it omits values, units, evidence
-content, goal text, and reviewer identity. Unit/time conversion, coordinate systems, uncertainty,
-entity conflict handling, and Gold writes remain deferred.
-
-`phase5-resolve-demo` consumes the exact M15 request/result. It uses only eligible contract entity
-keys to create privacy-reduced exact identifier fingerprints, then generates candidate pairs inside
-matching buckets. The single Ia record produces one singleton cluster and no automatic merge or
-duplicate group. The summary omits entity-key names/values, records, evidence content, goal text,
-and reviewer identity. Fuzzy/probabilistic matching, alias graphs, transitive consistency,
-benchmark accuracy, conflict fusion, and Gold writes remain deferred.
-
-`phase5-fuse-demo` consumes the exact M16 request/result and retains every normalized field as a
-content-addressed candidate. A field enters the Gold candidate view only when its sole candidate is
-M16-eligible or every eligible candidate has the same normalized value hash. Distinct values create
-an unresolved conflict with no selected value; blocked context creates an explicit withheld
-decision. The Ia fixture has one record, so it demonstrates two safe single-candidate selections
-and two withheld fields rather than a production multi-source conflict. The summary exposes only
-counts, decision classes, opaque identifiers, and hashes. Tolerance reconciliation, source
-priority, uncertainty aggregation, version precedence, LLM explanations, final Gold publication,
-and benchmark conflict accuracy remain deferred.
-
-`phase5-audit-demo` consumes the exact M17 request/result and evaluates every quality gate in the
-confirmed scientific contract. The current Gold candidate record fails required-field completeness,
-required-field provenance, and the magnitude-or-flux gate, so M18 emits three Critical issues and
-routes each to `request_human`. No automatic repair executes, the before/after score remains
-unchanged, and formal Gold is absent. The summary exposes only counts, gate/issue/action classes,
-opaque identifiers, and hashes. Domain validators, statistical anomaly detection, safe local retry
-execution, reviewer resolution, benchmark recall, and quality-approved export remain deferred.
-
-`phase6-knowledge-demo` consumes the exact M18 request/result and creates task-private index
-documents from M13 EvidenceAtoms plus M18 gate and Issue metadata. `rank-bm25` provides sparse
-scores; task/permission filters run before scoring; one-hop graph neighbors contribute a separately
-recorded graph score. Every hit retains source identity, source location, index version, and channel
-scores in the strict artifact, while the CLI summary omits those private details. The graph records
-three decisions: evidence-lineage validation, retrieval-context expansion, and memory admission.
-Because M18 has no formal Gold, the task memory is quarantined and cannot be reused. Dense vectors,
-Qwen reranking, cross-task retrieval, DocumentIR indexing, benchmark Recall@20/nDCG, and published
-long-term memory remain deferred.
-
-`phase7-figure-demo` uses a confirmed Ia contract and a content-addressed synthetic P6 PPM chart.
-Two explicitly confirmed tick anchors per axis define Decimal calibration records; the service then
-segments real marker pixels, maps their centroids into data coordinates, and derives errors from
-component extent. The magnitude axis is explicitly inverted. Every digitized point links to both
-calibrations and the immutable raster hash. The summary omits pixel colors, field names, values,
-goal text, and reviewer identity. This first slice is `partial` because calibration and series
-semantics are supplied manually; OCR, automatic chart/axis/legend recognition, overlapping-line
-separation, document-region routing, and representative-image accuracy benchmarks remain deferred.
-
-Connector attempts expose tri-state network audit: `true` is confirmed live, `false` is confirmed
-not performed, and `null` is unknown after an unexpected live failure. Unknown attempts are reported
-separately and never counted as confirmed live. Credential values are used only to construct the
-outbound authentication request; M05 does not proactively persist them in application artifacts or
-logs. Responses reflecting a credential in common direct or encoded forms are quarantined before
-hashing or storage, but this is a bounded safeguard rather than an absolute leak-detection
-guarantee.
-
-## Quality commands
+也可以运行一个离线命令行演示：
 
 ```powershell
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy
-uv run pytest
-uv run bandit -c pyproject.toml -r src
-uv run python scripts/scan_secrets.py
+uv run scidatafusion phase8-delivery-demo `
+  --goal "研究 Ia 型超新星光变曲线并整合为可追溯数据" `
+  --query "质量证据 观测时间 星等 来源记录" `
+  --confirmed-by "demo-reviewer"
 ```
 
-The official competition requires the final application to use Qwen through Alibaba Cloud Model
-Studio or an approved competition tool. The regional provider boundary, timeout/retry/cache
-controls, strict output validation, and audit record are implemented and Mock-tested. No real
-credential was used in repository tests; a credentialed competition-environment proof remains a
-separate deployment acceptance item.
+## 开启联网智能
+
+![联网配置](docs/assets/online-configuration.jpg)
+
+1. 打开左侧“联网配置”。
+2. 勾选“启用联网智能”，填写 SerpApi Key 和百炼 API Key。
+3. 选择 Google 或 Google Scholar、语言、地域、查询数量、结果数量和 Qwen 模型。
+4. 点击“保存并应用”，配置会写入本机项目目录的 `.env`，立即对后续任务生效。
+
+密钥输入框留空会保留原值；勾选“清除”才会删除对应密钥。接口只返回“已配置/未配置”，不会回显密钥。配置写入接口仅允许本机回环地址访问，且不会把 `.env` 提交到 GitHub。
+
+默认使用百炼北京兼容接口和 `qwen-plus`/`qwen-turbo`。联网搜索仅负责发现和评估来源，模型不能直接修改科学数值；解析、证据、质量门和交付仍由本地确定性流程控制。
+
+官方配置参考：[阿里云百炼 Base URL](https://help.aliyun.com/zh/model-studio/base-url)、[SerpApi Search API](https://serpapi.com/search-api)。
+
+## 交付内容
+
+每次任务都会形成可追溯的工作台结果。质量门通过后才会开放正式 CSV/Parquet；未通过时仍会保留原始数据、字段证据、问题列表、图表和审核队列，方便修正后重跑。
+
+交付包通常包括：
+
+- 数据字典与字段来源说明
+- 原始产物清单和内容哈希
+- 字段级证据与证据关系图
+- 质量报告、审核问题和运行指标
+- 可复现的验证笔记本与元数据
+
+## 安全与边界
+
+- 默认离线，测试和演示不调用外部服务。
+- 外部页面和模型输出都按不可信输入处理，并经过严格结构校验。
+- 原始产物不可变、按内容寻址；冲突值不会被静默覆盖。
+- API Key 只保存在本机 `.env`，请勿写入代码、截图或提交记录。
+
+## 开发检查
+
+提交前运行完整门禁：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1
+```
+
+该命令会执行 Ruff、mypy、pytest、Bandit、秘密扫描和依赖检查。
+
+## 项目结构
+
+```text
+src/scidatafusion/       FastAPI、工作流、在线服务和中文工作台
+tests/                    单元、契约、API 和离线演示测试
+docs/                     验收记录、架构决策和页面截图
+prompts/                  版本化的模型提示词
+scripts/                  本地检查与演示脚本
+```
+
+更多边界说明见 [联网配置验收](docs/phase-9-m22-acceptance.md) 和 [工作台验收](docs/product-workbench-acceptance.md)。

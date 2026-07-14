@@ -14,7 +14,7 @@ async def _exercise_api() -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         health = await client.get("/api/health")
         assert health.status_code == 200
-        assert health.json() == {"status": "ok", "service": "scidatafusion", "module": "M21"}
+        assert health.json() == {"status": "ok", "service": "scidatafusion", "module": "M22"}
         assert health.headers["x-content-type-options"] == "nosniff"
 
         page = await client.get("/")
@@ -23,12 +23,25 @@ async def _exercise_api() -> None:
         assert "从科学问题到可交付数据" in page.text
         assert "联网智能" in page.text
         assert "实时联网发现" in page.text
+        assert "联网配置" in page.text
+        assert 'id="config-form"' in page.text
+        assert "保存并应用" in page.text
         assert "M00-M20" not in page.text
 
         runtime = await client.get("/api/v1/runtime")
         assert runtime.status_code == 200
         assert runtime.json()["online_ready"] is False
         assert runtime.json()["search_endpoint_host"] == "serpapi.com"
+
+        configuration = await client.get("/api/v1/online/configuration")
+        assert configuration.status_code == 200
+        assert configuration.json()["query_planning_enabled"] is True
+        assert configuration.json()["max_search_queries"] == 3
+        assert all(not item["configured"] for item in configuration.json()["credentials"])
+        assert all(
+            set(item) == {"environment_variable", "configured"}
+            for item in configuration.json()["credentials"]
+        )
 
         status = await client.get("/api/v1/demo/status")
         assert status.status_code == 200

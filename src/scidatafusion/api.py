@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import secrets
 from importlib.resources import files
+from pathlib import Path as FileSystemPath
 from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
 from fastapi import FastAPI, Path, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, Response
-from pydantic import StringConstraints
+from pydantic import StringConstraints, ValidationError
 
 from scidatafusion.cli import (
     _build_search_planning,
@@ -23,6 +25,8 @@ from scidatafusion.config import Settings, get_settings
 from scidatafusion.contracts.base import StrictContract
 from scidatafusion.contracts.delivery import DeliveryArtifact, DeliveryRequest, DeliveryResult
 from scidatafusion.contracts.online import (
+    OnlineConfigurationUpdate,
+    OnlineConfigurationView,
     OnlineResearchResult,
     OnlineRuntimeStatus,
     ResearchExecutionMode,
@@ -32,7 +36,12 @@ from scidatafusion.delivery.downloads import DownloadTicketSigner
 from scidatafusion.delivery.fixtures import build_offline_delivery_bundle
 from scidatafusion.delivery.service import DeliveryOrchestrator
 from scidatafusion.errors import AppError, ErrorCode
-from scidatafusion.online import OnlineResearchService, build_online_runtime_status
+from scidatafusion.online import (
+    LocalOnlineConfigurationStore,
+    OnlineResearchService,
+    build_online_configuration,
+    build_online_runtime_status,
+)
 from scidatafusion.workbench import build_workbench_snapshot
 
 DEFAULT_GOAL = "Study Type Ia supernova light curves using multi-source data integration into CSV."
@@ -168,6 +177,13 @@ class DemoDeliveryProvider:
             )
             return _summary(request, result)
 
+    async def update_online_settings(self, settings: Settings) -> None:
+        """Apply a validated local configuration without restarting the server."""
+
+        async with self._lock:
+            self.settings = settings
+            self._online_service = OnlineResearchService(settings)
+
     async def current(self) -> tuple[DeliveryRequest, DeliveryResult, DeliveryOrchestrator]:
         """Return the current delivery, creating the default demonstration when absent."""
 
@@ -187,7 +203,10 @@ class DemoDeliveryProvider:
         return self._workbench
 
 
-def create_app(provider: DemoDeliveryProvider | None = None) -> FastAPI:
+def create_app(
+    provider: DemoDeliveryProvider | None = None,
+    configuration_store: LocalOnlineConfigurationStore | None = None,
+) -> FastAPI:
     """Create the SciDataFusion workbench application with injectable demo state."""
 
     app = FastAPI(
@@ -197,6 +216,9 @@ def create_app(provider: DemoDeliveryProvider | None = None) -> FastAPI:
         redoc_url=None,
     )
     state = provider or DemoDeliveryProvider()
+    local_configuration = configuration_store or LocalOnlineConfigurationStore(
+        FileSystemPath(".env")
+    )
     ticket_signer = DownloadTicketSigner(secrets.token_bytes(32))
 
     @app.middleware("http")
@@ -251,11 +273,40 @@ def create_app(provider: DemoDeliveryProvider | None = None) -> FastAPI:
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "service": "scidatafusion", "module": "M21"}
+        return {"status": "ok", "service": "scidatafusion", "module": "M22"}
 
     @app.get("/api/v1/runtime", response_model=OnlineRuntimeStatus)
     async def runtime_status() -> OnlineRuntimeStatus:
         return build_online_runtime_status(state.settings)
+
+    @app.get("/api/v1/online/configuration", response_model=OnlineConfigurationView)
+    async def online_configuration() -> OnlineConfigurationView:
+        return build_online_configuration(state.settings)
+
+    @app.put("/api/v1/online/configuration", response_model=OnlineConfigurationView)
+    async def update_online_configuration(
+        payload: OnlineConfigurationUpdate,
+        request: Request,
+    ) -> OnlineConfigurationView:
+        host = None if request.client is None else request.client.host
+        try:
+            is_loopback = host is not None and ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            is_loopback = False
+        if not is_loopback:
+            raise AppError(
+                ErrorCode.SECURITY_POLICY_VIOLATION,
+                "online configuration may be changed only from the local machine",
+            )
+        try:
+            settings = await asyncio.to_thread(local_configuration.save, payload)
+        except ValidationError as exc:
+            raise AppError(
+                ErrorCode.CONFIGURATION_ERROR,
+                "online configuration failed validation",
+            ) from exc
+        await state.update_online_settings(settings)
+        return build_online_configuration(settings)
 
     @app.post("/api/v1/demo/run", response_model=DeliverySummary)
     async def run_demo(payload: DemoRunRequest) -> DeliverySummary:

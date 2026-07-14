@@ -162,14 +162,16 @@ class SerpApiSearchClient:
         if key is None:
             raise AppError(ErrorCode.CONFIGURATION_ERROR, "SERPAPI_API_KEY is missing")
         params: dict[str, str | int] = {
-            "engine": "google",
+            "engine": self._settings.search_engine,
             "q": query,
             "api_key": key.get_secret_value(),
             "output": "json",
-            "hl": "en",
+            "hl": self._settings.search_language,
             "num": self._settings.search_max_results,
             "no_cache": "false",
         }
+        if self._settings.search_country is not None:
+            params["gl"] = self._settings.search_country
         if urlparse(self._ENDPOINT).hostname != "serpapi.com":
             raise AppError(
                 ErrorCode.SECURITY_POLICY_VIOLATION, "SerpApi endpoint is not allowlisted"
@@ -226,10 +228,14 @@ class SerpApiSearchClient:
             ),
         )
 
-    @staticmethod
-    def _request_hash(query: str) -> str:
+    def _request_hash(self, query: str) -> str:
         encoded = json.dumps(
-            {"engine": "google", "hl": "en", "q": query},
+            {
+                "engine": self._settings.search_engine,
+                "gl": self._settings.search_country,
+                "hl": self._settings.search_language,
+                "q": query,
+            },
             sort_keys=True,
             separators=(",", ":"),
         ).encode()

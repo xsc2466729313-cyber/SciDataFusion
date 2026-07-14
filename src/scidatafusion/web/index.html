@@ -14,7 +14,7 @@
     * { box-sizing:border-box; letter-spacing:0; }
     html { scroll-behavior:smooth; }
     body { margin:0; color:var(--ink); background:var(--paper); font:14px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; }
-    button,input,textarea { font:inherit; }
+    button,input,textarea,select { font:inherit; }
     button { cursor:pointer; }
     .app { min-height:100vh; display:grid; grid-template-columns:220px minmax(0,1fr); }
     aside { position:sticky; top:0; height:100vh; color:#eaf0ed; background:var(--sidebar); padding:20px 14px; display:flex; flex-direction:column; }
@@ -35,10 +35,10 @@
     .content { max-width:1500px; margin:0 auto; padding:24px 28px 48px; }
     .query-band { display:grid; grid-template-columns:minmax(300px,1.6fr) minmax(220px,.8fr) 220px auto; gap:12px; align-items:end; padding-bottom:24px; border-bottom:1px solid var(--line); }
     label { display:block; color:var(--muted); font-size:12px; font-weight:650; margin-bottom:6px; }
-    textarea,input { width:100%; border:1px solid #b9c4bf; border-radius:5px; background:white; color:var(--ink); padding:10px 11px; outline:none; }
+    textarea,input,select { width:100%; border:1px solid #b9c4bf; border-radius:5px; background:white; color:var(--ink); padding:10px 11px; outline:none; }
     textarea { min-height:68px; max-height:140px; resize:vertical; }
     input { height:44px; }
-    textarea:focus,input:focus { border-color:var(--green); box-shadow:0 0 0 2px var(--green-soft); }
+    textarea:focus,input:focus,select:focus { border-color:var(--green); box-shadow:0 0 0 2px var(--green-soft); }
     .primary { height:44px; border:0; border-radius:5px; padding:0 18px; color:white; background:var(--green); font-weight:700; white-space:nowrap; }
     .primary:hover { background:#12583f; }
     .primary:disabled { opacity:.6; cursor:wait; }
@@ -114,6 +114,22 @@
     .proof-item span { color:var(--muted); font-size:11px; }
     .source-link { color:var(--blue); font-weight:700; text-decoration:none; }
     .source-link:hover { text-decoration:underline; }
+    .config-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border:1px solid var(--line); background:white; }
+    .config-item { min-height:98px; padding:15px 16px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); min-width:0; }
+    .config-item:nth-child(3n) { border-right:0; }
+    .config-item:nth-last-child(-n+3) { border-bottom:0; }
+    .config-item strong { display:block; margin:4px 0; font-size:15px; overflow-wrap:anywhere; }
+    .config-item small { color:var(--muted); }
+    .config-form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:15px 18px; padding:18px; border:1px solid var(--line); background:white; }
+    .config-form .span-2 { grid-column:span 2; }
+    .config-form .span-3 { grid-column:1 / -1; }
+    .check-row { min-height:44px; display:flex; align-items:center; gap:9px; padding:8px 0; }
+    .check-row input { width:17px; height:17px; flex:0 0 auto; }
+    .check-row label { margin:0; color:var(--ink); cursor:pointer; }
+    .secret-controls { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; }
+    .secret-controls .check-row { white-space:nowrap; }
+    .form-actions { display:flex; align-items:center; justify-content:space-between; gap:14px; padding-top:4px; }
+    .form-actions .primary { min-width:150px; }
     .issue-list { display:grid; gap:8px; }
     .issue { padding:12px; border-left:3px solid var(--red); background:#fffafa; }
     .issue strong { display:block; margin-bottom:4px; }
@@ -140,6 +156,13 @@
       .online-proof { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .proof-item:nth-child(2) { border-right:0; }
       .proof-item:nth-child(-n+2) { border-bottom:1px solid var(--line); }
+      .config-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .config-item:nth-child(3n) { border-right:1px solid var(--line); }
+      .config-item:nth-child(2n) { border-right:0; }
+      .config-item:nth-last-child(-n+3) { border-bottom:1px solid var(--line); }
+      .config-item:nth-last-child(-n+2) { border-bottom:0; }
+      .config-form { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .config-form .span-3 { grid-column:1 / -1; }
     }
     @media (max-width:900px) {
       .app { grid-template-columns:minmax(0,1fr); }
@@ -164,6 +187,13 @@
       .online-proof { grid-template-columns:minmax(0,1fr); }
       .proof-item { border-right:0; border-bottom:1px solid var(--line); }
       .proof-item:last-child { border-bottom:0; }
+      .config-grid { grid-template-columns:minmax(0,1fr); }
+      .config-item,.config-item:nth-child(3n),.config-item:nth-child(2n) { border-right:0; border-bottom:1px solid var(--line); }
+      .config-item:nth-last-child(-n+2) { border-bottom:1px solid var(--line); }
+      .config-item:last-child { border-bottom:0; }
+      .config-form { grid-template-columns:minmax(0,1fr); }
+      .config-form .span-2,.config-form .span-3 { grid-column:auto; }
+      .form-actions { align-items:stretch; flex-direction:column; }
       .run-state { align-items:flex-start; }
       #lightcurve { height:250px; }
       #evidence-graph { height:340px; }
@@ -180,6 +210,7 @@
         <button class="nav-btn" data-view="integration">解析与整合</button>
         <button class="nav-btn" data-view="quality">证据与质量</button>
         <button class="nav-btn" data-view="delivery">成果交付</button>
+        <button class="nav-btn" data-view="configuration">联网配置</button>
       </nav>
       <div class="aside-meta"><div>全链路内容寻址</div><div>证据优先 · 质量门控 · 可复现</div></div>
     </aside>
@@ -239,6 +270,10 @@
               <div class="proof-item"><strong id="model-proof">Qwen 未调用</strong><span>模型调用证明</span></div>
             </div>
             <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>排名</th><th>实时来源</th><th>搜索摘要</th><th>LLM 相关性</th><th>证据类型</th><th>建议与依据</th></tr></thead><tbody id="online-source-rows"></tbody></table></div>
+            <div class="section">
+              <div class="section-head"><h2>智能检索计划</h2><p id="plan-copy">等待执行</p></div>
+              <div class="table-wrap"><table><thead><tr><th>序号</th><th>检索式</th><th>检索目的</th><th>预期证据</th><th>执行状态</th><th>命中</th></tr></thead><tbody id="query-plan-rows"></tbody></table></div>
+            </div>
           </div>
           <div class="section">
           <div class="section-head"><h2>多源数据发现与选择</h2><p>来源覆盖、许可、下载就绪状态和选择评分</p></div>
@@ -294,6 +329,41 @@
             </div>
           </div>
         </section>
+
+        <section id="configuration" class="view">
+          <div class="section-head"><h2>联网能力配置</h2><p>保存到本机 .env，密钥不会回显</p></div>
+          <div class="config-grid">
+            <div class="config-item"><small>执行开关</small><strong id="cfg-execution">-</strong><span id="cfg-ready" class="badge review">检查中</span></div>
+            <div class="config-item"><small>搜索提供商</small><strong id="cfg-search-provider">-</strong><span id="cfg-search-endpoint" class="mono">-</span></div>
+            <div class="config-item"><small>搜索策略</small><strong id="cfg-search-strategy">-</strong><span id="cfg-search-locale" class="subtle">-</span></div>
+            <div class="config-item"><small>模型提供商</small><strong id="cfg-model-provider">-</strong><span id="cfg-model-endpoint" class="mono">-</span></div>
+            <div class="config-item"><small>查询规划模型</small><strong id="cfg-planner-model">-</strong><span class="subtle">生成互补检索式</span></div>
+            <div class="config-item"><small>来源评估模型</small><strong id="cfg-assessment-model">-</strong><span class="subtle">严格结构化判断</span></div>
+          </div>
+          <div class="section">
+            <div class="section-head"><h2>编辑配置</h2><p>留空的密钥保持原值</p></div>
+            <form id="config-form" class="config-form" autocomplete="off">
+              <div class="span-3 check-row"><input id="cfg-online-enabled" type="checkbox"><label for="cfg-online-enabled">启用联网智能</label></div>
+              <div class="span-2"><label for="cfg-serpapi-key">SerpApi Key</label><div class="secret-controls"><input id="cfg-serpapi-key" type="password" placeholder="留空则保留当前密钥" autocomplete="new-password"><div class="check-row"><input id="cfg-clear-serpapi" type="checkbox"><label for="cfg-clear-serpapi">清除</label></div></div></div>
+              <div><label for="cfg-search-engine">搜索类型</label><select id="cfg-search-engine"><option value="google">Google 网页</option><option value="google_scholar">Google Scholar</option></select></div>
+              <div class="span-2"><label for="cfg-dashscope-key">百炼 API Key</label><div class="secret-controls"><input id="cfg-dashscope-key" type="password" placeholder="留空则保留当前密钥" autocomplete="new-password"><div class="check-row"><input id="cfg-clear-dashscope" type="checkbox"><label for="cfg-clear-dashscope">清除</label></div></div></div>
+              <div><label for="cfg-region">百炼地域</label><select id="cfg-region"><option value="cn-beijing">北京</option><option value="ap-southeast-1">新加坡</option><option value="us-virginia">弗吉尼亚</option><option value="ap-northeast-1">东京</option></select></div>
+              <div><label for="cfg-language">搜索语言</label><select id="cfg-language"><option value="zh-cn">简体中文</option><option value="en">English</option><option value="ja">日本語</option></select></div>
+              <div><label for="cfg-country">国家代码</label><input id="cfg-country" maxlength="2" placeholder="可选，如 cn / us"></div>
+              <div><label for="cfg-workspace">百炼工作空间 ID</label><input id="cfg-workspace" maxlength="128" placeholder="可选"></div>
+              <div class="check-row"><input id="cfg-query-planning" type="checkbox"><label for="cfg-query-planning">Qwen 自动扩展检索式</label></div>
+              <div><label for="cfg-max-queries">最多检索式</label><input id="cfg-max-queries" type="number" min="1" max="4"></div>
+              <div><label for="cfg-max-results">最多保留来源</label><input id="cfg-max-results" type="number" min="1" max="10"></div>
+              <div><label for="cfg-planner-input">规划模型</label><input id="cfg-planner-input" pattern="qwen[A-Za-z0-9._-]*" required></div>
+              <div><label for="cfg-assessment-input">评估模型</label><input id="cfg-assessment-input" pattern="qwen[A-Za-z0-9._-]*" required></div>
+              <div class="span-3 form-actions"><span id="config-message" class="subtle">配置仅允许从本机保存</span><button id="save-config" class="primary" type="submit">保存并应用</button></div>
+            </form>
+          </div>
+          <div class="section">
+            <div class="section-head"><h2>凭据状态</h2><p>接口永不返回 API Key 内容</p></div>
+            <div class="table-wrap"><table><thead><tr><th>环境变量</th><th>状态</th><th>作用范围</th></tr></thead><tbody id="credential-rows"></tbody></table></div>
+          </div>
+        </section>
       </div>
     </main>
   </div>
@@ -306,12 +376,14 @@
       parse:'解析', metadata_only:'仅保留元数据', needs_review:'待人工审核', succeeded:'已完成',
       completed:'完整完成', degraded:'部分完成', failed:'失败', inspect:'人工查阅', download:'建议下载', deprioritize:'降低优先级',
       document:'文档', table:'表格', landing_page:'网页', scientific_file:'科学文件', archive:'压缩包',
-      data_repository:'数据仓库', domain_database:'领域数据库', literature_metadata:'论文元数据', supplement_web:'补充材料'
+      data_repository:'数据仓库', domain_database:'领域数据库', literature_metadata:'论文元数据', supplement_web:'补充材料',
+      google:'Google 网页', google_scholar:'Google Scholar', llm:'Qwen 自动规划', seed_fallback:'用户检索式回退', manual:'用户单检索式'
     };
     const label = value => zh[value] || String(value ?? '-');
     let snapshot = null;
     let delivery = null;
     let runtime = null;
+    let configuration = null;
 
     async function api(url, options) {
       const response = await fetch(url, options);
@@ -322,7 +394,7 @@
     }
 
     function badge(status) {
-      const cls = status === 'complete' || status === 'selected' ? 'good' : status === 'blocked' || status === 'missing' ? 'bad' : 'review';
+      const cls = status === 'complete' || status === 'completed' || status === 'selected' ? 'good' : status === 'blocked' || status === 'failed' || status === 'missing' ? 'bad' : 'review';
       return `<span class="badge ${cls}">${esc(label(status))}</span>`;
     }
 
@@ -341,7 +413,7 @@
       $('m-issues').textContent = snapshot.issues.length;
       $('mode-offline').checked = snapshot.execution_mode !== 'online';
       $('mode-online').checked = snapshot.execution_mode === 'online';
-      renderRuntime(); renderPipeline(); renderFields(); renderSources(); renderOnline(); renderArtifacts(); renderEvidence(); renderScientific(); renderQuality(); renderIssues(); renderHits(); renderDelivery();
+      renderRuntime(); renderPipeline(); renderFields(); renderSources(); renderOnline(); renderArtifacts(); renderEvidence(); renderScientific(); renderQuality(); renderIssues(); renderHits(); renderDelivery(); renderConfiguration();
       requestAnimationFrame(() => { drawLightCurve(); drawEvidenceGraph(); });
     }
 
@@ -366,7 +438,7 @@
       if (!runtime) return;
       const onlineActive = snapshot && snapshot.execution_mode === 'online';
       $('runtime-dot').className = `dot ${runtime.online_ready ? '' : 'offline'}`;
-      $('runtime-label').textContent = onlineActive ? `实时联网 · SerpApi + ${runtime.model_id}` : runtime.online_ready ? '联网能力就绪 · 当前离线复现' : '离线复现 · 联网密钥未启用';
+      $('runtime-label').textContent = onlineActive ? `实时联网 · ${label(runtime.search_engine)} + ${runtime.model_id}` : runtime.online_ready ? '联网能力就绪 · 当前离线复现' : '离线复现 · 联网配置未就绪';
       $('mode-online').disabled = !runtime.online_ready;
       $('mode-online-label').title = runtime.online_ready ? '使用 SerpApi 实时搜索，并由 Qwen 评估来源相关性' : '需以 SCIDATA_OFFLINE_MODE=false 启动，并在本地 .env 配置 SerpApi 与百炼密钥';
     }
@@ -379,6 +451,8 @@
         $('search-proof').textContent = 'SerpApi 未调用';
         $('model-proof').textContent = 'Qwen 未调用';
         $('online-source-rows').innerHTML = '<tr><td colspan="6" class="empty">离线复现模式：联网调用数为 0，全部结果可重复校验。</td></tr>';
+        $('plan-copy').textContent = '本次未执行联网查询规划';
+        $('query-plan-rows').innerHTML = '<tr><td colspan="6" class="empty">选择联网智能后显示 Qwen 规划与逐条检索结果。</td></tr>';
         return;
       }
       const search = online.search_invocation;
@@ -386,7 +460,8 @@
       $('online-copy').textContent = online.warnings.length ? online.warnings.join('；') : '网页结果来自实时搜索；Qwen 仅评估来源相关性，不生成或改写科学数值';
       $('online-status').textContent = label(online.status);
       $('online-count').textContent = online.sources.length;
-      $('search-proof').textContent = search ? `${search.cached ? '缓存命中' : '实时请求'} · ${Math.round(search.latency_ms)} ms · ${search.attempt_count} 次` : 'SerpApi 未完成';
+      const completedSearches=online.search_executions.filter(item=>item.status==='completed');
+      $('search-proof').textContent = search ? `${completedSearches.length}/${online.search_executions.length} 条完成 · ${search.cached ? '首条缓存命中' : '已发实时请求'}` : 'SerpApi 未完成';
       $('model-proof').textContent = model ? `${model.actual_model} · ${Math.round(model.latency_ms)} ms · ${model.usage.input_tokens + model.usage.output_tokens} tokens` : 'Qwen 未完成';
       $('online-source-rows').innerHTML = online.sources.length ? online.sources.map(item => {
         const assessment = item.assessment;
@@ -395,6 +470,41 @@
         const rationale = assessment ? `<span class="status-text ${assessment.recommended_action === 'deprioritize' ? 'review' : 'good'}">${esc(label(assessment.recommended_action))}</span><br>${esc(assessment.rationale)}` : '模型评估未采用';
         return `<tr><td>#${item.search.position}</td><td><a class="source-link" href="${esc(item.search.url)}" target="_blank" rel="noopener noreferrer">${esc(item.search.title)}</a><div class="mono">${esc(item.search.source_domain)}</div></td><td>${esc(item.search.snippet)}</td><td>${decision}</td><td><div class="tags">${types}</div></td><td>${rationale}</td></tr>`;
       }).join('') : '<tr><td colspan="6" class="empty">实时搜索未返回可验证来源。</td></tr>';
+      const executions = new Map(online.search_executions.map(item => [item.query, item]));
+      $('plan-copy').textContent = `${label(online.search_plan.strategy)} · ${online.search_plan.queries.length} 条检索式 · 最多保留 ${runtime.max_search_results} 个来源`;
+      $('query-plan-rows').innerHTML = online.search_plan.queries.map((item,index) => {
+        const execution=executions.get(item.query); const types=item.expected_evidence_types.map(type=>`<span class="tag">${esc(type)}</span>`).join('');
+        return `<tr><td>#${index+1}</td><td><strong>${esc(item.query)}</strong></td><td>${esc(item.purpose)}</td><td><div class="tags">${types}</div></td><td>${execution ? badge(execution.status) : '-'}</td><td>${execution ? execution.result_count : 0}</td></tr>`;
+      }).join('');
+    }
+
+    function renderConfiguration() {
+      if (!configuration) return;
+      $('cfg-execution').textContent = configuration.execution_enabled ? '允许联网执行' : '仅离线执行';
+      $('cfg-ready').textContent = configuration.online_ready ? '全部就绪' : '尚未就绪';
+      $('cfg-ready').className = `badge ${configuration.online_ready ? 'good' : 'review'}`;
+      $('cfg-search-provider').textContent = 'SerpApi';
+      $('cfg-search-endpoint').textContent = configuration.search_endpoint;
+      $('cfg-search-strategy').textContent = `${label(configuration.search_engine)} · ${configuration.max_search_queries} 条查询 / ${configuration.max_search_results} 个结果`;
+      $('cfg-search-locale').textContent = `语言 ${configuration.search_language}${configuration.search_country ? ` · 国家 ${configuration.search_country.toUpperCase()}` : ''} · ${configuration.query_planning_enabled ? '自动规划' : '手动查询'}`;
+      $('cfg-model-provider').textContent = '百炼 OpenAI 兼容接口';
+      $('cfg-model-endpoint').textContent = configuration.model_endpoint_host || '未解析端点';
+      $('cfg-planner-model').textContent = configuration.planner_model_id;
+      $('cfg-assessment-model').textContent = configuration.assessment_model_id;
+      $('credential-rows').innerHTML = configuration.credentials.map(item=>`<tr><td class="mono">${esc(item.environment_variable)}</td><td>${item.configured ? '<span class="status-text good">已配置</span>' : '<span class="status-text review">未配置</span>'}</td><td>${item.environment_variable==='SERPAPI_API_KEY' ? '实时网页与学术搜索' : '查询规划与来源评估'}</td></tr>`).join('');
+      $('cfg-online-enabled').checked=configuration.execution_enabled;
+      $('cfg-search-engine').value=configuration.search_engine;
+      $('cfg-language').value=configuration.search_language;
+      $('cfg-country').value=configuration.search_country || '';
+      $('cfg-region').value=configuration.bailian_region;
+      $('cfg-workspace').value=configuration.bailian_workspace_id || '';
+      $('cfg-query-planning').checked=configuration.query_planning_enabled;
+      $('cfg-max-queries').value=configuration.max_search_queries;
+      $('cfg-max-results').value=configuration.max_search_results;
+      $('cfg-planner-input').value=configuration.planner_model_id;
+      $('cfg-assessment-input').value=configuration.assessment_model_id;
+      $('cfg-serpapi-key').placeholder=configuration.credentials[0].configured ? '已配置，留空则保留' : '请输入 SerpApi Key';
+      $('cfg-dashscope-key').placeholder=configuration.credentials[1].configured ? '已配置，留空则保留' : '请输入百炼 API Key';
     }
     function renderArtifacts() {
       $('artifact-rows').innerHTML = snapshot.artifacts.map(item => `<tr><td class="mono">${esc(item.object_id.slice(0,16))}…</td><td>${esc(item.format)}</td><td>${esc(item.media_type)}</td><td>${formatBytes(item.size_bytes)}</td><td>${esc(label(item.disposition))}</td><td>${esc(item.parser || '-')}</td><td>${Math.round(item.confidence * 100)}%</td><td class="mono">${esc(item.sha256.slice(0,14))}…</td></tr>`).join('');
@@ -465,10 +575,11 @@
       window.location.assign(ticket.download_url);
     }
     async function load() {
-      try { [snapshot,delivery,runtime]=await Promise.all([api('/api/v1/workbench'),api('/api/v1/demo/status'),api('/api/v1/runtime')]); render(); }
+      try { [snapshot,delivery,runtime,configuration]=await Promise.all([api('/api/v1/workbench'),api('/api/v1/demo/status'),api('/api/v1/runtime'),api('/api/v1/online/configuration')]); render(); }
       catch(error){$('message').textContent=error.message;$('message').className='error';}
     }
     $('run-form').addEventListener('submit',async event=>{event.preventDefault();$('run').disabled=true;const mode=document.querySelector('input[name="execution-mode"]:checked').value;$('message').textContent=mode==='online'?'正在联网搜索，并调用 Qwen 评估来源后执行解析与质量校验...':'正在解析、整合并校验可复现科学数据...';try{await api('/api/v1/demo/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_mode:mode,research_goal:$('goal').value,retrieval_query:$('query').value})});await load();}catch(error){$('message').textContent=error.message;$('message').className='error';}finally{$('run').disabled=false;}});
+    $('config-form').addEventListener('submit',async event=>{event.preventDefault();const button=$('save-config');button.disabled=true;$('config-message').textContent='正在校验并保存本机配置...';$('config-message').className='subtle';const serp=$('cfg-serpapi-key').value.trim();const dash=$('cfg-dashscope-key').value.trim();const payload={online_enabled:$('cfg-online-enabled').checked,serpapi_api_key:serp||null,dashscope_api_key:dash||null,clear_serpapi_api_key:$('cfg-clear-serpapi').checked,clear_dashscope_api_key:$('cfg-clear-dashscope').checked,bailian_region:$('cfg-region').value,bailian_workspace_id:$('cfg-workspace').value.trim()||null,search_engine:$('cfg-search-engine').value,search_language:$('cfg-language').value,search_country:$('cfg-country').value.trim().toLowerCase()||null,query_planning_enabled:$('cfg-query-planning').checked,max_search_queries:Number($('cfg-max-queries').value),max_search_results:Number($('cfg-max-results').value),planner_model_id:$('cfg-planner-input').value.trim(),assessment_model_id:$('cfg-assessment-input').value.trim()};try{configuration=await api('/api/v1/online/configuration',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});runtime=await api('/api/v1/runtime');$('cfg-serpapi-key').value='';$('cfg-dashscope-key').value='';$('cfg-clear-serpapi').checked=false;$('cfg-clear-dashscope').checked=false;renderRuntime();renderConfiguration();$('config-message').textContent=configuration.online_ready?'配置已保存，联网智能可以使用':'配置已保存，仍有必填项未就绪';$('config-message').className=configuration.online_ready?'status-text good':'status-text review';}catch(error){$('config-message').textContent=error.message;$('config-message').className='error';}finally{button.disabled=false;}});
     document.addEventListener('click',async event=>{const nav=event.target.closest('.nav-btn[data-view]');if(nav){document.querySelectorAll('.nav-btn[data-view]').forEach(item=>item.classList.toggle('active',item===nav));document.querySelectorAll('.view').forEach(item=>item.classList.toggle('active',item.id===nav.dataset.view));$('page-title').textContent=nav.textContent;requestAnimationFrame(()=>{drawLightCurve();drawEvidenceGraph();});return;}const button=event.target.closest('.signed,#download-package,#download-csv');if(button&&!button.disabled){try{await signedDownload(button.dataset.file);}catch(error){$('message').textContent=error.message;$('message').className='error';}}});
     window.addEventListener('resize',()=>{drawLightCurve();drawEvidenceGraph();});
     load();

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import httpx
 import pytest
@@ -20,14 +21,19 @@ from scidatafusion.contracts.online import (
     LiveSearchBatch,
     LiveSearchResult,
     OnlineResearchResult,
+    PlannedSearchQuery,
+    SearchExecutionRecord,
     SearchInvocationRecord,
+    SearchQueryPlan,
     SourceAssessmentBatch,
 )
 from scidatafusion.errors import AppError, ErrorCode
 from scidatafusion.online import (
     InMemorySearchCache,
+    LocalOnlineConfigurationStore,
     OnlineResearchService,
     SerpApiSearchClient,
+    build_online_configuration,
     build_online_runtime_status,
 )
 
@@ -43,6 +49,7 @@ def _settings(**overrides: object) -> Settings:
         "serpapi_api_key": "test-serpapi-key",
         "search_min_interval_seconds": 0,
         "search_max_retries": 1,
+        "search_query_planning_enabled": False,
     }
     values.update(overrides)
     return Settings(**values)  # type: ignore[arg-type]
@@ -91,17 +98,23 @@ def _search_batch() -> LiveSearchBatch:
     )
 
 
-def _completion(content: str) -> StructuredModelCompletion:
+def _completion(
+    content: str,
+    request: StructuredModelRequest | None = None,
+) -> StructuredModelCompletion:
+    role = ModelRole.FAST_CLASSIFIER if request is None else request.role
+    schema_name = "SourceAssessmentBatch" if request is None else request.schema_name
+    model_id = "qwen-turbo" if request is None else request.model_id
     return StructuredModelCompletion(
         content=content,
         invocation=ModelInvocationRecord(
             region="cn-beijing",
             endpoint_host="dashscope.aliyuncs.com",
-            requested_model="qwen-turbo",
-            actual_model="qwen-turbo-2026-06-01",
-            role=ModelRole.FAST_CLASSIFIER,
+            requested_model=model_id,
+            actual_model=f"{model_id}-2026-06-01",
+            role=role,
             prompt_version="1.0.0",
-            schema_name="SourceAssessmentBatch",
+            schema_name=schema_name,
             request_hash=_HASH_A,
             response_hash=_HASH_B,
             usage=ModelUsage(input_tokens=120, output_tokens=40),
@@ -124,7 +137,7 @@ class _ModelClient:
 
     async def complete(self, request: StructuredModelRequest) -> StructuredModelCompletion:
         self.requests.append(request)
-        return _completion(self.content)
+        return _completion(self.content, request)
 
 
 def test_serpapi_search_retries_caches_and_redacts_key() -> None:
@@ -341,6 +354,152 @@ def test_online_runtime_requires_both_providers_without_exposing_secrets() -> No
     assert offline.online_ready is False
     assert offline.serpapi_configured is False
 
+    configuration = build_online_configuration(
+        _settings(
+            search_engine="google_scholar",
+            search_language="zh-cn",
+            search_country="cn",
+            search_query_planning_enabled=True,
+            search_max_queries=4,
+        )
+    )
+    serialized = configuration.model_dump_json()
+    assert configuration.search_engine == "google_scholar"
+    assert configuration.max_search_queries == 4
+    assert all(item.configured for item in configuration.credentials)
+    assert "test-dashscope-key" not in serialized
+    assert "test-serpapi-key" not in serialized
+
+
+def test_serpapi_uses_configured_engine_locale_and_country() -> None:
+    async def scenario() -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.params["engine"] == "google_scholar"
+            assert request.url.params["hl"] == "zh-cn"
+            assert request.url.params["gl"] == "cn"
+            return httpx.Response(200, json={"organic_results": []})
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            result = await SerpApiSearchClient(
+                _settings(
+                    search_engine="google_scholar",
+                    search_language="zh-cn",
+                    search_country="cn",
+                ),
+                client=client,
+            ).search("Type Ia supernova catalog")
+        assert result.results == ()
+
+    asyncio.run(scenario())
+
+
+def test_qwen_plans_bounded_queries_and_partial_search_failure_is_audited() -> None:
+    class PlannedModel:
+        def __init__(self) -> None:
+            self.requests: list[StructuredModelRequest] = []
+
+        async def complete(self, request: StructuredModelRequest) -> StructuredModelCompletion:
+            self.requests.append(request)
+            if request.schema_name == "SearchQueryPlan":
+                content = json.dumps(
+                    {
+                        "strategy": "llm",
+                        "queries": [
+                            {
+                                "query": "Ia supernova photometry table",
+                                "purpose": "duplicate seed",
+                                "expected_evidence_types": ["table"],
+                            },
+                            {
+                                "query": "Type Ia supernova machine readable catalog",
+                                "purpose": "find catalogs",
+                                "expected_evidence_types": ["catalog", "repository"],
+                            },
+                            {
+                                "query": "Type Ia supernova supplementary light curves",
+                                "purpose": "find supplements",
+                                "expected_evidence_types": ["supplement", "paper"],
+                            },
+                        ],
+                    }
+                )
+            else:
+                content = json.dumps(
+                    {
+                        "assessments": [
+                            {
+                                "source_url": "https://example.org/seed",
+                                "relevance_score": 0.91,
+                                "evidence_types": ["table"],
+                                "rationale": "The result describes a machine-readable table.",
+                                "recommended_action": "download",
+                            },
+                            {
+                                "source_url": "https://example.org/supplement",
+                                "relevance_score": 0.82,
+                                "evidence_types": ["supplement"],
+                                "rationale": "The result describes supplementary light curves.",
+                                "recommended_action": "inspect",
+                            },
+                        ]
+                    }
+                )
+            return _completion(content, request)
+
+    class PlannedSearch:
+        async def search(self, query: str) -> LiveSearchBatch:
+            if "catalog" in query:
+                raise AppError(ErrorCode.EXTERNAL_SERVICE_ERROR, "mock provider failure")
+            suffix = "seed" if query == "Ia supernova photometry table" else "supplement"
+            result = LiveSearchResult(
+                position=1,
+                title=f"Result {suffix}",
+                url=HttpUrl(f"https://example.org/{suffix}"),
+                display_url=f"example.org/{suffix}",
+                source_domain="example.org",
+                snippet=f"Validated {suffix} discovery result.",
+            )
+            return LiveSearchBatch(
+                results=(result,),
+                invocation=SearchInvocationRecord(
+                    query_hash=_HASH_A,
+                    response_hash=_HASH_B,
+                    result_count=1,
+                    attempt_count=1,
+                    latency_ms=4.0,
+                ),
+            )
+
+    async def scenario() -> None:
+        model = PlannedModel()
+        result = await OnlineResearchService(
+            _settings(
+                search_query_planning_enabled=True,
+                search_max_queries=3,
+                search_max_results=3,
+            ),
+            search_client=PlannedSearch(),
+            model_client=model,
+        ).run(
+            research_goal="Study Type Ia supernova light curves.",
+            query="Ia supernova photometry table",
+        )
+
+        assert result.status == "completed"
+        assert result.search_plan.strategy == "llm"
+        assert len(result.search_plan.queries) == 3
+        assert len(result.search_executions) == 3
+        assert [item.status for item in result.search_executions].count("failed") == 1
+        assert len(result.sources) == 2
+        assert result.planning_model_invocation is not None
+        assert [request.schema_name for request in model.requests] == [
+            "SearchQueryPlan",
+            "SourceAssessmentBatch",
+        ]
+        assert any("1 条检索式执行失败" in warning for warning in result.warnings)
+
+    asyncio.run(scenario())
+
 
 def test_online_service_configuration_empty_results_and_unknown_model_url() -> None:
     async def scenario() -> None:
@@ -354,7 +513,8 @@ def test_online_service_configuration_empty_results_and_unknown_model_url() -> N
 
         class EmptySearch:
             async def search(self, query: str) -> LiveSearchBatch:
-                return LiveSearchBatch(results=(), invocation=_search_batch().invocation)
+                invocation = _search_batch().invocation.model_copy(update={"result_count": 0})
+                return LiveSearchBatch(results=(), invocation=invocation)
 
         empty = await OnlineResearchService(
             _settings(), search_client=EmptySearch(), model_client=_ModelClient("{}")
@@ -414,8 +574,28 @@ def test_online_contracts_reject_duplicate_sources_and_false_execution_proof() -
     base = {
         "status": "degraded",
         "query": "valid query",
+        "search_plan": SearchQueryPlan(
+            strategy="manual",
+            queries=(
+                PlannedSearchQuery(
+                    query="valid query",
+                    purpose="test query",
+                    expected_evidence_types=("table",),
+                ),
+            ),
+        ),
+        "search_executions": (
+            SearchExecutionRecord(
+                query="valid query",
+                purpose="test query",
+                status="completed",
+                result_count=1,
+                invocation=_search_batch().invocation,
+            ),
+        ),
         "sources": (),
         "search_invocation": _search_batch().invocation,
+        "planning_model_invocation": None,
         "model_invocation": None,
         "network_performed": True,
         "model_performed": False,
@@ -428,9 +608,18 @@ def test_online_contracts_reject_duplicate_sources_and_false_execution_proof() -
             {**base, "model_performed": True, "model_invocation": None}
         )
     with pytest.raises(ValidationError, match="requires live search"):
+        failed_execution = SearchExecutionRecord(
+            query="valid query",
+            purpose="test query",
+            status="failed",
+            result_count=0,
+            invocation=None,
+            error_code="external_service_error",
+        )
         OnlineResearchResult.model_validate(
             {
                 **base,
+                "search_executions": (failed_execution,),
                 "search_invocation": None,
                 "network_performed": False,
                 "model_performed": True,
@@ -467,6 +656,15 @@ def test_fastapi_online_mode_connects_live_discovery_to_workbench() -> None:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             runtime = await client.get("/api/v1/runtime")
             assert runtime.json()["online_ready"] is True
+            configuration = await client.get("/api/v1/online/configuration")
+            assert configuration.status_code == 200
+            assert configuration.json()["online_ready"] is True
+            assert configuration.json()["credentials"] == [
+                {"environment_variable": "SERPAPI_API_KEY", "configured": True},
+                {"environment_variable": "DASHSCOPE_API_KEY", "configured": True},
+            ]
+            assert "test-serpapi-key" not in configuration.text
+            assert "test-dashscope-key" not in configuration.text
             response = await client.post(
                 "/api/v1/demo/run",
                 json={
@@ -482,5 +680,94 @@ def test_fastapi_online_mode_connects_live_discovery_to_workbench() -> None:
         assert workbench["online_research"]["status"] == "completed"
         assert len(workbench["online_research"]["sources"]) == 1
         assert workbench["online_research"]["model_performed"] is True
+
+    asyncio.run(scenario())
+
+
+def test_local_configuration_api_writes_env_applies_settings_and_redacts_keys(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        env_path = tmp_path / ".env"
+        env_path.write_text("# Keep this comment\nSCIDATA_LOG_LEVEL=DEBUG\n", encoding="utf-8")
+        settings = Settings(_env_file=None)
+        provider = DemoDeliveryProvider(settings=settings)
+        app = create_app(
+            provider,
+            configuration_store=LocalOnlineConfigurationStore(env_path),
+        )
+        transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 54321))
+        payload = {
+            "online_enabled": True,
+            "serpapi_api_key": "test-serpapi-key-material",
+            "dashscope_api_key": "test-dashscope-key-material",
+            "bailian_region": "cn-beijing",
+            "search_engine": "google_scholar",
+            "search_language": "zh-cn",
+            "search_country": "cn",
+            "query_planning_enabled": True,
+            "max_search_queries": 4,
+            "max_search_results": 8,
+            "planner_model_id": "qwen-plus",
+            "assessment_model_id": "qwen-turbo",
+        }
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://127.0.0.1",
+        ) as client:
+            response = await client.put("/api/v1/online/configuration", json=payload)
+            assert response.status_code == 200, response.text
+            configuration = response.json()
+            assert configuration["online_ready"] is True
+            assert configuration["search_engine"] == "google_scholar"
+            assert configuration["max_search_queries"] == 4
+            assert "test-serpapi-key-material" not in response.text
+            assert "test-dashscope-key-material" not in response.text
+            runtime = (await client.get("/api/v1/runtime")).json()
+            assert runtime["online_ready"] is True
+
+        stored = env_path.read_text(encoding="utf-8")
+        assert "# Keep this comment" in stored
+        assert "SCIDATA_LOG_LEVEL=DEBUG" in stored
+        assert "SERPAPI_API_KEY=test-serpapi-key-material" in stored
+        assert "DASHSCOPE_API_KEY=test-dashscope-key-material" in stored
+        assert not (tmp_path / "..env.scidatafusion.tmp").exists()
+
+    asyncio.run(scenario())
+
+
+def test_configuration_api_rejects_remote_writes(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = create_app(configuration_store=LocalOnlineConfigurationStore(tmp_path / ".env"))
+        transport = httpx.ASGITransport(app=app, client=("203.0.113.10", 54321))
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.put(
+                "/api/v1/online/configuration",
+                json={"online_enabled": False},
+            )
+        assert response.status_code == 403
+        assert response.json()["code"] == "security_policy_violation"
+        assert not (tmp_path / ".env").exists()
+
+    asyncio.run(scenario())
+
+
+def test_configuration_api_rejects_malformed_secret(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = create_app(configuration_store=LocalOnlineConfigurationStore(tmp_path / ".env"))
+        transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 54321))
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://127.0.0.1",
+        ) as client:
+            response = await client.put(
+                "/api/v1/online/configuration",
+                json={
+                    "online_enabled": False,
+                    "serpapi_api_key": "invalid key with spaces",
+                },
+            )
+        assert response.status_code == 422
+        assert not (tmp_path / ".env").exists()
 
     asyncio.run(scenario())
