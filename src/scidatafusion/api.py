@@ -139,6 +139,7 @@ class DemoDeliveryProvider:
                     phase1.confirmation.contract,
                     planning,
                     payload.retrieval_query,
+                    complete_profile=True,
                 ),
                 _execute_offline_figure(phase1.confirmation.contract),
                 _execute_offline_scientific(phase1.confirmation.contract),

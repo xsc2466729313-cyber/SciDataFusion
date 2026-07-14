@@ -1,0 +1,9 @@
+object_id,observation_time,band,magnitude,source_record_id,observation_time_unit,magnitude_unit,magnitude_error,source_catalog
+2004dt,2453249.79,B,15.769,VizieR:J/AJ/154/211/OptPhot:1,JD,mag,0.006,J/AJ/154/211/OptPhot
+2004dt,2453250.81,B,15.859,VizieR:J/AJ/154/211/OptPhot:2,JD,mag,0.008,J/AJ/154/211/OptPhot
+2004dt,2453251.83,B,15.961,VizieR:J/AJ/154/211/OptPhot:3,JD,mag,0.009,J/AJ/154/211/OptPhot
+2004dt,2453252.86,B,16.069,VizieR:J/AJ/154/211/OptPhot:4,JD,mag,0.007,J/AJ/154/211/OptPhot
+2004dt,2453253.78,B,16.142,VizieR:J/AJ/154/211/OptPhot:5,JD,mag,0.014,J/AJ/154/211/OptPhot
+2004dt,2453256.75,B,16.573,VizieR:J/AJ/154/211/OptPhot:6,JD,mag,0.007,J/AJ/154/211/OptPhot
+2004dt,2453257.73,B,16.715,VizieR:J/AJ/154/211/OptPhot:7,JD,mag,0.008,J/AJ/154/211/OptPhot
+2004dt,2453258.76,B,16.858,VizieR:J/AJ/154/211/OptPhot:8,JD,mag,0.008,J/AJ/154/211/OptPhot

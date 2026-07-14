@@ -47,6 +47,11 @@ class TabularExporter:
             **{name: pl.String for name in field_names},
         }
         frame = pl.DataFrame(rows, schema=schema)
+        if "observation_time" in field_names:
+            frame = frame.sort(
+                pl.col("observation_time").cast(pl.Decimal(scale=9), strict=False),
+                maintain_order=True,
+            )
         csv_bytes = frame.write_csv().encode("utf-8")
         parquet_buffer = io.BytesIO()
         frame.write_parquet(parquet_buffer)

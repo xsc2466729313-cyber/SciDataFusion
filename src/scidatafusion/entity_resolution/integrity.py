@@ -222,7 +222,9 @@ def verify_entity_result(
         _fail("M16 result does not match its immutable request")
     verify_entity_result_hashes(result)
     records = {item.normalized_record_id: item for item in upstream.record_set.records}
-    keys = request.normalization_request.mapping_request.extraction_request.contract.entity_keys
+    keys = request.policy.record_identity_fields or (
+        request.normalization_request.mapping_request.extraction_request.contract.entity_keys
+    )
     evidence_by_record = {
         item.normalized_record_id: item for item in result.resolution_evidence_set.records
     }

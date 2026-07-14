@@ -52,10 +52,12 @@ async def _exercise_api() -> None:
         status = await client.get("/api/v1/demo/status")
         assert status.status_code == 200
         summary = status.json()
-        assert summary["status"] == "needs_review"
-        assert summary["issue_count"] == 3
-        assert summary["formal_gold_record_count"] == 0
-        assert summary["known_limitations"]
+        assert summary["status"] == "succeeded"
+        assert summary["issue_count"] == 0
+        assert summary["formal_gold_record_count"] == 8
+        assert summary["quality_gate_passed"] is True
+        assert summary["quality_score"] == 1.0
+        assert summary["known_limitations"] == []
 
         workbench = await client.get("/api/v1/workbench")
         assert workbench.status_code == 200
@@ -71,20 +73,25 @@ async def _exercise_api() -> None:
             "成果交付",
         ]
         assert len(detail["sources"]) == 3
-        assert len(detail["artifacts"]) == 6
-        assert len(detail["evidence"]) == 4
+        assert len(detail["artifacts"]) == 7
+        assert len(detail["evidence"]) == 76
         assert len(detail["fields"]) == 6
-        assert len(detail["chart_points"]) == 3
-        assert len(detail["graph_nodes"]) == 18
-        assert len(detail["graph_edges"]) == 33
+        assert len(detail["chart_points"]) == 8
+        assert detail["chart_points"][0] == {
+            "x": "53249.29",
+            "y": "15.769",
+            "error_x": "0",
+            "error_y": "0.006",
+        }
+        assert len(detail["graph_nodes"]) == 87
+        assert len(detail["graph_edges"]) == 130
         assert detail["scientific_dataset"]["format"] == "fits"
         assert detail["scientific_dataset"]["variable_names"] == ["MJD", "MAG", "MAG_ERR"]
         assert detail["scientific_dataset"]["materialized_cell_count"] == 12
 
         issues = await client.get("/api/v1/demo/issues")
         assert issues.status_code == 200
-        assert len(issues.json()) == 3
-        assert all(item["evidence_count"] > 0 for item in issues.json())
+        assert issues.json() == []
 
         unauthorized = await client.get("/api/v1/demo/artifacts/scidatafusion-reproduction.zip")
         assert unauthorized.status_code == 422
@@ -95,10 +102,14 @@ async def _exercise_api() -> None:
         assert package.headers["content-type"] == "application/zip"
         assert package.content.startswith(b"PK")
 
-        blocked = await client.post("/api/v1/demo/download-tickets/gold.csv")
-        assert blocked.status_code == 409
-        assert blocked.json()["code"] == "quality_gate_failed"
-        assert blocked.headers["content-type"].startswith("application/problem+json")
+        gold_ticket = await client.post("/api/v1/demo/download-tickets/gold.csv")
+        assert gold_ticket.status_code == 200
+        gold = await client.get(gold_ticket.json()["download_url"])
+        assert gold.status_code == 200
+        assert gold.headers["content-type"].startswith("text/csv")
+        lines = gold.text.splitlines()
+        assert len(lines) == 9
+        assert "2004dt,53249.29,VizieR:J/AJ/154/211/OptPhot:1" in lines[1]
 
         tampered_url = ticket.json()["download_url"].replace("token=", "token=x")
         tampered = await client.get(tampered_url)

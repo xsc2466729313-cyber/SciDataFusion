@@ -404,6 +404,7 @@ def _document(
     graph_node_id: str,
     producer_version: str,
 ) -> IndexDocument:
+    normalized_text = text.strip()
     draft = IndexDocument.model_validate(
         {
             **_metadata(request, producer_version),
@@ -411,8 +412,8 @@ def _document(
             "source_id": source_id,
             "kind": kind,
             "location": location,
-            "text": text,
-            "text_sha256": hashlib.sha256(text.encode()).hexdigest(),
+            "text": normalized_text,
+            "text_sha256": hashlib.sha256(normalized_text.encode()).hexdigest(),
             "graph_node_id": graph_node_id,
             "visibility": Visibility.TASK_PRIVATE,
             "permission_tags": ("task_read",),

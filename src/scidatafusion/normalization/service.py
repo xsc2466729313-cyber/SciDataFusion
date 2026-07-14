@@ -6,10 +6,11 @@ import asyncio
 import hashlib
 from concurrent.futures import Future
 from threading import RLock
+from typing import Literal
 
 from scidatafusion.artifacts.storage import BronzeByteStore
 from scidatafusion.contracts.events import EventEnvelope, EventType, ProducerRef
-from scidatafusion.contracts.extraction import ExtractedFieldCandidate
+from scidatafusion.contracts.extraction import EvidenceAtom, ExtractedFieldCandidate
 from scidatafusion.contracts.mapping import FieldMapping
 from scidatafusion.contracts.normalization import (
     NormalizationIssue,
@@ -30,6 +31,7 @@ from scidatafusion.contracts.normalization import (
     TransformationRecordSet,
 )
 from scidatafusion.contracts.scientific import DataType, FieldContract
+from scidatafusion.contracts.tables import TableIR
 from scidatafusion.errors import AppError, ErrorCode
 from scidatafusion.normalization.checkpoints import (
     MemoryNormalizationCheckpointStore,
@@ -51,7 +53,7 @@ from scidatafusion.normalization.integrity import (
     verify_normalization_request,
     verify_normalization_result,
 )
-from scidatafusion.normalization.rules import parse_decimal_exact
+from scidatafusion.normalization.rules import jd_to_mjd_exact, parse_decimal_exact
 
 
 class ScientificNormalizationService:
@@ -124,6 +126,9 @@ class ScientificNormalizationService:
             item.candidate_id: item
             for item in request.mapping_request.extraction_result.candidate_set.candidates
         }
+        evidence = request.mapping_request.extraction_result.evidence_set.atoms
+        tables = request.mapping_request.extraction_request.table_parsing_result.tables
+        context_by_row = _context_evidence_by_row(tables, evidence)
         contracts = {
             item.name: item for item in request.mapping_request.extraction_request.contract.fields
         }
@@ -134,7 +139,12 @@ class ScientificNormalizationService:
             candidate = candidates[mapping.source_candidate_id]
             contract = contracts[mapping.target_field_name]
             field_transformations, field_issues, field = _normalize_field(
-                request, mapping, candidate, contract, self._producer_version
+                request,
+                mapping,
+                candidate,
+                contract,
+                context_by_row,
+                self._producer_version,
             )
             transformations.extend(field_transformations)
             issues.extend(field_issues)
@@ -156,12 +166,16 @@ def _normalize_field(
     mapping: FieldMapping,
     candidate: ExtractedFieldCandidate,
     contract: FieldContract,
+    context_by_row: dict[tuple[str, int, str], tuple[str, str]],
     producer_version: str,
 ) -> tuple[tuple[TransformationRecord, ...], tuple[NormalizationIssue, ...], NormalizedField]:
     transformations: list[TransformationRecord] = []
     issue_codes: list[NormalizationIssueCode] = []
     normalized: str | None = candidate.raw_value
     kind: NormalizedValueKind | None = NormalizedValueKind.STRING
+    source_unit: str | None = None
+    time_scale: str | None = None
+    context_evidence_ids: tuple[str, ...] = ()
     if not mapping.eligible_for_m15:
         normalized = None
         kind = None
@@ -187,9 +201,66 @@ def _normalize_field(
                     producer_version,
                 )
             )
-    if mapping.eligible_for_m15 and contract.unit_dimension is not None:
+    if request.context_evidence_enabled and mapping.eligible_for_m15:
+        unit_name = {
+            "observation_time": "observation_time_unit",
+            "magnitude": "magnitude_unit",
+        }.get(contract.name)
+        unit_evidence = (
+            None
+            if unit_name is None
+            else context_by_row.get(
+                (candidate.source_table_id, candidate.source_row_index, unit_name)
+            )
+        )
+        if unit_evidence is not None and unit_evidence[0] in contract.allowed_units:
+            source_unit = unit_evidence[0]
+            context_evidence_ids = (*context_evidence_ids, unit_evidence[1])
+        if contract.semantic_type == "astronomical_time":
+            scale_evidence = context_by_row.get(
+                (
+                    candidate.source_table_id,
+                    candidate.source_row_index,
+                    "observation_time_scale",
+                )
+            )
+            if scale_evidence is not None and scale_evidence[0] == "UTC":
+                time_scale = scale_evidence[0]
+                context_evidence_ids = (*context_evidence_ids, scale_evidence[1])
+    if (
+        request.jd_to_mjd_conversion_enabled
+        and mapping.eligible_for_m15
+        and contract.name == "observation_time"
+        and source_unit == "JD"
+        and contract.target_unit == "MJD"
+        and normalized is not None
+    ):
+        converted = jd_to_mjd_exact(candidate.raw_value)
+        normalized = converted.text
+        transformations.append(
+            _transformation(
+                request,
+                mapping,
+                candidate,
+                normalized,
+                converted.decimal_places,
+                converted.significant_digits,
+                producer_version,
+                kind=TransformationKind.JD_TO_MJD_EXACT,
+            )
+        )
+    if mapping.eligible_for_m15 and contract.unit_dimension is not None and source_unit is None:
         issue_codes.append(NormalizationIssueCode.SOURCE_UNIT_MISSING)
-    if mapping.eligible_for_m15 and contract.semantic_type == "astronomical_time":
+    if (
+        mapping.eligible_for_m15
+        and contract.semantic_type == "astronomical_time"
+        and time_scale is None
+        and not (
+            request.jd_to_mjd_conversion_enabled
+            and source_unit == "JD"
+            and contract.target_unit == "MJD"
+        )
+    ):
         issue_codes.append(NormalizationIssueCode.TIME_SCALE_MISSING)
     issue_records = tuple(
         _issue(request, mapping, candidate, code, producer_version) for code in issue_codes
@@ -226,6 +297,9 @@ def _normalize_field(
         issue_ids=issue_ids,
         evidence_ids=candidate.evidence_ids,
         entity_evidence_ids=candidate.entity_evidence_ids,
+        source_unit=source_unit,
+        time_scale=time_scale,
+        context_evidence_ids=tuple(dict.fromkeys(context_evidence_ids)),
         status=status,
         eligible_for_m16=status is NormalizedFieldStatus.NORMALIZED,
         normalized_field_hash="0" * 64,
@@ -240,6 +314,26 @@ def _normalize_field(
     )
 
 
+def _context_evidence_by_row(
+    tables: tuple[TableIR, ...],
+    evidence: tuple[EvidenceAtom, ...],
+) -> dict[tuple[str, int, str], tuple[str, str]]:
+    result: dict[tuple[str, int, str], tuple[str, str]] = {}
+    evidence_by_cell = {item.cell_id: item for item in evidence}
+    for table in tables:
+        headers = table.cells[: table.column_count]
+        for row_index in range(1, table.row_count):
+            row = table.cells[row_index * table.column_count : (row_index + 1) * table.column_count]
+            for header, cell in zip(headers, row, strict=True):
+                atom = evidence_by_cell.get(cell.cell_id)
+                if atom is not None:
+                    result[(table.table_id, row_index, header.decoded_text)] = (
+                        atom.raw_value,
+                        atom.evidence_id,
+                    )
+    return result
+
+
 def _transformation(
     request: NormalizationRequest,
     mapping: FieldMapping,
@@ -248,7 +342,17 @@ def _transformation(
     decimal_places: int,
     significant_digits: int,
     producer_version: str,
+    *,
+    kind: TransformationKind = TransformationKind.PARSE_DECIMAL_EXACT,
 ) -> TransformationRecord:
+    formula: Literal[
+        "Decimal(raw_value); require finite; format(value, 'f')",
+        "Decimal(raw_value) - Decimal('2400000.5'); require finite; format(value, 'f')",
+    ] = (
+        "Decimal(raw_value) - Decimal('2400000.5'); require finite; format(value, 'f')"
+        if kind is TransformationKind.JD_TO_MJD_EXACT
+        else "Decimal(raw_value); require finite; format(value, 'f')"
+    )
     draft = TransformationRecord(
         task_id=request.mapping_result.task_id,
         run_id=request.mapping_result.run_id,
@@ -259,12 +363,12 @@ def _transformation(
         mapping_id=mapping.mapping_id,
         source_candidate_id=candidate.candidate_id,
         field_name=mapping.target_field_name,
-        kind=TransformationKind.PARSE_DECIMAL_EXACT,
+        kind=kind,
         raw_value=candidate.raw_value,
         raw_value_sha256=candidate.raw_value_sha256,
         normalized_value=normalized,
         normalized_value_sha256=_sha(normalized),
-        formula="Decimal(raw_value); require finite; format(value, 'f')",
+        formula=formula,
         library="python.decimal",
         library_version=request.runtime.decimal_library_version,
         reversible=True,

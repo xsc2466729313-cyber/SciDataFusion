@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from scidatafusion.contracts.datasets import ScientificParsingRequest, ScientificParsingResult
 from scidatafusion.contracts.delivery import DeliveryResult
-from scidatafusion.contracts.extraction import ExtractedFieldCandidate
+from scidatafusion.contracts.extraction import (
+    ExtractedFieldCandidate,
+    ExtractionRequest,
+    ExtractionResult,
+)
 from scidatafusion.contracts.figures import FigureDigitizationResult
 from scidatafusion.contracts.fusion import FusedField
 from scidatafusion.contracts.knowledge import KnowledgeRequest, KnowledgeResult
@@ -15,6 +19,7 @@ from scidatafusion.contracts.online import (
     OnlineResearchResult,
     ResearchExecutionMode,
 )
+from scidatafusion.contracts.quality import QualityAuditResult
 from scidatafusion.contracts.scientific import FieldContract
 from scidatafusion.contracts.workbench import (
     WorkbenchArtifact,
@@ -77,6 +82,7 @@ def build_workbench_snapshot(
     contract = extraction_request.contract
     selected = parse_request.download_request.selected_source_set
     download = parse_request.download_result
+    gold_chart_points = _gold_chart_points(quality, extraction_request, extraction)
 
     evidence_field: dict[str, str] = {}
     candidate_by_field = {item.field_name: item for item in extraction.candidate_set.candidates}
@@ -275,14 +281,18 @@ def build_workbench_snapshot(
             )
             for item in knowledge.graph.edges
         ),
-        chart_points=tuple(
-            WorkbenchChartPoint(
-                x=item.data_x,
-                y=item.data_y,
-                error_x=item.error_x,
-                error_y=item.error_y,
+        chart_points=(
+            gold_chart_points
+            if gold_chart_points
+            else tuple(
+                WorkbenchChartPoint(
+                    x=item.data_x,
+                    y=item.data_y,
+                    error_x=item.error_x,
+                    error_y=item.error_y,
+                )
+                for item in figure.figure_ir.point_set.points
             )
-            for item in figure.figure_ir.point_set.points
         ),
         scientific_dataset=WorkbenchScientificDataset(
             format=scientific_request.artifact.format.value,
@@ -303,6 +313,59 @@ def build_workbench_snapshot(
         package_filename=delivery.package.filename,
         formal_gold_available=quality.formal_gold_dataset is not None,
     )
+
+
+def _gold_chart_points(
+    quality: QualityAuditResult,
+    extraction_request: ExtractionRequest,
+    extraction: ExtractionResult,
+) -> tuple[WorkbenchChartPoint, ...]:
+    """Build the displayed light curve from quality-approved Gold records."""
+
+    formal = quality.formal_gold_dataset
+    if formal is None:
+        return ()
+    evidence_by_id = {item.evidence_id: item for item in extraction.evidence_set.atoms}
+    tables = extraction_request.table_parsing_result.tables
+    errors: dict[tuple[str, int], str] = {}
+    for table in tables:
+        headers = table.cells[: table.column_count]
+        error_column = next(
+            (
+                index
+                for index, header in enumerate(headers)
+                if header.decoded_text == "magnitude_error"
+            ),
+            None,
+        )
+        if error_column is None:
+            continue
+        for row_index in range(1, table.row_count):
+            cell = table.cells[row_index * table.column_count + error_column]
+            if cell.decoded_text:
+                errors[(table.table_id, row_index)] = cell.decoded_text
+    points: list[WorkbenchChartPoint] = []
+    for record in formal.records:
+        fields = {item.field_name: item for item in record.fields}
+        time_field = fields.get("observation_time")
+        magnitude_field = fields.get("magnitude")
+        if time_field is None or magnitude_field is None:
+            continue
+        magnitude_atom = evidence_by_id.get(magnitude_field.evidence_ids[0])
+        error_y = (
+            "0"
+            if magnitude_atom is None
+            else errors.get((magnitude_atom.table_id, magnitude_atom.row_index), "0")
+        )
+        points.append(
+            WorkbenchChartPoint(
+                x=time_field.value,
+                y=magnitude_field.value,
+                error_x="0",
+                error_y=error_y,
+            )
+        )
+    return tuple(sorted(points, key=lambda item: (float(item.x), float(item.y))))
 
 
 def _field_view(

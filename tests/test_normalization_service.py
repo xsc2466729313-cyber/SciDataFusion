@@ -9,7 +9,11 @@ import pytest
 from pydantic import ValidationError
 
 from scidatafusion.artifacts.storage import BronzeByteStore
-from scidatafusion.cli import _build_search_planning, _execute_offline_mapping
+from scidatafusion.cli import (
+    _build_search_planning,
+    _execute_offline_mapping,
+    _execute_offline_normalization,
+)
 from scidatafusion.contracts.normalization import (
     NormalizationExecutionMode,
     NormalizationIssueCode,
@@ -19,6 +23,7 @@ from scidatafusion.contracts.normalization import (
     NormalizedField,
     NormalizedFieldStatus,
     NormalizedValueKind,
+    TransformationKind,
 )
 from scidatafusion.errors import AppError, ErrorCode
 from scidatafusion.normalization.checkpoints import MemoryNormalizationCheckpointStore
@@ -28,7 +33,7 @@ from scidatafusion.normalization.integrity import (
     verify_normalization_result,
     verify_normalization_result_hashes,
 )
-from scidatafusion.normalization.rules import parse_decimal_exact
+from scidatafusion.normalization.rules import jd_to_mjd_exact, parse_decimal_exact
 from scidatafusion.normalization.service import ScientificNormalizationService
 
 GOAL = "Study Type Ia supernova light curves using multi-source data integration into CSV."
@@ -132,6 +137,40 @@ def test_exact_decimal_rule_rejects_non_finite_and_preserves_scale() -> None:
         with pytest.raises(AppError) as captured:
             parse_decimal_exact(value)
         assert captured.value.code is ErrorCode.VALIDATION_FAILED
+
+
+def test_vizier_profile_preserves_jd_evidence_and_records_exact_mjd_conversion() -> None:
+    phase1, planning = _build_search_planning(GOAL, "vizier-normalization-reviewer")
+    assert phase1.confirmation is not None
+    assert planning is not None
+    request, result, store = asyncio.run(
+        _execute_offline_normalization(
+            phase1.confirmation.contract,
+            planning,
+            complete_profile=True,
+        )
+    )
+    verify_normalization_result(result, request, store)
+    fields = tuple(field for record in result.record_set.records for field in record.fields)
+    converted = next(
+        field
+        for field in fields
+        if field.field_name == "observation_time" and field.raw_value == "2453249.79"
+    )
+    assert converted.normalized_value == "53249.29"
+    assert converted.source_unit == "JD"
+    assert converted.time_scale is None
+    assert converted.context_evidence_ids
+    transformations = {item.transformation_id: item for item in result.transformation_set.records}
+    conversion = next(
+        transformations[item]
+        for item in converted.transformation_ids
+        if transformations[item].kind is TransformationKind.JD_TO_MJD_EXACT
+    )
+    assert conversion.formula.startswith("Decimal(raw_value) - Decimal('2400000.5')")
+    assert conversion.raw_value == "2453249.79"
+    assert conversion.normalized_value == "53249.29"
+    assert jd_to_mjd_exact("2453249.79").text == "53249.29"
 
 
 def test_result_contract_and_integrity_fail_closed(

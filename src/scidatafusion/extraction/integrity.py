@@ -56,6 +56,7 @@ def calculate_extraction_input_hash(request: ExtractionRequest) -> str:
             "m10_output_hash": request.table_parsing_result.output_hash,
             "policy_hash": calculate_extraction_policy_hash(request.policy),
             "runtime_hash": request.runtime.runtime_hash,
+            "context_headers": request.context_headers,
         }
     )
 

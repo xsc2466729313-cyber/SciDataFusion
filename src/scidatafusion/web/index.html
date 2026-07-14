@@ -168,7 +168,8 @@
       .app { grid-template-columns:minmax(0,1fr); }
       aside { position:static; height:auto; padding:12px 14px; }
       .brand { padding:0 0 10px; }
-      nav { margin-top:10px; display:flex; overflow:auto; }
+      nav { margin-top:10px; display:flex; overflow-x:auto; scrollbar-width:none; }
+      nav::-webkit-scrollbar { display:none; }
       .nav-btn { width:auto; white-space:nowrap; }
       .aside-meta { display:none; }
       .query-band,.dashboard-grid,.delivery-band { grid-template-columns:minmax(0,1fr); }

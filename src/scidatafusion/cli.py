@@ -1237,10 +1237,14 @@ async def _execute_offline_artifacts_with_request(
     selection: SourceSelectionResult,
     *,
     store: BronzeByteStore,
+    complete_profile: bool = False,
 ) -> tuple[ArtifactDownloadRequest, ArtifactDownloadResult]:
     """Execute M07 while retaining the exact request and read-only Bronze store for M08."""
 
-    bundle = build_offline_ia_artifact_bundle(selection.selected_source_set)
+    bundle = build_offline_ia_artifact_bundle(
+        selection.selected_source_set,
+        complete_vizier_profile=complete_profile,
+    )
     request = ArtifactDownloadRequest(
         selected_source_set=selection.selected_source_set,
         policy=bundle.policy,
@@ -1261,6 +1265,8 @@ async def _execute_offline_artifacts_with_request(
 async def _execute_offline_extraction(
     contract: ScientificDataContract,
     planning: SearchPlanningResult,
+    *,
+    complete_profile: bool = False,
 ) -> tuple[ExtractionRequest, ExtractionResult, MemoryBronzeStore]:
     """Execute the exact offline M00-M13 tail and retain its immutable request chain."""
 
@@ -1269,6 +1275,7 @@ async def _execute_offline_extraction(
     download_request, download_result = await _execute_offline_artifacts_with_request(
         selection,
         store=store,
+        complete_profile=complete_profile,
     )
     parse_bundle = build_offline_parse_planning_bundle()
     parse_request = ParsePlanningRequest(
@@ -1301,6 +1308,18 @@ async def _execute_offline_extraction(
         policy=extraction_bundle.policy,
         runtime=extraction_bundle.runtime,
         requested_at=extraction_bundle.runtime.checked_at,
+        context_headers=(
+            (
+                "observation_time_unit",
+                "observation_time_scale",
+                "magnitude_unit",
+                "magnitude_error",
+                "original_jd",
+                "source_catalog",
+            )
+            if complete_profile
+            else ()
+        ),
     )
     extraction_result = await EvidenceFirstExtractionService(bronze_store=store).execute(
         extraction_request
@@ -1311,12 +1330,15 @@ async def _execute_offline_extraction(
 async def _execute_offline_mapping(
     contract: ScientificDataContract,
     planning: SearchPlanningResult,
+    *,
+    complete_profile: bool = False,
 ) -> tuple[MappingRequest, MappingResult, MemoryBronzeStore]:
     """Execute M14 over the exact offline M13 result without network or model calls."""
 
     extraction_request, extraction_result, store = await _execute_offline_extraction(
         contract,
         planning,
+        complete_profile=complete_profile,
     )
     bundle = build_offline_mapping_bundle(not_before=extraction_result.created_at)
     request = MappingRequest(
@@ -1333,10 +1355,14 @@ async def _execute_offline_mapping(
 async def _execute_offline_normalization(
     contract: ScientificDataContract,
     planning: SearchPlanningResult,
+    *,
+    complete_profile: bool = False,
 ) -> tuple[NormalizationRequest, NormalizationResult, MemoryBronzeStore]:
     """Execute M15 over the exact offline M14 result without network or model calls."""
 
-    mapping_request, mapping_result, store = await _execute_offline_mapping(contract, planning)
+    mapping_request, mapping_result, store = await _execute_offline_mapping(
+        contract, planning, complete_profile=complete_profile
+    )
     bundle = build_offline_normalization_bundle(not_before=mapping_result.created_at)
     request = NormalizationRequest(
         mapping_request=mapping_request,
@@ -1344,6 +1370,8 @@ async def _execute_offline_normalization(
         policy=bundle.policy,
         runtime=bundle.runtime,
         requested_at=bundle.runtime.checked_at,
+        context_evidence_enabled=complete_profile,
+        jd_to_mjd_conversion_enabled=complete_profile,
     )
     result = await ScientificNormalizationService(bronze_store=store).execute(request)
     return request, result, store
@@ -1352,17 +1380,25 @@ async def _execute_offline_normalization(
 async def _execute_offline_entity_resolution(
     contract: ScientificDataContract,
     planning: SearchPlanningResult,
+    *,
+    complete_profile: bool = False,
 ) -> tuple[EntityResolutionRequest, EntityResolutionResult, MemoryBronzeStore]:
     """Execute M16 over the exact offline M15 result without network or model calls."""
 
     normalization_request, normalization_result, store = await _execute_offline_normalization(
-        contract, planning
+        contract, planning, complete_profile=complete_profile
     )
     bundle = build_offline_entity_resolution_bundle(not_before=normalization_result.created_at)
     request = EntityResolutionRequest(
         normalization_request=normalization_request,
         normalization_result=normalization_result,
-        policy=bundle.policy,
+        policy=(
+            bundle.policy.model_copy(
+                update={"record_identity_fields": ("object_id", "source_record_id")}
+            )
+            if complete_profile
+            else bundle.policy
+        ),
         runtime=bundle.runtime,
         requested_at=bundle.runtime.checked_at,
     )
@@ -1373,11 +1409,13 @@ async def _execute_offline_entity_resolution(
 async def _execute_offline_fusion(
     contract: ScientificDataContract,
     planning: SearchPlanningResult,
+    *,
+    complete_profile: bool = False,
 ) -> tuple[FusionRequest, FusionResult, MemoryBronzeStore]:
     """Execute M17 over the exact offline M16 result without network or model calls."""
 
     entity_request, entity_result, store = await _execute_offline_entity_resolution(
-        contract, planning
+        contract, planning, complete_profile=complete_profile
     )
     bundle = build_offline_fusion_bundle(not_before=entity_result.created_at)
     request = FusionRequest(
@@ -1394,10 +1432,14 @@ async def _execute_offline_fusion(
 async def _execute_offline_quality_audit(
     contract: ScientificDataContract,
     planning: SearchPlanningResult,
+    *,
+    complete_profile: bool = False,
 ) -> tuple[QualityAuditRequest, QualityAuditResult, MemoryBronzeStore]:
     """Execute M18 over the exact offline M17 result without network or model calls."""
 
-    fusion_request, fusion_result, store = await _execute_offline_fusion(contract, planning)
+    fusion_request, fusion_result, store = await _execute_offline_fusion(
+        contract, planning, complete_profile=complete_profile
+    )
     bundle = build_offline_quality_bundle(not_before=fusion_result.created_at)
     request = QualityAuditRequest(
         fusion_request=fusion_request,
@@ -1414,11 +1456,13 @@ async def _execute_offline_knowledge(
     contract: ScientificDataContract,
     planning: SearchPlanningResult,
     query: str,
+    *,
+    complete_profile: bool = False,
 ) -> tuple[KnowledgeRequest, KnowledgeResult, MemoryBronzeStore]:
     """Execute M19 over the exact offline M18 result without network or model calls."""
 
     quality_request, quality_result, store = await _execute_offline_quality_audit(
-        contract, planning
+        contract, planning, complete_profile=complete_profile
     )
     bundle = build_offline_knowledge_bundle(not_before=quality_result.created_at)
     request = KnowledgeRequest(

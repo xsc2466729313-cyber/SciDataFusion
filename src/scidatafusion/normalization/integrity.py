@@ -47,6 +47,8 @@ def calculate_normalization_input_hash(request: NormalizationRequest) -> str:
             "mapping_output_hash": request.mapping_result.output_hash,
             "policy_hash": calculate_normalization_policy_hash(request.policy),
             "runtime_hash": request.runtime.runtime_hash,
+            "context_evidence_enabled": request.context_evidence_enabled,
+            "jd_to_mjd_conversion_enabled": request.jd_to_mjd_conversion_enabled,
         }
     )
 
@@ -241,6 +243,15 @@ def verify_normalization_result(
             )
         ):
             _fail("M15 field does not exactly derive from M13/M14 lineage")
+        if any(
+            evidence_id
+            not in {
+                item.evidence_id
+                for item in request.mapping_request.extraction_result.evidence_set.atoms
+            }
+            for evidence_id in field.context_evidence_ids
+        ):
+            _fail("M15 context evidence must resolve to an upstream EvidenceAtom")
 
 
 def _fail(message: str) -> NoReturn:

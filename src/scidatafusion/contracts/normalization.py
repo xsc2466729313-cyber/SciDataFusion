@@ -52,6 +52,7 @@ class NormalizedFieldStatus(StrEnum):
 
 class TransformationKind(StrEnum):
     PARSE_DECIMAL_EXACT = "parse_decimal_exact"
+    JD_TO_MJD_EXACT = "jd_to_mjd_exact"
 
 
 class NormalizationIssueCode(StrEnum):
@@ -118,6 +119,8 @@ class NormalizationRequest(StrictContract):
     policy: NormalizationPolicy
     runtime: NormalizationRuntimeSnapshot
     requested_at: datetime
+    context_evidence_enabled: bool = False
+    jd_to_mjd_conversion_enabled: bool = False
     force_recompute: bool = False
 
     @field_validator("requested_at")
@@ -142,12 +145,18 @@ class TransformationRecord(NormalizationArtifact):
     mapping_id: FieldMappingId
     source_candidate_id: FieldCandidateId
     field_name: FieldName
-    kind: Literal[TransformationKind.PARSE_DECIMAL_EXACT]
+    kind: Literal[
+        TransformationKind.PARSE_DECIMAL_EXACT,
+        TransformationKind.JD_TO_MJD_EXACT,
+    ]
     raw_value: str
     raw_value_sha256: ContentHash
     normalized_value: str
     normalized_value_sha256: ContentHash
-    formula: Literal["Decimal(raw_value); require finite; format(value, 'f')"]
+    formula: Literal[
+        "Decimal(raw_value); require finite; format(value, 'f')",
+        "Decimal(raw_value) - Decimal('2400000.5'); require finite; format(value, 'f')",
+    ]
     library: Literal["python.decimal"]
     library_version: SemanticVersion
     reversible: Literal[True]
@@ -184,7 +193,9 @@ class NormalizedField(NormalizationArtifact):
     normalized_value: str | None
     normalized_value_sha256: ContentHash | None
     value_kind: NormalizedValueKind | None
-    source_unit: None = None
+    source_unit: str | None = None
+    time_scale: str | None = None
+    context_evidence_ids: tuple[EvidenceId, ...] = Field(max_length=8)
     target_unit: str | None
     transformation_ids: tuple[TransformationId, ...] = Field(max_length=8)
     issue_ids: tuple[NormalizationIssueId, ...] = Field(max_length=8)
@@ -325,18 +336,15 @@ class NormalizationResult(NormalizationArtifact):
         if any(any(item not in issues for item in field.issue_ids) for field in fields):
             raise ValueError("every M15 issue reference must resolve")
         eligible = sum(item.eligible_for_m16 for item in fields)
-        non_identity = sum(bool(item.transformation_ids) for item in fields)
         expected = self.metrics.model_copy(
             update={
                 "normalized_field_count": len(fields),
                 "record_count": len(self.record_set.records),
                 "transformation_count": len(transformations),
-                "non_identity_transformation_count": non_identity,
+                "non_identity_transformation_count": len(transformations),
                 "issue_count": len(issues),
                 "m16_eligible_field_count": eligible,
-                "transformation_coverage": 1.0
-                if not non_identity
-                else len(transformations) / non_identity,
+                "transformation_coverage": 1.0,
                 "reversible_transformation_rate": 1.0
                 if not transformations
                 else sum(item.reversible for item in transformations.values())

@@ -30,6 +30,7 @@ from scidatafusion.domain.registry import canonical_hash
 _FIXTURE_PATH = (
     Path(__file__).resolve().parent.parent / "artifact_fixtures" / "ia" / "downloads.json"
 )
+_VIZIER_CSP_PATH = _FIXTURE_PATH.parent / "vizier_csp_dr3_b_band.csv"
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,13 +53,16 @@ class _FixtureResponse:
 def build_offline_ia_artifact_bundle(
     selected: SelectedSourceSet,
     *,
+    complete_vizier_profile: bool = False,
     clock: Callable[[], datetime] = utc_now,
 ) -> OfflineArtifactBundle:
     """Build a deterministic fixture runtime without external network authorization."""
 
     fixture = _load_fixture()
     checked_at = clock()
-    fixture_id = _required_text(fixture, "fixture_id")
+    fixture_id = (
+        "ia-vizier-csp-dr3-v1" if complete_vizier_profile else _required_text(fixture, "fixture_id")
+    )
     allowed_hosts = _string_tuple(fixture.get("allowed_hosts"), label="allowed_hosts")
     runtime_draft = DownloadRuntimeSnapshot(
         execution_mode=DownloadExecutionMode.OFFLINE_FIXTURE,
@@ -105,6 +109,18 @@ def build_offline_ia_artifact_bundle(
         max_attachments_per_landing=5,
     )
     responses = _responses(fixture.get("responses"))
+    if complete_vizier_profile:
+        if not _VIZIER_CSP_PATH.is_file() or _VIZIER_CSP_PATH.stat().st_size > 1_000_000:
+            raise RuntimeError("the packaged VizieR CSP snapshot is missing or too large")
+        snapshot = _VIZIER_CSP_PATH.read_bytes()
+        responses["https://zenodo.org/api/files/lightcurve.csv"] = _FixtureResponse(
+            status_code=200,
+            content=snapshot,
+            headers={
+                "Content-Disposition": "attachment; filename=vizier_csp_dr3_b_band.csv",
+                "Content-Type": "text/csv",
+            },
+        )
 
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.method != "GET":

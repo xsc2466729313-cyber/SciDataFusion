@@ -76,6 +76,7 @@ class EntityResolutionPolicy(StrictContract):
     auto_merge_threshold: float = Field(default=1.0, ge=1.0, le=1.0, allow_inf_nan=False)
     max_records: int = Field(default=1_000_000, ge=1, le=1_000_000)
     max_candidate_pairs: int = Field(default=5_000_000, ge=1, le=50_000_000)
+    record_identity_fields: tuple[FieldName, ...] = ()
     require_all_entity_keys: Literal[True] = True
     stable_identifier_conflict_blocks_merge: Literal[True] = True
     allow_fuzzy_auto_merge: Literal[False] = False

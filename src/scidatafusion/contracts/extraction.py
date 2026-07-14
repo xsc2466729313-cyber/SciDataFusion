@@ -159,6 +159,17 @@ class ExtractionRequest(StrictContract):
     policy: ExtractionPolicy
     runtime: ExtractionRuntimeSnapshot
     requested_at: datetime
+    context_headers: tuple[
+        Literal[
+            "observation_time_unit",
+            "observation_time_scale",
+            "magnitude_unit",
+            "magnitude_error",
+            "original_jd",
+            "source_catalog",
+        ],
+        ...,
+    ] = ()
     force_recompute: bool = False
 
     @field_validator("requested_at")

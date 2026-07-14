@@ -126,7 +126,7 @@ class EntityResolutionService:
         records = request.normalization_result.record_set.records
         if len(records) > request.policy.max_records:
             raise AppError(ErrorCode.BUDGET_EXCEEDED, "M16 record count exceeds policy")
-        required_keys = (
+        required_keys = request.policy.record_identity_fields or (
             request.normalization_request.mapping_request.extraction_request.contract.entity_keys
         )
         evidence_records: list[EntityResolutionEvidence] = []

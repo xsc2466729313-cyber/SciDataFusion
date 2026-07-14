@@ -33,3 +33,19 @@ def parse_decimal_exact(raw_value: str) -> ExactDecimal:
         decimal_places=max(-exponent, 0),
         significant_digits=max(len(digits), 1),
     )
+
+
+def jd_to_mjd_exact(raw_value: str) -> ExactDecimal:
+    """Convert the JD representation to MJD without asserting a time scale."""
+
+    parsed = parse_decimal_exact(raw_value)
+    value = Decimal(parsed.text) - Decimal("2400000.5")
+    text = format(value, "f")
+    exponent = value.as_tuple().exponent
+    if not isinstance(exponent, int):
+        raise AppError(ErrorCode.VALIDATION_FAILED, "M15 converted decimal exponent is invalid")
+    return ExactDecimal(
+        text=text,
+        decimal_places=max(-exponent, 0),
+        significant_digits=max(len(value.as_tuple().digits), 1),
+    )

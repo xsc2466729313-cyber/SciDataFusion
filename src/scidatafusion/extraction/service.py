@@ -133,6 +133,7 @@ class EvidenceFirstExtractionService:
         input_rows = 0
         extracted_rows = 0
         for table in request.table_parsing_result.tables:
+            context_headers = set(request.context_headers)
             data_rows = table.row_count - table.header_hierarchy.header_row_count
             input_rows += max(0, data_rows)
             if input_rows > request.policy.max_rows:
@@ -169,7 +170,7 @@ class EvidenceFirstExtractionService:
                         )
                     )
             for header in headers:
-                if header.decoded_text not in fields:
+                if header.decoded_text not in fields and header.decoded_text not in context_headers:
                     gaps.append(
                         _gap(
                             ExtractionGapCode.UNMAPPED_HEADER,
@@ -186,8 +187,14 @@ class EvidenceFirstExtractionService:
                 mapped = {
                     header.decoded_text: (header, value)
                     for header, value in zip(headers, row_cells, strict=True)
-                    if header.decoded_text in fields
-                    and fields[header.decoded_text].requirement is not FieldRequirement.DERIVED
+                    if (
+                        header.decoded_text in context_headers
+                        or (
+                            header.decoded_text in fields
+                            and fields[header.decoded_text].requirement
+                            is not FieldRequirement.DERIVED
+                        )
+                    )
                 }
                 missing_entity = tuple(
                     name
@@ -228,6 +235,8 @@ class EvidenceFirstExtractionService:
                 row_group_id = _row_group_id(table, row_index, entity_ids)
                 row_candidate_count = 0
                 for field_name, (header, value_cell) in mapped.items():
+                    if field_name not in fields:
+                        continue
                     selected_atom = row_atoms.get(field_name)
                     if selected_atom is None:
                         continue
