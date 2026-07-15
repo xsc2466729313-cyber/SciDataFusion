@@ -28,6 +28,8 @@ async def _exercise_api() -> None:
         assert "联网配置" in page.text
         assert 'id="config-form"' in page.text
         assert 'id="cfg-base-url"' in page.text
+        assert 'id="evidence-graph"' in page.text
+        assert 'from "/assets/knowledge-graph.js"' in page.text
         assert "https://dashscope.aliyuncs.com/compatible-mode/v1" in page.text
         assert "保存并应用" in page.text
         assert "规划模型" not in page.text
@@ -85,9 +87,37 @@ async def _exercise_api() -> None:
         }
         assert len(detail["graph_nodes"]) == 87
         assert len(detail["graph_edges"]) == 130
+        assert set(detail["graph_nodes"][0]) == {
+            "node_id",
+            "kind",
+            "source_id",
+            "label",
+            "trusted",
+        }
+        assert set(detail["graph_edges"][0]) == {
+            "source",
+            "target",
+            "kind",
+            "evidence_refs",
+        }
+        assert detail["graph_nodes"][0]["source_id"]
+        assert detail["graph_edges"][0]["evidence_refs"]
         assert detail["scientific_dataset"]["format"] == "fits"
         assert detail["scientific_dataset"]["variable_names"] == ["MJD", "MAG", "MAG_ERR"]
         assert detail["scientific_dataset"]["materialized_cell_count"] == 12
+
+        graph_script = await client.get("/assets/knowledge-graph.js")
+        assert graph_script.status_code == 200
+        assert graph_script.headers["content-type"].startswith("text/javascript")
+        assert b"createEvidenceGraph" in graph_script.content
+        three_script = await client.get("/assets/three.module.min.js")
+        assert three_script.status_code == 200
+        assert three_script.headers["content-type"].startswith("text/javascript")
+        assert len(three_script.content) > 300_000
+        three_core_script = await client.get("/assets/three.core.min.js")
+        assert three_core_script.status_code == 200
+        assert three_core_script.headers["content-type"].startswith("text/javascript")
+        assert len(three_core_script.content) > 300_000
 
         issues = await client.get("/api/v1/demo/issues")
         assert issues.status_code == 200

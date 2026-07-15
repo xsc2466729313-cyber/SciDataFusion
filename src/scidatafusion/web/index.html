@@ -86,7 +86,50 @@
     .panel-body { padding:14px; }
     canvas { width:100%; display:block; }
     #lightcurve { height:310px; }
-    #evidence-graph { height:430px; }
+    .graph-shell { min-width:0; overflow:hidden; color:#edf8f3; background:#071410; border:1px solid #24483d; border-radius:6px; }
+    .graph-top { min-height:58px; padding:11px 14px; display:flex; align-items:center; justify-content:space-between; gap:14px; border-bottom:1px solid #24483d; }
+    .graph-title { display:flex; align-items:center; gap:10px; min-width:0; }
+    .graph-title h2 { margin:0; font-size:15px; }
+    .graph-title span { color:#9bb8ad; font-size:11px; }
+    .graph-3d-badge { flex:0 0 auto; padding:2px 7px; color:#071410!important; background:#8ff0c5; border-radius:3px; font-weight:800; }
+    .graph-actions,.graph-filters { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+    .graph-action,.graph-filter { min-height:32px; padding:5px 9px; color:#c9ddd5; background:#10261f; border:1px solid #315448; border-radius:4px; font-size:11px; }
+    .graph-action:hover,.graph-filter:hover { color:white; border-color:#6aa88f; }
+    .graph-filter { display:inline-flex; align-items:center; gap:6px; }
+    .graph-filter[aria-pressed="false"] { opacity:.42; }
+    .graph-filter i { width:8px; height:8px; border-radius:50%; background:var(--kind-color); box-shadow:0 0 8px var(--kind-color); }
+    .graph-workspace { display:grid; grid-template-columns:minmax(0,1fr) 310px; min-height:580px; }
+    .graph-viewport { position:relative; min-width:0; min-height:580px; overflow:hidden; }
+    #evidence-graph { height:580px; touch-action:none; cursor:grab; outline:none; }
+    #evidence-graph:active { cursor:grabbing; }
+    #evidence-graph:focus-visible { box-shadow:inset 0 0 0 2px #8ff0c5; }
+    .graph-tooltip { position:absolute; top:0; left:0; z-index:3; width:max-content; max-width:220px; padding:8px 10px; color:#edf8f3; background:#10261f; border:1px solid #3d6758; border-radius:4px; pointer-events:none; }
+    .graph-tooltip strong,.graph-tooltip span { display:block; }
+    .graph-tooltip span { margin-top:2px; color:#9bb8ad; font-size:11px; }
+    .graph-inspector { min-width:0; padding:18px; border-left:1px solid #24483d; background:#0b1b16; overflow-wrap:anywhere; }
+    .graph-empty { min-height:180px; display:flex; flex-direction:column; justify-content:center; gap:5px; color:#9bb8ad; }
+    .graph-empty strong { color:#edf8f3; font-size:15px; }
+    .graph-node-heading { display:flex; gap:11px; align-items:flex-start; padding-bottom:16px; border-bottom:1px solid #24483d; }
+    .graph-node-heading i { width:12px; height:12px; margin-top:5px; flex:0 0 auto; border-radius:50%; background:var(--node-color); box-shadow:0 0 14px var(--node-color); }
+    .graph-node-heading span { color:#8fb2a4; font-size:11px; }
+    .graph-node-heading h3 { margin:3px 0 0; color:white; font-size:15px; overflow-wrap:anywhere; }
+    .graph-node-facts { display:grid; grid-template-columns:1fr 1fr; gap:0; margin:14px 0; }
+    .graph-node-facts div { padding:9px 0; border-bottom:1px solid #18362d; }
+    .graph-node-facts .wide { grid-column:1 / -1; }
+    .graph-node-facts dt { color:#78998c; font-size:10px; }
+    .graph-node-facts dd { margin:2px 0 0; color:#e2f1eb; font-size:12px; }
+    .graph-code { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .graph-relations h4 { margin:0 0 8px; font-size:12px; }
+    .graph-relations ul { margin:0; padding:0; list-style:none; display:grid; gap:4px; }
+    .graph-relations li { display:flex; gap:8px; padding:7px 0; border-bottom:1px solid #18362d; }
+    .graph-relations li:last-child { border-bottom:0; }
+    .graph-relations li strong,.graph-relations li span { display:block; }
+    .graph-relations li strong { color:#dcebe5; font-size:11px; }
+    .graph-relations li span { color:#78998c; font-size:10px; }
+    .graph-relation-mark { color:#8ff0c5!important; font-size:14px!important; }
+    .graph-bottom { min-height:52px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; gap:12px; border-top:1px solid #24483d; }
+    .graph-status { color:#8fb2a4; font-size:11px; white-space:nowrap; }
+    .quality-issues { margin-top:24px; }
     .legend { display:flex; gap:15px; color:var(--muted); font-size:11px; }
     .legend i { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; }
     .quality-list { display:grid; gap:14px; }
@@ -174,6 +217,7 @@
       .aside-meta { display:none; }
       .query-band,.dashboard-grid,.delivery-band { grid-template-columns:minmax(0,1fr); }
       .ids { display:none; }
+      .graph-workspace { grid-template-columns:minmax(0,1fr) 270px; }
     }
     @media (max-width:620px) {
       .topbar { padding:0 16px; }
@@ -197,7 +241,14 @@
       .form-actions { align-items:stretch; flex-direction:column; }
       .run-state { align-items:flex-start; }
       #lightcurve { height:250px; }
-      #evidence-graph { height:340px; }
+      .graph-top,.graph-bottom { align-items:flex-start; flex-direction:column; }
+      .graph-workspace { grid-template-columns:minmax(0,1fr); }
+      .graph-viewport { min-height:430px; }
+      #evidence-graph { height:430px; }
+      .graph-inspector { border-left:0; border-top:1px solid #24483d; }
+      .graph-node-facts { grid-template-columns:1fr; }
+      .graph-node-facts .wide { grid-column:auto; }
+      .graph-status { white-space:normal; }
     }
   </style>
 </head>
@@ -300,15 +351,38 @@
         </section>
 
         <section id="quality" class="view">
-          <div class="dashboard-grid">
-            <div class="panel">
-              <div class="panel-head"><h3>证据关系图</h3><span id="graph-count" class="subtle"></span></div>
-              <div class="panel-body"><canvas id="evidence-graph" aria-label="证据关系图"></canvas></div>
+          <div id="knowledge-graph" class="graph-shell">
+            <div class="graph-top">
+              <div class="graph-title"><span class="graph-3d-badge">3D</span><div><h2>证据知识图谱</h2><span id="graph-count">-</span></div></div>
+              <div class="graph-actions">
+                <button id="graph-pause" class="graph-action" type="button" aria-pressed="false">暂停布局</button>
+                <button id="graph-reset" class="graph-action" type="button">复位视角</button>
+              </div>
             </div>
-            <div class="panel">
-              <div class="panel-head"><h3>待审问题</h3><span id="issue-count" class="badge bad">-</span></div>
-              <div class="panel-body"><div id="issue-list" class="issue-list"></div></div>
+            <div class="graph-workspace">
+              <div class="graph-viewport">
+                <canvas id="evidence-graph" tabindex="0" role="application" aria-label="可旋转、缩放和拖拽节点的三维证据知识图谱"></canvas>
+                <div id="graph-tooltip" class="graph-tooltip" hidden></div>
+              </div>
+              <section id="graph-inspector" class="graph-inspector" aria-live="polite">
+                <div class="graph-empty"><strong>正在构建知识图谱</strong><span>请稍候</span></div>
+              </section>
             </div>
+            <div class="graph-bottom">
+              <div class="graph-filters" aria-label="节点类型筛选">
+                <button class="graph-filter" type="button" data-kind="task" aria-pressed="true" style="--kind-color:#e8f1ff"><i></i>任务</button>
+                <button class="graph-filter" type="button" data-kind="evidence" aria-pressed="true" style="--kind-color:#4eb9e6"><i></i>证据</button>
+                <button class="graph-filter" type="button" data-kind="field" aria-pressed="true" style="--kind-color:#48ce91"><i></i>字段</button>
+                <button class="graph-filter" type="button" data-kind="quality_gate" aria-pressed="true" style="--kind-color:#f3ad55"><i></i>质量门</button>
+                <button class="graph-filter" type="button" data-kind="quality_issue" aria-pressed="true" style="--kind-color:#f06f66"><i></i>问题</button>
+                <button class="graph-filter" type="button" data-kind="memory" aria-pressed="true" style="--kind-color:#b9c8c2"><i></i>记忆</button>
+              </div>
+              <span id="graph-status" class="graph-status">初始化 3D 场景</span>
+            </div>
+          </div>
+          <div class="panel quality-issues">
+            <div class="panel-head"><h3>待审问题</h3><span id="issue-count" class="badge bad">-</span></div>
+            <div class="panel-body"><div id="issue-list" class="issue-list"></div></div>
           </div>
           <div class="section">
             <div class="section-head"><h2>混合检索命中</h2><p>稀疏检索与证据图扩展分数分开保留</p></div>
@@ -346,7 +420,9 @@
       </div>
     </main>
   </div>
-  <script>
+  <script type="module">
+    import { createEvidenceGraph } from "/assets/knowledge-graph.js";
+
     const $ = id => document.getElementById(id);
     const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
     const zh = {
@@ -363,6 +439,7 @@
     let delivery = null;
     let runtime = null;
     let configuration = null;
+    let evidenceGraph = null;
 
     async function api(url, options) {
       const response = await fetch(url, options);
@@ -525,14 +602,18 @@
     }
     function drawEvidenceGraph() {
       if (!snapshot || $('quality').classList.contains('active') === false) return;
-      const {ctx,w,h}=setupCanvas($('evidence-graph')); const nodes=snapshot.graph_nodes; if(!nodes.length)return;
-      const center={x:w/2,y:h/2}, radius=Math.max(90,Math.min(w,h)*.37); const pos=new Map();
-      nodes.forEach((node,i)=>{const a=(Math.PI*2*i/nodes.length)-Math.PI/2;pos.set(node.node_id,{x:center.x+Math.cos(a)*radius,y:center.y+Math.sin(a)*radius});});
-      ctx.clearRect(0,0,w,h);ctx.strokeStyle='#d5ddd9';ctx.globalAlpha=.7;ctx.lineWidth=1;
-      snapshot.graph_edges.forEach(edge=>{const a=pos.get(edge.source),b=pos.get(edge.target);if(a&&b){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}});ctx.globalAlpha=1;
-      const colors={evidence:'#27647c',field:'#176b4d',quality_gate:'#9b5d13',quality_issue:'#a33d34'};
-      nodes.forEach(node=>{const p=pos.get(node.node_id);ctx.fillStyle=colors[node.kind]||'#65716b';ctx.beginPath();ctx.arc(p.x,p.y,node.trusted?7:5,0,Math.PI*2);ctx.fill();});
-      ctx.fillStyle='#65716b';ctx.font='11px system-ui';ctx.fillText('节点颜色表示证据、字段、质量门与问题；连线表示可追溯关系',12,h-10);
+      if (!evidenceGraph) {
+        evidenceGraph=createEvidenceGraph({
+          root:$('knowledge-graph'),
+          canvas:$('evidence-graph'),
+          tooltip:$('graph-tooltip'),
+          inspector:$('graph-inspector'),
+          status:$('graph-status'),
+          count:$('graph-count'),
+        });
+      }
+      evidenceGraph.setData(snapshot.graph_nodes,snapshot.graph_edges);
+      evidenceGraph.resize();
     }
 
     async function signedDownload(filename) {

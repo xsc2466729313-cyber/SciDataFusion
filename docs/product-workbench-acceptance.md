@@ -16,7 +16,8 @@ field alignment, normalization, fusion, evidence, quality review, visualization,
   fused values, mapping scores, evidence counts, and FITS DatasetIR metrics.
 - [x] Field evidence exposes source table position, byte range, method, confidence, and identity.
 - [x] Quality views expose every gate, threshold, score, issue, action, and retrieval channel score.
-- [x] Canvas visualizations use actual M11 chart points and M19 graph nodes/edges.
+- [x] Canvas visualizations use actual M11 chart points and M19 graph nodes/edges. The evidence graph
+  is now a locally bundled interactive 3D knowledge graph with node inspection and category filters.
 - [x] Delivery lists every package artifact and retains quality-gated CSV behavior.
 - [x] Desktop 1280x720 and mobile 390x844 browser runs render all six views without page-level
   horizontal overflow. The light-curve and evidence graph contain drawn data, the run control

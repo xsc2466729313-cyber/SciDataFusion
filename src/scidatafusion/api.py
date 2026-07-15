@@ -15,6 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import StringConstraints, ValidationError
 
+from scidatafusion import __version__
 from scidatafusion.cli import (
     _build_search_planning,
     _execute_offline_figure,
@@ -232,7 +233,7 @@ def create_app(
 
     app = FastAPI(
         title="SciDataFusion Workbench",
-        version="0.1.0",
+        version=__version__,
         docs_url="/api/docs",
         redoc_url=None,
     )
@@ -291,6 +292,28 @@ def create_app(
     async def workbench() -> HTMLResponse:
         page = files("scidatafusion.web").joinpath("index.html").read_text(encoding="utf-8")
         return HTMLResponse(page)
+
+    @app.get("/assets/knowledge-graph.js", include_in_schema=False)
+    async def knowledge_graph_asset() -> Response:
+        script = files("scidatafusion.web").joinpath("knowledge-graph.js").read_bytes()
+        return Response(script, media_type="text/javascript")
+
+    @app.get("/assets/three.module.min.js", include_in_schema=False)
+    async def three_asset() -> Response:
+        script = (
+            files("scidatafusion.web")
+            .joinpath("vendor")
+            .joinpath("three.module.min.js")
+            .read_bytes()
+        )
+        return Response(script, media_type="text/javascript")
+
+    @app.get("/assets/three.core.min.js", include_in_schema=False)
+    async def three_core_asset() -> Response:
+        script = (
+            files("scidatafusion.web").joinpath("vendor").joinpath("three.core.min.js").read_bytes()
+        )
+        return Response(script, media_type="text/javascript")
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:

@@ -107,6 +107,7 @@ class WorkbenchHit(StrictContract):
 class WorkbenchGraphNode(StrictContract):
     node_id: str
     kind: str
+    source_id: str
     label: ShortText
     trusted: bool
 
@@ -115,6 +116,7 @@ class WorkbenchGraphEdge(StrictContract):
     source: str
     target: str
     kind: str
+    evidence_refs: tuple[str, ...]
 
 
 class WorkbenchChartPoint(StrictContract):

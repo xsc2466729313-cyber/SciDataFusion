@@ -268,6 +268,7 @@ def build_workbench_snapshot(
             WorkbenchGraphNode(
                 node_id=item.node_id,
                 kind=item.kind.value,
+                source_id=item.source_id,
                 label=item.label,
                 trusted=item.trusted_fact,
             )
@@ -278,6 +279,7 @@ def build_workbench_snapshot(
                 source=item.source_node_id,
                 target=item.target_node_id,
                 kind=item.kind.value,
+                evidence_refs=item.evidence_refs,
             )
             for item in knowledge.graph.edges
         ),
