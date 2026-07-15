@@ -35,6 +35,10 @@ from scidatafusion.contracts.online import (
     SourceAssessmentBatch,
 )
 from scidatafusion.errors import AppError, ErrorCode
+from scidatafusion.exploration import (
+    build_fallback_exploration_profile,
+    build_fallback_search_query,
+)
 from scidatafusion.models import BailianStructuredClient
 from scidatafusion.online.search import SerpApiSearchClient
 
@@ -143,7 +147,7 @@ class OnlineResearchService:
             quality_prompt_path or _PROJECT_ROOT / "prompts" / "online_quality_review.md"
         )
 
-    async def run(self, *, research_goal: str, query: str) -> OnlineResearchResult:
+    async def run(self, *, research_goal: str, query: str | None = None) -> OnlineResearchResult:
         status = build_online_runtime_status(self._settings)
         if not status.online_ready:
             requirements = ", ".join(status.missing_requirements)
@@ -156,6 +160,7 @@ class OnlineResearchService:
             research_goal,
             query,
         )
+        effective_query = plan.queries[0].query
         outcomes = await asyncio.gather(*(self._execute_search(item) for item in plan.queries))
         executions = tuple(item[0] for item in outcomes)
         successful = tuple(item for item in executions if item.status == "completed")
@@ -169,7 +174,7 @@ class OnlineResearchService:
         if not successful:
             return OnlineResearchResult(
                 status="failed",
-                query=query,
+                query=effective_query,
                 search_plan=plan,
                 search_executions=executions,
                 sources=(),
@@ -184,7 +189,7 @@ class OnlineResearchService:
             warnings.append("实时搜索未返回可验证的网页结果。")
             return OnlineResearchResult(
                 status="degraded",
-                query=query,
+                query=effective_query,
                 search_plan=plan,
                 search_executions=executions,
                 sources=(),
@@ -198,7 +203,7 @@ class OnlineResearchService:
 
         completion: StructuredModelCompletion | None = None
         try:
-            completion = await self._assess(research_goal, query, results)
+            completion = await self._assess(research_goal, effective_query, results)
             batch = SourceAssessmentBatch.model_validate_json(completion.content)
             allowed_urls = {str(item.url) for item in results}
             received_urls = {str(item.source_url) for item in batch.assessments}
@@ -207,7 +212,7 @@ class OnlineResearchService:
             assessments = {str(item.source_url): item for item in batch.assessments}
             return OnlineResearchResult(
                 status="completed",
-                query=query,
+                query=effective_query,
                 search_plan=plan,
                 search_executions=executions,
                 sources=tuple(
@@ -225,7 +230,7 @@ class OnlineResearchService:
             warnings.append("Qwen 来源评估失败; 已保留搜索结果, 未生成任何科学数值。")
             return OnlineResearchResult(
                 status="degraded",
-                query=query,
+                query=effective_query,
                 search_plan=plan,
                 search_executions=executions,
                 sources=tuple(OnlineSourceRecord(search=item, assessment=None) for item in results),
@@ -308,22 +313,33 @@ class OnlineResearchService:
     async def _build_search_plan(
         self,
         research_goal: str,
-        seed_query: str,
+        seed_query: str | None,
     ) -> tuple[SearchQueryPlan, ModelInvocationRecord | None, tuple[str, ...]]:
+        explicit_query = None if seed_query is None else seed_query.strip()
+        effective_seed = explicit_query or build_fallback_search_query(research_goal)
+        fallback_profile = build_fallback_exploration_profile(research_goal)
         seed = PlannedSearchQuery(
-            query=seed_query,
-            purpose="执行用户指定的核心证据检索",
+            query=effective_seed,
+            purpose=(
+                "执行用户指定的核心证据检索"
+                if explicit_query
+                else "从研究主题派生论文、数据集和机器可读材料检索"
+            ),
             expected_evidence_types=("paper", "repository", "table"),
         )
         if not self._settings.search_query_planning_enabled:
-            return SearchQueryPlan(strategy="manual", queries=(seed,)), None, ()
+            return (
+                SearchQueryPlan(strategy="manual", profile=fallback_profile, queries=(seed,)),
+                None,
+                (),
+            )
 
         completion: StructuredModelCompletion | None = None
         try:
-            completion = await self._plan(research_goal, seed_query)
+            completion = await self._plan(research_goal, effective_seed)
             proposed = SearchQueryPlan.model_validate_json(completion.content)
-            queries: list[PlannedSearchQuery] = [seed]
-            normalized = {" ".join(seed.query.lower().split())}
+            queries: list[PlannedSearchQuery] = [seed] if explicit_query else []
+            normalized = {" ".join(seed.query.lower().split())} if explicit_query else set()
             for item in proposed.queries:
                 key = " ".join(item.query.lower().split())
                 if key not in normalized:
@@ -332,16 +348,24 @@ class OnlineResearchService:
                 if len(queries) >= self._settings.search_max_queries:
                     break
             return (
-                SearchQueryPlan(strategy="llm", queries=tuple(queries)),
+                SearchQueryPlan(
+                    strategy="llm",
+                    profile=proposed.profile,
+                    queries=tuple(queries),
+                ),
                 completion.invocation,
                 (),
             )
         except (AppError, ValidationError, ValueError):
             invocation = None if completion is None else completion.invocation
             return (
-                SearchQueryPlan(strategy="seed_fallback", queries=(seed,)),
+                SearchQueryPlan(
+                    strategy="seed_fallback",
+                    profile=fallback_profile,
+                    queries=(seed,),
+                ),
                 invocation,
-                ("Qwen 检索规划未通过严格校验, 已回退到用户检索式。",),
+                ("Qwen 自主探索蓝图未通过严格校验, 已回退到主题派生检索式。",),
             )
 
     async def _execute_search(
@@ -408,10 +432,10 @@ class OnlineResearchService:
             model_id=self._settings.planner_model_id,
             system_prompt=system_prompt,
             user_prompt=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-            prompt_version="1.0.0",
+            prompt_version="2.0.0",
             schema_name="SearchQueryPlan",
             temperature=0.0,
-            max_tokens=2048,
+            max_tokens=4096,
         )
         return await self._model.complete(request)
 

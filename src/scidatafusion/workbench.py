@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+from typing import Literal
+
 from scidatafusion.contracts.datasets import ScientificParsingRequest, ScientificParsingResult
 from scidatafusion.contracts.delivery import DeliveryResult
 from scidatafusion.contracts.extraction import (
@@ -18,6 +21,7 @@ from scidatafusion.contracts.online import (
     AutomatedQualityReview,
     OnlineResearchResult,
     ResearchExecutionMode,
+    ResearchExplorationProfile,
 )
 from scidatafusion.contracts.quality import QualityAuditResult
 from scidatafusion.contracts.scientific import FieldContract
@@ -36,6 +40,7 @@ from scidatafusion.contracts.workbench import (
     WorkbenchSource,
     WorkbenchStage,
 )
+from scidatafusion.exploration import build_fallback_exploration_profile
 
 _FIELD_LABELS = {
     "object_id": "天体编号",
@@ -140,68 +145,107 @@ def build_workbench_snapshot(
         ),
     )
     report = quality.quality_report
+    blueprint = (
+        online_research.search_plan.profile
+        if online_research is not None
+        else build_fallback_exploration_profile(research_goal)
+    )
+    live_discovery = execution_mode is ResearchExecutionMode.ONLINE
     stages = (
-        WorkbenchStage(
-            key="goal",
-            label="研究需求",
-            status="complete",
-            primary_count=len(contract.fields),
-            count_label="目标字段",
-            detail="研究目标已转为可验证的数据合同, 字段、来源类型和质量门均已冻结。",
-        ),
-        WorkbenchStage(
-            key="discover",
-            label="多源发现",
-            status="complete",
-            primary_count=len(selected.sources),
-            count_label="选定来源",
-            detail=f"从候选结果中选定 {len(selected.sources)} 个互补来源并保存 {len(download.artifact_set.objects)} 个不可变原始产物。",
-        ),
-        WorkbenchStage(
-            key="parse",
-            label="解析提取",
-            status="complete",
-            primary_count=len(extraction.evidence_set.atoms),
-            count_label="字段证据",
-            detail="正文、表格和附件按格式路由; 当前可用表格已完成单元格级证据提取。",
-        ),
-        WorkbenchStage(
-            key="integrate",
-            label="清洗整合",
-            status="review" if fusion.metrics.withheld_field_count else "complete",
-            primary_count=fusion.metrics.selected_field_count,
-            count_label="已选字段",
-            detail=f"完成字段映射、确定性规范化和实体聚合; {fusion.metrics.withheld_field_count} 个字段因证据不足被保留待审。",
-        ),
-        WorkbenchStage(
-            key="quality",
-            label="质量校验",
-            status="complete" if report.quality_gate_passed else "blocked",
-            primary_count=report.passed_gate_count,
-            count_label=f"通过 / {report.gate_count} 门",
-            detail="所有质量结论均绑定证据; 未通过的阻断门不会被静默绕过。",
-        ),
-        WorkbenchStage(
-            key="deliver",
-            label="成果交付",
-            status="complete" if report.formal_gold_eligible else "review",
-            primary_count=delivery.metrics.artifact_count,
-            count_label="交付文件",
-            detail="已生成数据字典、证据图、质量报告和复现包; 正式数据表仅在质量门通过后开放。",
-        ),
+        _live_discovery_stages(blueprint, online_research)
+        if live_discovery
+        else (
+            WorkbenchStage(
+                key="goal",
+                label="研究需求",
+                status="complete",
+                primary_count=len(contract.fields),
+                count_label="目标字段",
+                detail="研究目标已转为可验证的数据合同, 字段、来源类型和质量门均已冻结。",
+            ),
+            WorkbenchStage(
+                key="discover",
+                label="多源发现",
+                status="complete",
+                primary_count=len(selected.sources),
+                count_label="选定来源",
+                detail=f"从候选结果中选定 {len(selected.sources)} 个互补来源并保存 {len(download.artifact_set.objects)} 个不可变原始产物。",
+            ),
+            WorkbenchStage(
+                key="parse",
+                label="解析提取",
+                status="complete",
+                primary_count=len(extraction.evidence_set.atoms),
+                count_label="字段证据",
+                detail="正文、表格和附件按格式路由; 当前可用表格已完成单元格级证据提取。",
+            ),
+            WorkbenchStage(
+                key="integrate",
+                label="清洗整合",
+                status="review" if fusion.metrics.withheld_field_count else "complete",
+                primary_count=fusion.metrics.selected_field_count,
+                count_label="已选字段",
+                detail=f"完成字段映射、确定性规范化和实体聚合; {fusion.metrics.withheld_field_count} 个字段因证据不足被保留待审。",
+            ),
+            WorkbenchStage(
+                key="quality",
+                label="质量校验",
+                status="complete" if report.quality_gate_passed else "blocked",
+                primary_count=report.passed_gate_count,
+                count_label=f"通过 / {report.gate_count} 门",
+                detail="所有质量结论均绑定证据; 未通过的阻断门不会被静默绕过。",
+            ),
+            WorkbenchStage(
+                key="deliver",
+                label="成果交付",
+                status="complete" if report.formal_gold_eligible else "review",
+                primary_count=delivery.metrics.artifact_count,
+                count_label="交付文件",
+                detail="已生成数据字典、证据图、质量报告和复现包; 正式数据表仅在质量门通过后开放。",
+            ),
+        )
+    )
+    graph_nodes, graph_edges = (
+        _exploration_graph(blueprint, online_research)
+        if live_discovery
+        else (
+            tuple(
+                WorkbenchGraphNode(
+                    node_id=item.node_id,
+                    kind=item.kind.value,
+                    source_id=item.source_id,
+                    label=item.label,
+                    trusted=item.trusted_fact,
+                )
+                for item in knowledge.graph.nodes
+            ),
+            tuple(
+                WorkbenchGraphEdge(
+                    source=item.source_node_id,
+                    target=item.target_node_id,
+                    kind=item.kind.value,
+                    evidence_refs=item.evidence_refs,
+                )
+                for item in knowledge.graph.edges
+            ),
+        )
     )
     return WorkbenchSnapshot(
         execution_mode=execution_mode,
         research_goal=research_goal,
         retrieval_query=retrieval_query,
+        research_blueprint=blueprint,
+        topic_data_status="live_discovery" if live_discovery else "reference_demo",
         task_id=knowledge.task_id,
         run_id=knowledge.run_id,
         contract_id=knowledge.contract_id,
-        status=delivery.status.value,
-        quality_score=report.quality_score,
-        quality_gate_passed=report.quality_gate_passed,
+        status="discovery_completed" if live_discovery else delivery.status.value,
+        quality_score=0.0 if live_discovery else report.quality_score,
+        quality_gate_passed=False if live_discovery else report.quality_gate_passed,
         stages=stages,
-        sources=tuple(
+        sources=()
+        if live_discovery
+        else tuple(
             WorkbenchSource(
                 candidate_id=item.candidate_id,
                 rank=item.selection_rank,
@@ -215,9 +259,11 @@ def build_workbench_snapshot(
             )
             for item in selected.sources
         ),
-        artifacts=artifacts,
-        fields=fields,
-        evidence=tuple(
+        artifacts=() if live_discovery else artifacts,
+        fields=() if live_discovery else fields,
+        evidence=()
+        if live_discovery
+        else tuple(
             WorkbenchEvidence(
                 evidence_id=item.evidence_id,
                 field_name=evidence_field.get(item.evidence_id, "unknown"),
@@ -230,7 +276,9 @@ def build_workbench_snapshot(
             )
             for item in extraction.evidence_set.atoms
         ),
-        gates=tuple(
+        gates=()
+        if live_discovery
+        else tuple(
             WorkbenchGate(
                 gate_id=item.gate_id,
                 label=_GATE_LABELS.get(item.gate_id, item.gate_id),
@@ -242,7 +290,9 @@ def build_workbench_snapshot(
             )
             for item in quality.gate_evaluation_set.evaluations
         ),
-        issues=tuple(
+        issues=()
+        if live_discovery
+        else tuple(
             WorkbenchIssue(
                 issue_id=item.issue_id,
                 code=item.code.value,
@@ -254,7 +304,9 @@ def build_workbench_snapshot(
             )
             for item in quality.issue_set.issues
         ),
-        hits=tuple(
+        hits=()
+        if live_discovery
+        else tuple(
             WorkbenchHit(
                 source_id=item.source_id,
                 location=item.location,
@@ -264,26 +316,11 @@ def build_workbench_snapshot(
             )
             for item in knowledge.retrieval.hits
         ),
-        graph_nodes=tuple(
-            WorkbenchGraphNode(
-                node_id=item.node_id,
-                kind=item.kind.value,
-                source_id=item.source_id,
-                label=item.label,
-                trusted=item.trusted_fact,
-            )
-            for item in knowledge.graph.nodes
-        ),
-        graph_edges=tuple(
-            WorkbenchGraphEdge(
-                source=item.source_node_id,
-                target=item.target_node_id,
-                kind=item.kind.value,
-                evidence_refs=item.evidence_refs,
-            )
-            for item in knowledge.graph.edges
-        ),
-        chart_points=(
+        graph_nodes=graph_nodes,
+        graph_edges=graph_edges,
+        chart_points=()
+        if live_discovery
+        else (
             gold_chart_points
             if gold_chart_points
             else tuple(
@@ -296,7 +333,9 @@ def build_workbench_snapshot(
                 for item in figure.figure_ir.point_set.points
             )
         ),
-        scientific_dataset=WorkbenchScientificDataset(
+        scientific_dataset=None
+        if live_discovery
+        else WorkbenchScientificDataset(
             format=scientific_request.artifact.format.value,
             parser_id=scientific.runtime.parser.parser_id,
             engine_name=scientific.runtime.parser.engine_name,
@@ -311,10 +350,137 @@ def build_workbench_snapshot(
         ),
         online_research=online_research,
         automated_quality_review=automated_quality_review,
-        delivery_artifact_count=delivery.metrics.artifact_count,
+        delivery_artifact_count=0 if live_discovery else delivery.metrics.artifact_count,
         package_filename=delivery.package.filename,
-        formal_gold_available=quality.formal_gold_dataset is not None,
+        formal_gold_available=False if live_discovery else quality.formal_gold_dataset is not None,
     )
+
+
+def _live_discovery_stages(
+    blueprint: ResearchExplorationProfile,
+    online_research: OnlineResearchResult | None,
+) -> tuple[WorkbenchStage, ...]:
+    source_count = 0 if online_research is None else len(online_research.sources)
+    query_count = 0 if online_research is None else len(online_research.search_plan.queries)
+    discovery_status: Literal["complete", "review"] = "complete" if source_count else "review"
+    return (
+        WorkbenchStage(
+            key="goal",
+            label="主题理解",
+            status="complete",
+            primary_count=len(blueprint.evidence_priorities),
+            count_label="证据重点",
+            detail="研究方向已转为自主探索蓝图, 包含候选字段、来源类型和质量检查。",
+        ),
+        WorkbenchStage(
+            key="discover",
+            label="多源检索",
+            status=discovery_status,
+            primary_count=source_count,
+            count_label="真实来源",
+            detail=f"执行 {query_count} 条主题检索式, 发现 {source_count} 个可继续核验的网页来源。",
+        ),
+        WorkbenchStage(
+            key="parse",
+            label="材料获取",
+            status="review",
+            primary_count=len(blueprint.source_types),
+            count_label="目标类型",
+            detail="等待从候选来源获取论文正文、表格、附件、图像或科学文件后再解析。",
+        ),
+        WorkbenchStage(
+            key="integrate",
+            label="字段整合",
+            status="review",
+            primary_count=len(blueprint.candidate_fields),
+            count_label="候选字段",
+            detail="字段仅为主题驱动的提取计划; 取得真实数据前不生成、不填充科学值。",
+        ),
+        WorkbenchStage(
+            key="quality",
+            label="证据校验",
+            status="review",
+            primary_count=len(blueprint.quality_checks),
+            count_label="计划检查",
+            detail="后续数据必须通过来源、完整性、单位、冲突与不确定性检查。",
+        ),
+        WorkbenchStage(
+            key="deliver",
+            label="结构化交付",
+            status="review",
+            primary_count=len(blueprint.target_outputs),
+            count_label="目标成果",
+            detail="当前完成主题探索; 只有真实数据完成解析并通过质量门后才开放 CSV 与复现包。",
+        ),
+    )
+
+
+def _exploration_graph(
+    blueprint: ResearchExplorationProfile,
+    online_research: OnlineResearchResult | None,
+) -> tuple[tuple[WorkbenchGraphNode, ...], tuple[WorkbenchGraphEdge, ...]]:
+    task_id = "explore-topic"
+    nodes = [
+        WorkbenchGraphNode(
+            node_id=task_id,
+            kind="task",
+            source_id="user-research-goal",
+            label=blueprint.topic_title[:256],
+            trusted=True,
+        )
+    ]
+    edges: list[WorkbenchGraphEdge] = []
+
+    def add_group(values: tuple[str, ...], kind: str, prefix: str, edge_kind: str) -> None:
+        for value in values:
+            digest = hashlib.sha256(f"{prefix}:{value}".encode()).hexdigest()[:16]
+            node_id = f"{prefix}-{digest}"
+            nodes.append(
+                WorkbenchGraphNode(
+                    node_id=node_id,
+                    kind=kind,
+                    source_id=f"plan:{prefix}",
+                    label=value[:256],
+                    trusted=False,
+                )
+            )
+            edges.append(
+                WorkbenchGraphEdge(
+                    source=task_id,
+                    target=node_id,
+                    kind=edge_kind,
+                    evidence_refs=(f"plan:{prefix}",),
+                )
+            )
+
+    add_group(blueprint.evidence_priorities, "evidence", "priority", "prioritizes")
+    add_group(blueprint.candidate_fields, "field", "field", "targets")
+    add_group(blueprint.quality_checks, "quality_gate", "quality", "requires")
+    add_group(blueprint.target_outputs, "memory", "output", "produces")
+    if online_research is not None:
+        for source in online_research.sources:
+            value = source.search.title
+            url = str(source.search.url)
+            digest = hashlib.sha256(url.encode()).hexdigest()[:16]
+            node_id = f"source-{digest}"
+            nodes.append(
+                WorkbenchGraphNode(
+                    node_id=node_id,
+                    kind="evidence",
+                    source_id=url,
+                    label=value[:256],
+                    trusted=False,
+                )
+            )
+            edges.append(
+                WorkbenchGraphEdge(
+                    source=task_id,
+                    target=node_id,
+                    kind="discovered",
+                    evidence_refs=(url,),
+                )
+            )
+    return tuple(nodes), tuple(edges)
 
 
 def _gold_chart_points(

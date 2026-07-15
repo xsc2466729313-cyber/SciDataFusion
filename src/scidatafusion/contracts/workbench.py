@@ -11,6 +11,7 @@ from scidatafusion.contracts.online import (
     AutomatedQualityReview,
     OnlineResearchResult,
     ResearchExecutionMode,
+    ResearchExplorationProfile,
 )
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=256)]
@@ -144,6 +145,8 @@ class WorkbenchSnapshot(StrictContract):
     execution_mode: ResearchExecutionMode
     research_goal: DetailText
     retrieval_query: DetailText
+    research_blueprint: ResearchExplorationProfile
+    topic_data_status: Literal["reference_demo", "live_discovery"]
     task_id: str
     run_id: str
     contract_id: str
@@ -161,7 +164,7 @@ class WorkbenchSnapshot(StrictContract):
     graph_nodes: tuple[WorkbenchGraphNode, ...]
     graph_edges: tuple[WorkbenchGraphEdge, ...]
     chart_points: tuple[WorkbenchChartPoint, ...]
-    scientific_dataset: WorkbenchScientificDataset
+    scientific_dataset: WorkbenchScientificDataset | None
     online_research: OnlineResearchResult | None
     automated_quality_review: AutomatedQualityReview | None = None
     delivery_artifact_count: int = Field(ge=0)

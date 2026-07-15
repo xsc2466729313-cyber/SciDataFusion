@@ -31,7 +31,6 @@ from scidatafusion.contracts.online import (
     OnlineConfigurationView,
     OnlineResearchResult,
     OnlineRuntimeStatus,
-    QualityIssueInput,
     ResearchExecutionMode,
 )
 from scidatafusion.contracts.workbench import WorkbenchSnapshot
@@ -48,7 +47,7 @@ from scidatafusion.online import (
 from scidatafusion.workbench import build_workbench_snapshot
 
 DEFAULT_GOAL = "Study Type Ia supernova light curves using multi-source data integration into CSV."
-DEFAULT_QUERY = "quality evidence observation time magnitude"
+REFERENCE_QUERY = "quality evidence observation time magnitude"
 
 
 class DemoRunRequest(StrictContract):
@@ -57,8 +56,8 @@ class DemoRunRequest(StrictContract):
         str, StringConstraints(strip_whitespace=True, min_length=10, max_length=2_000)
     ] = DEFAULT_GOAL
     retrieval_query: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=3, max_length=512)
-    ] = DEFAULT_QUERY
+        str | None, StringConstraints(strip_whitespace=True, min_length=3, max_length=512)
+    ] = None
 
 
 class ArtifactSummary(StrictContract):
@@ -128,7 +127,7 @@ class DemoDeliveryProvider:
             execution_mode = ResearchExecutionMode(payload.execution_mode)
             phase1, planning = await asyncio.to_thread(
                 _build_search_planning,
-                payload.research_goal,
+                DEFAULT_GOAL,
                 "workbench-reviewer",
             )
             if planning is None or phase1.confirmation is None:
@@ -139,7 +138,7 @@ class DemoDeliveryProvider:
                 _execute_offline_knowledge(
                     phase1.confirmation.contract,
                     planning,
-                    payload.retrieval_query,
+                    REFERENCE_QUERY,
                     complete_profile=True,
                 ),
                 _execute_offline_figure(phase1.confirmation.contract),
@@ -164,29 +163,17 @@ class DemoDeliveryProvider:
             )
             orchestrator = DeliveryOrchestrator(bronze_store=bronze_store)
             result = await orchestrator.execute(request)
-            quality = knowledge_request.quality_result
             automated_review: AutomatedQualityReview | None = None
-            if execution_mode is ResearchExecutionMode.ONLINE and online_result is not None:
-                automated_review = await self._online_service.review_quality(
-                    research_goal=payload.research_goal,
-                    issues=tuple(
-                        QualityIssueInput(
-                            issue_id=item.issue_id,
-                            code=item.code.value,
-                            fields=item.affected_field_names,
-                            detail=item.detail,
-                            evidence_count=len(item.evidence_refs),
-                        )
-                        for item in quality.issue_set.issues
-                    ),
-                    sources=online_result.sources,
-                )
             self._request = request
             self._result = result
             self._orchestrator = orchestrator
             self._workbench = build_workbench_snapshot(
                 research_goal=payload.research_goal,
-                retrieval_query=payload.retrieval_query,
+                retrieval_query=(
+                    online_result.query
+                    if online_result is not None
+                    else payload.retrieval_query or payload.research_goal
+                ),
                 request=knowledge_request,
                 knowledge=knowledge_result,
                 figure=figure_result,

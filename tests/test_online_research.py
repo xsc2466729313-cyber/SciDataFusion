@@ -24,6 +24,7 @@ from scidatafusion.contracts.online import (
     OnlineSourceRecord,
     PlannedSearchQuery,
     QualityIssueInput,
+    ResearchExplorationProfile,
     SearchExecutionRecord,
     SearchInvocationRecord,
     SearchQueryPlan,
@@ -41,6 +42,26 @@ from scidatafusion.online import (
 
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64
+
+
+def _profile_payload() -> dict[str, object]:
+    return {
+        "topic_title": "Ia 型超新星光变曲线",
+        "research_summary": "自主发现论文、光度数据仓库、机器可读表格与补充材料。",
+        "evidence_priorities": ["观测时间", "光度值", "测量误差", "来源记录"],
+        "source_types": ["paper", "repository", "table", "supplement", "catalog"],
+        "candidate_fields": [
+            "object_id",
+            "observation_time",
+            "band",
+            "magnitude",
+            "uncertainty",
+            "source_record_id",
+        ],
+        "quality_checks": ["字段完整性", "单位一致性", "来源证据链"],
+        "target_outputs": ["来源清单", "证据关联数据表", "质量报告"],
+        "visualization_hint": "以来源、字段和质量检查构建知识图谱",
+    }
 
 
 def _settings(**overrides: object) -> Settings:
@@ -492,6 +513,7 @@ def test_qwen_plans_bounded_queries_and_partial_search_failure_is_audited() -> N
                 content = json.dumps(
                     {
                         "strategy": "llm",
+                        "profile": _profile_payload(),
                         "queries": [
                             {
                                 "query": "Ia supernova photometry table",
@@ -589,6 +611,75 @@ def test_qwen_plans_bounded_queries_and_partial_search_failure_is_audited() -> N
     asyncio.run(scenario())
 
 
+def test_topic_only_request_generates_autonomous_blueprint_and_queries() -> None:
+    class AutonomousModel:
+        async def complete(self, request: StructuredModelRequest) -> StructuredModelCompletion:
+            if request.schema_name == "SearchQueryPlan":
+                content = json.dumps(
+                    {
+                        "strategy": "llm",
+                        "profile": {
+                            "topic_title": "城市热岛与绿地覆盖",
+                            "research_summary": "探索遥感影像、城市气温记录和绿地数据的关系。",
+                            "evidence_priorities": ["地表温度", "绿地覆盖率", "空间位置"],
+                            "source_types": ["paper", "repository", "table", "image"],
+                            "candidate_fields": [
+                                "city_id",
+                                "observation_time",
+                                "land_surface_temperature",
+                                "green_space_ratio",
+                                "source_record_id",
+                            ],
+                            "quality_checks": ["空间分辨率一致性", "时间对齐", "来源证据链"],
+                            "target_outputs": ["多源数据表", "空间关系图", "质量报告"],
+                            "visualization_hint": "构建城市、影像、字段和来源关系图",
+                        },
+                        "queries": [
+                            {
+                                "query": "urban heat island green space open dataset",
+                                "purpose": "查找开放遥感与城市气温数据",
+                                "expected_evidence_types": ["repository", "image", "table"],
+                            },
+                            {
+                                "query": "urban heat island green coverage supplementary data",
+                                "purpose": "查找论文补充数据和字段定义",
+                                "expected_evidence_types": ["paper", "supplement"],
+                            },
+                        ],
+                    }
+                )
+            else:
+                content = json.dumps({"assessments": []})
+            return _completion(content, request)
+
+    class AnySearch:
+        async def search(self, query: str) -> LiveSearchBatch:
+            batch = _search_batch()
+            return batch.model_copy(
+                update={
+                    "results": (
+                        batch.results[0].model_copy(update={"title": f"Source for {query[:40]}"}),
+                    )
+                }
+            )
+
+    async def scenario() -> None:
+        result = await OnlineResearchService(
+            _settings(search_query_planning_enabled=True, search_max_queries=3),
+            search_client=AnySearch(),
+            model_client=AutonomousModel(),
+        ).run(research_goal="我想研究城市热岛效应与绿地覆盖率之间的关系")
+
+        assert result.status == "completed"
+        assert result.search_plan.strategy == "llm"
+        assert result.search_plan.profile.topic_title == "城市热岛与绿地覆盖"
+        assert len(result.search_plan.queries) == 2
+        assert result.query == "urban heat island green space open dataset"
+        assert result.planning_model_invocation is not None
+
+    asyncio.run(scenario())
+
+
 def test_online_service_configuration_empty_results_and_unknown_model_url() -> None:
     async def scenario() -> None:
         with pytest.raises(AppError) as blocked:
@@ -638,6 +729,15 @@ def test_online_service_configuration_empty_results_and_unknown_model_url() -> N
 
 
 def test_online_contracts_reject_duplicate_sources_and_false_execution_proof() -> None:
+    invalid_profile = _profile_payload()
+    invalid_profile["candidate_fields"] = ["value", "value", "source_record_id"]
+    with pytest.raises(ValidationError, match="candidate_fields must contain unique"):
+        ResearchExplorationProfile.model_validate_json(json.dumps(invalid_profile))
+
+    extra_profile = {**_profile_payload(), "invented_measurement": 42}
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        ResearchExplorationProfile.model_validate_json(json.dumps(extra_profile))
+
     duplicate = {
         "assessments": [
             {
@@ -664,6 +764,7 @@ def test_online_contracts_reject_duplicate_sources_and_false_execution_proof() -
         "query": "valid query",
         "search_plan": SearchQueryPlan(
             strategy="manual",
+            profile=ResearchExplorationProfile.model_validate_json(json.dumps(_profile_payload())),
             queries=(
                 PlannedSearchQuery(
                     query="valid query",
@@ -765,9 +866,50 @@ def test_fastapi_online_mode_connects_live_discovery_to_workbench() -> None:
             workbench = (await client.get("/api/v1/workbench")).json()
 
         assert workbench["execution_mode"] == "online"
+        assert workbench["topic_data_status"] == "live_discovery"
+        assert workbench["research_blueprint"]["candidate_fields"]
         assert workbench["online_research"]["status"] == "completed"
         assert len(workbench["online_research"]["sources"]) == 1
         assert workbench["online_research"]["model_performed"] is True
+        assert workbench["fields"] == []
+        assert workbench["scientific_dataset"] is None
+        assert workbench["formal_gold_available"] is False
+
+    asyncio.run(scenario())
+
+
+def test_fastapi_accepts_online_topic_without_retrieval_query() -> None:
+    class AnySearch:
+        async def search(self, query: str) -> LiveSearchBatch:
+            assert "城市热岛" in query
+            return _search_batch()
+
+    async def scenario() -> None:
+        settings = _settings(search_query_planning_enabled=False)
+        service = OnlineResearchService(
+            settings,
+            search_client=AnySearch(),
+            model_client=_ModelClient(json.dumps({"assessments": []})),
+        )
+        app = create_app(DemoDeliveryProvider(settings=settings, online_service=service))
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/demo/run",
+                json={
+                    "execution_mode": "online",
+                    "research_goal": "我想研究城市热岛效应与绿地覆盖率之间的关系",
+                },
+            )
+            assert response.status_code == 200, response.text
+            workbench = (await client.get("/api/v1/workbench")).json()
+
+        assert workbench["topic_data_status"] == "live_discovery"
+        assert "城市热岛" in workbench["research_blueprint"]["topic_title"]
+        assert "城市热岛" in workbench["retrieval_query"]
+        assert workbench["sources"] == []
+        assert workbench["chart_points"] == []
+        assert workbench["delivery_artifact_count"] == 0
 
     asyncio.run(scenario())
 

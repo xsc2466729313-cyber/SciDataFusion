@@ -34,3 +34,8 @@ provides a local edit form: it writes allowlisted values into `.env`, applies th
 preserves unrelated settings, rejects remote writes, and never renders or returns a secret value.
 Online runs show every planned query, its purpose, expected evidence type, execution status, and
 result count.
+
+v1.2.0 makes the research direction the only required input. The online workbench renders the
+strict autonomous exploration profile, topic-specific coverage chart, candidate fields, pending
+quality checks, and exploration graph. Built-in reference values and downloads are removed from
+the live-discovery projection so they cannot be mistaken for current-topic results.

@@ -212,8 +212,40 @@ class PlannedSearchQuery(StrictContract):
     ] = Field(min_length=1, max_length=4)
 
 
+class ResearchExplorationProfile(StrictContract):
+    """Model-proposed research plan metadata; never treated as scientific evidence."""
+
+    topic_title: OnlineShortText
+    research_summary: OnlineText
+    evidence_priorities: tuple[OnlineShortText, ...] = Field(min_length=3, max_length=8)
+    source_types: tuple[
+        Literal["paper", "repository", "table", "supplement", "image", "catalog", "other"],
+        ...,
+    ] = Field(min_length=2, max_length=7)
+    candidate_fields: tuple[OnlineShortText, ...] = Field(min_length=3, max_length=12)
+    quality_checks: tuple[OnlineShortText, ...] = Field(min_length=3, max_length=8)
+    target_outputs: tuple[OnlineShortText, ...] = Field(min_length=1, max_length=6)
+    visualization_hint: OnlineShortText
+
+    @model_validator(mode="after")
+    def profile_lists_are_unique(self) -> ResearchExplorationProfile:
+        for name in (
+            "evidence_priorities",
+            "source_types",
+            "candidate_fields",
+            "quality_checks",
+            "target_outputs",
+        ):
+            values = getattr(self, name)
+            normalized = [" ".join(str(item).lower().split()) for item in values]
+            if len(normalized) != len(set(normalized)):
+                raise ValueError(f"{name} must contain unique values")
+        return self
+
+
 class SearchQueryPlan(StrictContract):
     strategy: Literal["llm", "seed_fallback", "manual"]
+    profile: ResearchExplorationProfile
     queries: tuple[PlannedSearchQuery, ...] = Field(min_length=1, max_length=4)
 
     @model_validator(mode="after")

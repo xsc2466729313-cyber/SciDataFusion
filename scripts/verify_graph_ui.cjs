@@ -11,6 +11,9 @@ const desktopScreenshot = path.resolve(
 const mobileScreenshot = path.resolve(
   process.argv[4] || "var/workbench-knowledge-graph-mobile.jpg",
 );
+const overviewScreenshot = path.resolve(
+  process.argv[5] || "docs/assets/workbench-overview.jpg",
+);
 
 async function inspectGraph(page, screenshotPath, verifyDrag) {
   const browserErrors = [];
@@ -19,8 +22,24 @@ async function inspectGraph(page, screenshotPath, verifyDrag) {
   });
   page.on("pageerror", error => browserErrors.push(error.message));
   await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await page.waitForFunction(() => document.getElementById("status").textContent !== "正在加载");
+  assert.equal(await page.locator("#run-form [required]").count(), 1);
+  assert.equal(await page.locator("#query").getAttribute("required"), null);
+  assert.ok((await page.locator("#blueprint-priorities li").count()) >= 3);
+  if (verifyDrag) {
+    await page.locator("#goal").fill("我想研究城市热岛效应与绿地覆盖率之间的关系");
+    await page.locator("#run").click();
+    await page.waitForFunction(() => !document.getElementById("run").disabled);
+    await page.waitForFunction(() => document.getElementById("blueprint-title").textContent.includes("城市热岛"));
+    await page.screenshot({
+      path: overviewScreenshot,
+      type: "jpeg",
+      quality: 90,
+    });
+  }
   await page.locator('button[data-view="quality"]').click();
   const canvas = page.locator("#evidence-graph");
+  await canvas.scrollIntoViewIfNeeded();
   try {
     await page.waitForFunction(() => {
       const element = document.getElementById("evidence-graph");
@@ -73,18 +92,31 @@ async function inspectGraph(page, screenshotPath, verifyDrag) {
   await page.waitForFunction(() => document.getElementById("graph-status").textContent.includes("布局已暂停"));
   await page.waitForTimeout(250);
   if (verifyDrag) {
-    const selected = await canvas.evaluate(element => ({
-      x: Number(element.dataset.selectedX),
-      y: Number(element.dataset.selectedY),
-    }));
     const box = await canvas.boundingBox();
-    assert.ok(box && Number.isFinite(selected.x) && Number.isFinite(selected.y));
-    assert.ok(selected.x >= 0 && selected.x <= box.width && selected.y >= 0 && selected.y <= box.height);
-    await page.mouse.move(box.x + selected.x, box.y + selected.y);
-    await page.mouse.down();
-    await page.mouse.move(box.x + selected.x + 28, box.y + selected.y + 18, { steps: 5 });
-    await page.mouse.up();
-    await page.waitForFunction(() => document.getElementById("graph-status").textContent.includes("已固定"));
+    assert.ok(box);
+    let fixed = false;
+    for (const [dx, dy] of [[28, 18], [45, -20], [-32, 24]]) {
+      const selected = await canvas.evaluate(element => ({
+        x: Number(element.dataset.selectedX),
+        y: Number(element.dataset.selectedY),
+      }));
+      assert.ok(Number.isFinite(selected.x) && Number.isFinite(selected.y));
+      assert.ok(selected.x >= 0 && selected.x <= box.width && selected.y >= 0 && selected.y <= box.height);
+      await page.mouse.move(box.x + selected.x, box.y + selected.y);
+      await page.mouse.down();
+      await page.mouse.move(box.x + selected.x + dx, box.y + selected.y + dy, { steps: 8 });
+      await page.mouse.up();
+      try {
+        await page.waitForFunction(
+          () => document.getElementById("graph-status").textContent.includes("已固定"),
+          null,
+          { timeout: 1500 },
+        );
+        fixed = true;
+        break;
+      } catch {}
+    }
+    assert.ok(fixed, "selected graph node could not be dragged and pinned");
   }
 
   const beforeFilter = Number(await canvas.getAttribute("data-active-nodes"));

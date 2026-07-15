@@ -24,6 +24,9 @@ async def _exercise_api() -> None:
         assert "SciDataFusion 科学数据融合工作台" in page.text
         assert "从科学问题到可交付数据" in page.text
         assert "联网智能" in page.text
+        assert "我想研究什么" in page.text
+        assert "高级设置" in page.text
+        assert "研究探索蓝图" in page.text
         assert "实时联网发现" in page.text
         assert "联网配置" in page.text
         assert 'id="config-form"' in page.text
@@ -65,6 +68,8 @@ async def _exercise_api() -> None:
         assert workbench.status_code == 200
         detail = workbench.json()
         assert detail["execution_mode"] == "offline"
+        assert detail["topic_data_status"] == "reference_demo"
+        assert detail["research_blueprint"]["candidate_fields"]
         assert detail["online_research"] is None
         assert [item["label"] for item in detail["stages"]] == [
             "研究需求",

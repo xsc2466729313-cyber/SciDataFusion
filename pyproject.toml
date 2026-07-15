@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "scidatafusion"
-version = "1.1.0"
+version = "1.2.0"
 description = "Evidence-first AI workflow for finding, parsing, and integrating scientific data"
 readme = "README.md"
 requires-python = ">=3.11"
