@@ -18,7 +18,9 @@ from scidatafusion.contracts.knowledge import KnowledgeRequest, KnowledgeResult
 from scidatafusion.contracts.mapping import FieldMapping
 from scidatafusion.contracts.normalization import NormalizedField
 from scidatafusion.contracts.online import (
+    AgentReflectionTrace,
     AutomatedQualityReview,
+    OnlineAcquisitionResult,
     OnlineResearchResult,
     ResearchExecutionMode,
     ResearchExplorationProfile,
@@ -35,6 +37,7 @@ from scidatafusion.contracts.workbench import (
     WorkbenchGraphNode,
     WorkbenchHit,
     WorkbenchIssue,
+    WorkbenchReviewAutomation,
     WorkbenchScientificDataset,
     WorkbenchSnapshot,
     WorkbenchSource,
@@ -69,6 +72,8 @@ def build_workbench_snapshot(
     delivery: DeliveryResult,
     execution_mode: ResearchExecutionMode = ResearchExecutionMode.OFFLINE,
     online_research: OnlineResearchResult | None = None,
+    online_acquisition: OnlineAcquisitionResult | None = None,
+    agent_reflection: AgentReflectionTrace | None = None,
     automated_quality_review: AutomatedQualityReview | None = None,
 ) -> WorkbenchSnapshot:
     """Project immutable workflow artifacts into a bounded UI read model."""
@@ -152,7 +157,7 @@ def build_workbench_snapshot(
     )
     live_discovery = execution_mode is ResearchExecutionMode.ONLINE
     stages = (
-        _live_discovery_stages(blueprint, online_research)
+        _live_discovery_stages(blueprint, online_research, online_acquisition)
         if live_discovery
         else (
             WorkbenchStage(
@@ -259,7 +264,23 @@ def build_workbench_snapshot(
             )
             for item in selected.sources
         ),
-        artifacts=() if live_discovery else artifacts,
+        artifacts=(
+            tuple(
+                WorkbenchArtifact(
+                    object_id=item.byte_sha256,
+                    format=item.artifact_kind,
+                    media_type=item.media_type,
+                    size_bytes=item.size_bytes,
+                    disposition="parse",
+                    parser=None,
+                    confidence=1.0,
+                    sha256=item.byte_sha256,
+                )
+                for item in online_acquisition.artifacts
+            )
+            if live_discovery and online_acquisition is not None
+            else (() if live_discovery else artifacts)
+        ),
         fields=() if live_discovery else fields,
         evidence=()
         if live_discovery
@@ -349,20 +370,90 @@ def build_workbench_snapshot(
             dataset_hash=scientific.dataset_ref.dataset_hash,
         ),
         online_research=online_research,
+        online_acquisition=online_acquisition,
+        agent_reflection=agent_reflection,
         automated_quality_review=automated_quality_review,
+        review_automation=_review_automation(
+            live_discovery=live_discovery,
+            blueprint=blueprint,
+            online_research=online_research,
+            quality=quality,
+            automated_quality_review=automated_quality_review,
+        ),
         delivery_artifact_count=0 if live_discovery else delivery.metrics.artifact_count,
         package_filename=delivery.package.filename,
         formal_gold_available=False if live_discovery else quality.formal_gold_dataset is not None,
     )
 
 
+def _review_automation(
+    *,
+    live_discovery: bool,
+    blueprint: ResearchExplorationProfile,
+    online_research: OnlineResearchResult | None,
+    quality: QualityAuditResult,
+    automated_quality_review: AutomatedQualityReview | None,
+) -> WorkbenchReviewAutomation:
+    """Route only genuine unresolved conflicts to people; retain machine-call proof."""
+
+    proof_hashes: list[str] = []
+    if online_research is not None:
+        for execution in online_research.search_executions:
+            if execution.invocation is not None:
+                proof_hashes.extend(
+                    (execution.invocation.query_hash, execution.invocation.response_hash)
+                )
+        for invocation in (
+            online_research.planning_model_invocation,
+            online_research.model_invocation,
+        ):
+            if invocation is not None:
+                proof_hashes.extend((invocation.request_hash, invocation.response_hash))
+    if (
+        automated_quality_review is not None
+        and automated_quality_review.model_invocation is not None
+    ):
+        proof_hashes.extend(
+            (
+                automated_quality_review.model_invocation.request_hash,
+                automated_quality_review.model_invocation.response_hash,
+            )
+        )
+    unique_hashes = tuple(dict.fromkeys(proof_hashes))
+    if live_discovery:
+        automatic = len(online_research.sources) if online_research is not None else 0
+        return WorkbenchReviewAutomation(
+            automatic_item_count=automatic,
+            evidence_wait_count=len(blueprint.candidate_fields),
+            human_review_count=0,
+            ai_assessment_performed=bool(online_research and online_research.model_performed),
+            proof_hashes=unique_hashes,
+        )
+    human_review_count = (
+        sum(decision.action == "request_human" for decision in automated_quality_review.decisions)
+        if automated_quality_review is not None
+        else len(quality.review_queue.items)
+    )
+    return WorkbenchReviewAutomation(
+        automatic_item_count=quality.metrics.gate_count,
+        evidence_wait_count=max(0, len(quality.issue_set.issues) - human_review_count),
+        human_review_count=human_review_count,
+        ai_assessment_performed=bool(
+            automated_quality_review and automated_quality_review.status == "completed"
+        ),
+        proof_hashes=unique_hashes,
+    )
+
+
 def _live_discovery_stages(
     blueprint: ResearchExplorationProfile,
     online_research: OnlineResearchResult | None,
+    online_acquisition: OnlineAcquisitionResult | None,
 ) -> tuple[WorkbenchStage, ...]:
     source_count = 0 if online_research is None else len(online_research.sources)
     query_count = 0 if online_research is None else len(online_research.search_plan.queries)
     discovery_status: Literal["complete", "review"] = "complete" if source_count else "review"
+    artifact_count = 0 if online_acquisition is None else len(online_acquisition.artifacts)
     return (
         WorkbenchStage(
             key="goal",
@@ -383,10 +474,10 @@ def _live_discovery_stages(
         WorkbenchStage(
             key="parse",
             label="材料获取",
-            status="review",
-            primary_count=len(blueprint.source_types),
-            count_label="目标类型",
-            detail="等待从候选来源获取论文正文、表格、附件、图像或科学文件后再解析。",
+            status="complete" if artifact_count else "review",
+            primary_count=artifact_count,
+            count_label="已获取材料",
+            detail=f"已自动获取并内容寻址保存 {artifact_count} 个真实材料; 失败来源保留结构化原因, 不阻塞其他来源。",
         ),
         WorkbenchStage(
             key="integrate",

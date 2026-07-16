@@ -18,6 +18,7 @@ from scidatafusion.config import Settings
 from scidatafusion.contracts.online import (
     LiveSearchBatch,
     LiveSearchResult,
+    SearchChannel,
     SearchInvocationRecord,
 )
 from scidatafusion.errors import AppError, ErrorCode
@@ -94,7 +95,16 @@ class SerpApiSearchClient:
         self._rate_lock = asyncio.Lock()
         self._last_started: float | None = None
 
-    async def search(self, query: str) -> LiveSearchBatch:
+    async def search(
+        self,
+        query: str,
+        channel: SearchChannel = SearchChannel.GOOGLE_WEB,
+    ) -> LiveSearchBatch:
+        if channel not in {SearchChannel.GOOGLE_WEB, SearchChannel.GOOGLE_SCHOLAR}:
+            raise AppError(
+                ErrorCode.INVALID_REQUEST,
+                "SerpApi client only supports Google web and Google Scholar",
+            )
         normalized = " ".join(query.split())
         if not 3 <= len(normalized) <= 512:
             raise AppError(ErrorCode.INVALID_REQUEST, "live search query must be 3-512 characters")
@@ -103,7 +113,7 @@ class SerpApiSearchClient:
                 ErrorCode.CONFIGURATION_ERROR,
                 "SerpApi search requires online mode and SERPAPI_API_KEY",
             )
-        cache_key = self._request_hash(normalized)
+        cache_key = self._request_hash(normalized, channel)
         cached = self._cache.get(
             cache_key,
             max_age_seconds=self._settings.search_cache_ttl_seconds,
@@ -114,7 +124,7 @@ class SerpApiSearchClient:
             )
         async with self._semaphore:
             await self._wait_for_rate_limit()
-            batch = await self._request_with_retry(normalized, cache_key)
+            batch = await self._request_with_retry(normalized, channel, cache_key)
         self._cache.put(cache_key, batch)
         return batch
 
@@ -127,12 +137,17 @@ class SerpApiSearchClient:
                     await self._sleeper(remaining)
             self._last_started = self._clock()
 
-    async def _request_with_retry(self, query: str, query_hash: str) -> LiveSearchBatch:
+    async def _request_with_retry(
+        self,
+        query: str,
+        channel: SearchChannel,
+        query_hash: str,
+    ) -> LiveSearchBatch:
         last_error = "unknown error"
         for attempt in range(1, self._settings.search_max_retries + 2):
             started = perf_counter()
             try:
-                response = await self._get(query)
+                response = await self._get(query, channel)
                 if response.status_code in self._RETRYABLE_STATUS:
                     last_error = f"HTTP {response.status_code}"
                 elif response.is_error:
@@ -143,6 +158,7 @@ class SerpApiSearchClient:
                 else:
                     return self._parse(
                         response,
+                        channel=channel,
                         query_hash=query_hash,
                         attempt=attempt,
                         latency_ms=(perf_counter() - started) * 1000,
@@ -157,17 +173,17 @@ class SerpApiSearchClient:
             retryable=True,
         )
 
-    async def _get(self, query: str) -> httpx.Response:
+    async def _get(self, query: str, channel: SearchChannel) -> httpx.Response:
         key = self._settings.serpapi_api_key
         if key is None:
             raise AppError(ErrorCode.CONFIGURATION_ERROR, "SERPAPI_API_KEY is missing")
         params: dict[str, str | int] = {
-            "engine": self._settings.search_engine,
+            "engine": ("google_scholar" if channel is SearchChannel.GOOGLE_SCHOLAR else "google"),
             "q": query,
             "api_key": key.get_secret_value(),
             "output": "json",
             "hl": self._settings.search_language,
-            "num": self._settings.search_max_results,
+            "num": min(self._settings.search_max_results, 20),
             "no_cache": "false",
         }
         if self._settings.search_country is not None:
@@ -186,6 +202,7 @@ class SerpApiSearchClient:
         self,
         response: httpx.Response,
         *,
+        channel: SearchChannel,
         query_hash: str,
         attempt: int,
         latency_ms: float,
@@ -200,7 +217,7 @@ class SerpApiSearchClient:
         if payload.error:
             raise AppError(ErrorCode.EXTERNAL_SERVICE_ERROR, "SerpApi reported a search error")
         results: list[LiveSearchResult] = []
-        for item in payload.organic_results[: self._settings.search_max_results]:
+        for item in payload.organic_results[: min(self._settings.search_max_results, 20)]:
             parsed_url = urlparse(item.link)
             if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname:
                 continue
@@ -208,6 +225,7 @@ class SerpApiSearchClient:
             display = item.displayed_link or parsed_url.hostname
             results.append(
                 LiveSearchResult(
+                    channel=channel,
                     position=item.position,
                     title=item.title,
                     url=HttpUrl(item.link),
@@ -220,6 +238,7 @@ class SerpApiSearchClient:
         return LiveSearchBatch(
             results=tuple(results),
             invocation=SearchInvocationRecord(
+                channel=channel,
                 query_hash=query_hash,
                 response_hash=response_hash,
                 result_count=len(results),
@@ -228,10 +247,10 @@ class SerpApiSearchClient:
             ),
         )
 
-    def _request_hash(self, query: str) -> str:
+    def _request_hash(self, query: str, channel: SearchChannel) -> str:
         encoded = json.dumps(
             {
-                "engine": self._settings.search_engine,
+                "channel": channel.value,
                 "gl": self._settings.search_country,
                 "hl": self._settings.search_language,
                 "q": query,

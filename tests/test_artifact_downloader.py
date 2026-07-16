@@ -14,6 +14,7 @@ from scidatafusion.artifacts.downloader import (
     DownloadFetchResult,
     LiveHostRateLimiter,
     SafeDownloadClient,
+    SystemHostResolver,
 )
 from scidatafusion.artifacts.integrity import calculate_url_locator_hash
 from scidatafusion.contracts.artifacts import (
@@ -51,6 +52,45 @@ class _Chunks(httpx.AsyncByteStream):
     async def __aiter__(self) -> AsyncIterator[bytes]:
         for chunk in self._chunks:
             yield chunk
+
+
+def test_system_resolver_retries_equivalent_absolute_dns_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def getaddrinfo(host: str, port: int, *, type: int) -> list[tuple[object, ...]]:
+        calls.append(host)
+        assert port == 443
+        assert type > 0
+        if host == "zenodo.org":
+            raise OSError(11004, "name resolution failed")
+        assert host == "zenodo.org."
+        return [(None, None, None, None, ("188.185.43.153", 443))]
+
+    monkeypatch.setattr("scidatafusion.artifacts.downloader.socket.getaddrinfo", getaddrinfo)
+
+    assert SystemHostResolver().resolve("zenodo.org") == ("188.185.43.153",)
+    assert calls == ["zenodo.org", "zenodo.org."]
+
+
+def test_system_resolver_uses_www_only_for_address_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def getaddrinfo(host: str, port: int, *, type: int) -> list[tuple[object, ...]]:
+        calls.append(host)
+        assert port == 443
+        assert type > 0
+        if host != "www.zenodo.org":
+            raise OSError(11004, "name resolution failed")
+        return [(None, None, None, None, ("188.185.43.153", 443))]
+
+    monkeypatch.setattr("scidatafusion.artifacts.downloader.socket.getaddrinfo", getaddrinfo)
+
+    assert SystemHostResolver().resolve("zenodo.org") == ("188.185.43.153",)
+    assert calls == ["zenodo.org", "zenodo.org.", "www.zenodo.org"]
 
 
 def _runtime(

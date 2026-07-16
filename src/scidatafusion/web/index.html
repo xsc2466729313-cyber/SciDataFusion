@@ -349,13 +349,13 @@
             <div class="online-proof">
               <div class="proof-item"><strong id="online-status">未执行</strong><span>联网状态</span></div>
               <div class="proof-item"><strong id="online-count">0</strong><span>实时搜索结果</span></div>
-              <div class="proof-item"><strong id="search-proof">SerpApi 未调用</strong><span>搜索调用证明</span></div>
+              <div class="proof-item"><strong id="search-proof">多通道未调用</strong><span>搜索调用证明</span></div>
               <div class="proof-item"><strong id="model-proof">Qwen 未调用</strong><span>模型调用证明</span></div>
             </div>
-            <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>排名</th><th>实时来源</th><th>搜索摘要</th><th>LLM 相关性</th><th>证据类型</th><th>建议与依据</th></tr></thead><tbody id="online-source-rows"></tbody></table></div>
+            <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>渠道</th><th>排名</th><th>实时来源</th><th>搜索摘要</th><th>LLM 相关性</th><th>证据类型</th><th>建议与依据</th></tr></thead><tbody id="online-source-rows"></tbody></table></div>
             <div class="section">
               <div class="section-head"><h2>智能检索计划</h2><p id="plan-copy">等待执行</p></div>
-              <div class="table-wrap"><table><thead><tr><th>序号</th><th>检索式</th><th>检索目的</th><th>预期证据</th><th>执行状态</th><th>命中</th></tr></thead><tbody id="query-plan-rows"></tbody></table></div>
+              <div class="table-wrap"><table><thead><tr><th>序号</th><th>渠道</th><th>检索式</th><th>检索目的</th><th>预期证据</th><th>执行状态</th><th>命中</th></tr></thead><tbody id="query-plan-rows"></tbody></table></div>
             </div>
           </div>
           <div class="section">
@@ -434,6 +434,10 @@
               <button id="download-csv" class="download-btn secondary" disabled>Gold CSV 尚未开放</button>
             </div>
           </div>
+          <div id="reflection-panel" class="section" style="display:none">
+            <div class="section-head"><h2>Agent 反思轨迹</h2><p>执行 → 验收 → 定位缺口 → 改写检索 → 再执行</p></div>
+            <div class="table-wrap"><table><thead><tr><th>轮次</th><th>本轮查询</th><th>发现 / 下载 / 有效数据</th><th>未满足条件</th><th>决策</th><th>反思依据</th></tr></thead><tbody id="reflection-rows"></tbody></table></div>
+          </div>
         </section>
 
         <section id="configuration" class="view">
@@ -457,14 +461,15 @@
     const $ = id => document.getElementById(id);
     const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
     const zh = {
-      complete:'完成', review:'待审', blocked:'阻断', required:'必填', optional:'可选', derived:'派生',
+      complete:'完成', review:'自动处理中', automated:'AI 已审核', evidence_wait:'待自动取证', blocked:'阻断', required:'必填', optional:'可选', derived:'派生',
       selected:'已采用', withheld:'待审保留', missing:'缺失', allowed:'允许', conditional:'条件许可', ready:'已就绪',
       parse:'解析', metadata_only:'仅保留元数据', needs_review:'待人工审核', succeeded:'已完成',
       completed:'完整完成', degraded:'部分完成', failed:'失败', inspect:'人工查阅', download:'建议下载', deprioritize:'降低优先级',
       document:'文档', table:'表格', landing_page:'网页', scientific_file:'科学文件', archive:'压缩包',
       data_repository:'数据仓库', domain_database:'领域数据库', literature_metadata:'论文元数据', supplement_web:'补充材料',
       paper:'论文', repository:'数据仓库', supplement:'补充材料', image:'图像与图表', catalog:'科学目录', other:'其他材料',
-      google:'Google 网页', google_scholar:'Google Scholar', llm:'Qwen 自主探索', seed_fallback:'主题检索回退', manual:'单检索式'
+      google:'Google 网页', google_web:'Google 网页', google_scholar:'Google Scholar', arxiv:'arXiv', multi_channel:'多通道检索', llm:'Qwen 自主探索', seed_fallback:'主题检索回退', manual:'多通道规则规划',
+      no_artifact:'没有取得文件', insufficient_artifacts:'文件数量不足', no_useful_file:'缺少机器可读数据', insufficient_source_diversity:'来源域名不足', retryable_failure:'存在可重试失败', continue:'继续检索', target_met:'达到材料目标', checkpointed:'保存续跑检查点', initial:'规则验收', fallback:'规则反思'
     };
     const label = value => zh[value] || String(value ?? '-');
     let snapshot = null;
@@ -503,13 +508,13 @@
       $('m-evidence').textContent = exploring ? snapshot.research_blueprint.evidence_priorities.length : snapshot.evidence.length;
       $('m-fields').textContent = exploring ? snapshot.research_blueprint.candidate_fields.length : snapshot.fields.length;
       $('m-quality').textContent = exploring ? snapshot.research_blueprint.quality_checks.length : `${Math.round(snapshot.quality_score * 100)}%`;
-      $('m-issues').textContent = exploring ? snapshot.research_blueprint.target_outputs.length : snapshot.issues.length;
+      $('m-issues').textContent = snapshot.review_automation.human_review_count;
       $('m-sources-label').textContent=exploring?'真实候选来源':'选定数据源';
       $('m-artifacts-label').textContent=exploring?'计划来源类型':'原始产物';
       $('m-evidence-label').textContent=exploring?'证据检索重点':'字段级证据';
       $('m-fields-label').textContent=exploring?'候选字段':'目标字段';
       $('m-quality-label').textContent=exploring?'计划质量检查':'质量得分';
-      $('m-issues-label').textContent=exploring?'目标成果':'待审问题';
+      $('m-issues-label').textContent='需人工审核';
       $('mode-offline').checked = snapshot.execution_mode !== 'online';
       $('mode-online').checked = snapshot.execution_mode === 'online';
       renderRuntime(); renderBlueprint(); renderPipeline(); renderFields(); renderSources(); renderOnline(); renderArtifacts(); renderEvidence(); renderScientific(); renderQuality(); renderIssues(); renderHits(); renderDelivery(); renderConfiguration();
@@ -546,8 +551,8 @@
       if(snapshot.topic_data_status==='live_discovery'){
         $('field-preview-title').textContent='主题候选字段';
         $('field-preview-copy').textContent='由研究主题自主生成的提取计划；尚未取得真实科学值';
-        $('overview-fields').innerHTML=snapshot.research_blueprint.candidate_fields.map(item=>`<tr><td><strong>${esc(item)}</strong></td><td>候选</td><td>-</td><td>-</td><td>-</td><td>${badge('review')}</td><td>0</td></tr>`).join('');
-        $('field-rows').innerHTML=snapshot.research_blueprint.candidate_fields.map(item=>`<tr><td><strong>${esc(item)}</strong></td><td>待来源确认</td><td>-</td><td>-</td><td>AI 规划</td><td>-</td><td>-</td><td>${badge('review')}</td></tr>`).join('');
+        $('overview-fields').innerHTML=snapshot.research_blueprint.candidate_fields.map(item=>`<tr><td><strong>${esc(item)}</strong></td><td>候选</td><td>-</td><td>-</td><td>-</td><td>${badge('evidence_wait')}</td><td>0</td></tr>`).join('');
+        $('field-rows').innerHTML=snapshot.research_blueprint.candidate_fields.map(item=>`<tr><td><strong>${esc(item)}</strong></td><td>待来源证据</td><td>-</td><td>-</td><td>AI 规划 + 规则校验</td><td>-</td><td>-</td><td>${badge('evidence_wait')}</td></tr>`).join('');
         return;
       }
       $('field-preview-title').textContent='融合结果预览';
@@ -563,9 +568,9 @@
       if (!runtime) return;
       const onlineActive = snapshot && snapshot.execution_mode === 'online';
       $('runtime-dot').className = `dot ${runtime.online_ready ? '' : 'offline'}`;
-      $('runtime-label').textContent = onlineActive ? `实时联网 · ${label(runtime.search_engine)} + ${runtime.model_id}` : runtime.online_ready ? '联网能力就绪 · 当前离线复现' : '离线复现 · 联网配置未就绪';
+      $('runtime-label').textContent = onlineActive ? `实时联网 · Google 网页 + Google Scholar + arXiv + ${runtime.model_id}` : runtime.online_ready ? '联网能力就绪 · 三通道可用' : '离线复现 · 联网配置未就绪';
       $('mode-online').disabled = !runtime.online_ready;
-      $('mode-online-label').title = runtime.online_ready ? '使用 SerpApi 实时搜索，并由 Qwen 评估来源相关性' : '需以 SCIDATA_OFFLINE_MODE=false 启动，并在本地 .env 配置 SerpApi 与百炼密钥';
+      $('mode-online-label').title = runtime.online_ready ? '使用 Google 网页、Google Scholar 与 arXiv 实时搜索，并由 Qwen 评估来源相关性' : '需启用联网模式，并在客户端配置 SerpApi 与百炼密钥';
     }
     function renderOnline() {
       const online = snapshot.online_research;
@@ -573,11 +578,11 @@
         $('online-copy').textContent = '本次运行使用内容寻址的离线复现数据，未发起外部请求';
         $('online-status').textContent = '未执行';
         $('online-count').textContent = '0';
-        $('search-proof').textContent = 'SerpApi 未调用';
+        $('search-proof').textContent = '多通道未调用';
         $('model-proof').textContent = 'Qwen 未调用';
-        $('online-source-rows').innerHTML = '<tr><td colspan="6" class="empty">离线复现模式：联网调用数为 0，全部结果可重复校验。</td></tr>';
+        $('online-source-rows').innerHTML = '<tr><td colspan="7" class="empty">离线复现模式：联网调用数为 0，全部结果可重复校验。</td></tr>';
         $('plan-copy').textContent = '本次未执行联网查询规划';
-        $('query-plan-rows').innerHTML = '<tr><td colspan="6" class="empty">选择联网智能后显示 Qwen 规划与逐条检索结果。</td></tr>';
+        $('query-plan-rows').innerHTML = '<tr><td colspan="7" class="empty">选择联网智能后显示 Qwen 规划与逐条检索结果。</td></tr>';
         return;
       }
       const search = online.search_invocation;
@@ -586,20 +591,21 @@
       $('online-status').textContent = label(online.status);
       $('online-count').textContent = online.sources.length;
       const completedSearches=online.search_executions.filter(item=>item.status==='completed');
-      $('search-proof').textContent = search ? `${completedSearches.length}/${online.search_executions.length} 条完成 · ${search.cached ? '首条缓存命中' : '已发实时请求'}` : 'SerpApi 未完成';
+      const completedChannels=new Set(completedSearches.map(item=>item.channel));
+      $('search-proof').textContent = search ? `${completedSearches.length}/${online.search_executions.length} 条完成 · ${completedChannels.size} 个渠道` : '多通道未完成';
       $('model-proof').textContent = model ? `${model.actual_model} · ${Math.round(model.latency_ms)} ms · ${model.usage.input_tokens + model.usage.output_tokens} tokens` : 'Qwen 未完成';
       $('online-source-rows').innerHTML = online.sources.length ? online.sources.map(item => {
         const assessment = item.assessment;
         const types = assessment ? assessment.evidence_types.map(type => `<span class="tag">${esc(type)}</span>`).join('') : '-';
         const decision = assessment ? `<strong>${esc(Math.round(assessment.relevance_score * 100))}%</strong>` : '-';
         const rationale = assessment ? `<span class="status-text ${assessment.recommended_action === 'deprioritize' ? 'review' : 'good'}">${esc(label(assessment.recommended_action))}</span><br>${esc(assessment.rationale)}` : '模型评估未采用';
-        return `<tr><td>#${item.search.position}</td><td><a class="source-link" href="${esc(item.search.url)}" target="_blank" rel="noopener noreferrer">${esc(item.search.title)}</a><div class="mono">${esc(item.search.source_domain)}</div></td><td>${esc(item.search.snippet)}</td><td>${decision}</td><td><div class="tags">${types}</div></td><td>${rationale}</td></tr>`;
-      }).join('') : '<tr><td colspan="6" class="empty">实时搜索未返回可验证来源。</td></tr>';
-      const executions = new Map(online.search_executions.map(item => [item.query, item]));
+        return `<tr><td><span class="tag">${esc(label(item.search.channel))}</span></td><td>#${item.search.position}</td><td><a class="source-link" href="${esc(item.search.url)}" target="_blank" rel="noopener noreferrer">${esc(item.search.title)}</a><div class="mono">${esc(item.search.source_domain)}</div></td><td>${esc(item.search.snippet)}</td><td>${decision}</td><td><div class="tags">${types}</div></td><td>${rationale}</td></tr>`;
+      }).join('') : '<tr><td colspan="7" class="empty">实时搜索未返回可验证来源。</td></tr>';
+      const executions = new Map(online.search_executions.map(item => [`${item.channel}:${item.query}`, item]));
       $('plan-copy').textContent = `${label(online.search_plan.strategy)} · ${online.search_plan.queries.length} 条检索式 · 最多保留 ${runtime.max_search_results} 个来源`;
       $('query-plan-rows').innerHTML = online.search_plan.queries.map((item,index) => {
-        const execution=executions.get(item.query); const types=item.expected_evidence_types.map(type=>`<span class="tag">${esc(type)}</span>`).join('');
-        return `<tr><td>#${index+1}</td><td><strong>${esc(item.query)}</strong></td><td>${esc(item.purpose)}</td><td><div class="tags">${types}</div></td><td>${execution ? badge(execution.status) : '-'}</td><td>${execution ? execution.result_count : 0}</td></tr>`;
+        const execution=executions.get(`${item.channel}:${item.query}`); const types=item.expected_evidence_types.map(type=>`<span class="tag">${esc(type)}</span>`).join('');
+        return `<tr><td>#${index+1}</td><td><span class="tag">${esc(label(item.channel))}</span></td><td><strong>${esc(item.query)}</strong></td><td>${esc(item.purpose)}</td><td><div class="tags">${types}</div></td><td>${execution ? badge(execution.status) : '-'}</td><td>${execution ? execution.result_count : 0}</td></tr>`;
       }).join('');
     }
 
@@ -620,14 +626,14 @@
     }
     function renderScientific() {
       const item=snapshot.scientific_dataset;
-      if(!item){$('scientific-dataset').innerHTML='<div class="empty" style="grid-column:1/-1">当前主题尚无已下载的科学文件，解析器不会生成占位数值。</div>';return;}
+      if(!item){const acquired=snapshot.online_acquisition?.artifacts.length||0;const failed=snapshot.online_acquisition?.failures.length||0;$('scientific-dataset').innerHTML=`<div class="empty" style="grid-column:1/-1">已自动获取 ${acquired} 个真实材料，${failed} 个来源获取失败并已记录原因；当前尚无可由确定性科学格式解析器读取的文件，不会生成占位数值。</div>`;return;}
       $('scientific-dataset').innerHTML=`<div class="metric"><b>${esc(item.format.toUpperCase())}</b><span>文件格式</span></div><div class="metric"><b>${item.selected_row_count}</b><span>选取行数</span></div><div class="metric"><b>${item.variable_names.length}</b><span>变量 ${esc(item.variable_names.join(' / '))}</span></div><div class="metric"><b>${item.materialized_cell_count}</b><span>确定性读取值</span></div><div class="metric"><b>${item.transformation_count}</b><span>显式缩放变换</span></div><div class="metric"><b>${item.missing_value_count}</b><span>保留缺失值</span></div>`;
     }
     function renderQuality() {
       if(snapshot.topic_data_status==='live_discovery'){
-        $('quality-summary').textContent=`${snapshot.research_blueprint.quality_checks.length} 项待执行`;
+        $('quality-summary').textContent=`自动校验 ${snapshot.review_automation.evidence_wait_count} 项`;
         $('quality-summary').className='badge review';
-        $('quality-list').innerHTML=snapshot.research_blueprint.quality_checks.map(item=>`<div class="quality-row"><div class="quality-label"><strong>${esc(item)}</strong><span class="status-text review">等待真实数据</span></div><div class="track"><div class="bar" style="width:0"></div></div></div>`).join('');
+        $('quality-list').innerHTML=snapshot.research_blueprint.quality_checks.map(item=>`<div class="quality-row"><div class="quality-label"><strong>${esc(item)}</strong><span class="status-text review">取得证据后自动执行</span></div><div class="track"><div class="bar" style="width:0"></div></div></div>`).join('');
         return;
       }
       $('quality-summary').textContent = `${snapshot.gates.filter(item => item.passed).length} / ${snapshot.gates.length} 通过`;
@@ -646,11 +652,16 @@
     }
     function renderDelivery() {
       if(snapshot.topic_data_status==='live_discovery'){
-        $('delivery-rows').innerHTML='<tr><td colspan="6" class="empty">当前主题尚处于真实来源探索阶段，没有可冒充正式成果的数据文件。</td></tr>';
-        $('delivery-copy').textContent='完成真实文件获取、字段级证据解析和质量门后，才会生成当前主题的 CSV 与复现包。';
+        const catalog=snapshot.online_acquisition?.catalog;const local=snapshot.artifacts;
+        const reflection=snapshot.agent_reflection;
+        $('reflection-panel').style.display=reflection?'block':'none';
+        $('reflection-rows').innerHTML=reflection?.rounds.length?reflection.rounds.map(round=>`<tr><td><strong>${round.iteration}</strong></td><td>${esc(round.input_query)}</td><td>${round.discovered_source_count} / ${round.acquired_artifact_count} / ${round.useful_artifact_count}</td><td>${round.gaps.length?round.gaps.map(label).map(esc).join('、'):'无'}</td><td><span class="status-text ${round.decision==='target_met'?'good':'review'}">${esc(label(round.decision))}</span><br><span class="subtle">${esc(label(round.reflection_strategy))}</span></td><td>${esc(round.reflection_summary)}${round.qualifications.length?`<br>${round.qualifications.map(item=>`<span class="status-text ${item.accepted?'good':'review'}">${item.accepted?'材料通过':'材料拒绝'}：${esc(item.rationale)}</span>`).join('<br>')}`:''}${round.next_query?`<br><span class="subtle">下一轮：${esc(round.next_query)}</span>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">等待 Agent 完成第一轮验收。</td></tr>';
+        $('delivery-rows').innerHTML=local.length?local.map(item=>`<tr><td><strong>${esc(item.sha256.slice(0,16))}…</strong></td><td>${esc(item.format)}</td><td>${esc(item.media_type)}</td><td>${formatBytes(item.size_bytes)}</td><td class="mono">${esc(item.sha256.slice(0,16))}…</td><td><button class="nav-btn online-download" data-sha="${esc(item.sha256)}" style="color:#27647c;padding:4px 0">下载原始文件</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">本次尚未取得可持久化的真实文件，Agent 将从检查点继续反思检索。</td></tr>';
+        $('delivery-copy').textContent=catalog?`已将 ${catalog.artifact_count} 个不可变原始文件接入本地 DuckDB，累计 ${formatBytes(catalog.stored_byte_count)}；Agent 反思 ${reflection?.rounds.length||0} 轮，取得 ${reflection?.useful_artifact_count||0} 个机器可读材料，状态：${reflection?.status==='target_met'?'达到材料目标':'已保存续跑检查点'}；原始文件：var/online-bronze/sha256；数据库：${catalog.database_path}`:'正在初始化本地文件与 DuckDB 存储。';
         $('download-package').disabled=true;$('download-package').textContent='等待主题数据通过质量门';$('download-package').dataset.file='';
         $('download-csv').disabled=true;$('download-csv').textContent='Gold CSV 尚未开放';$('download-csv').dataset.file='';return;
       }
+      $('reflection-panel').style.display='none';
       $('delivery-copy').textContent='包含数据字典、来源证据、质量报告、证据图、运行指标和校验 Notebook。';
       $('download-package').disabled=false;$('download-package').textContent='下载完整复现包';
       $('delivery-rows').innerHTML = delivery.artifacts.map(item => `<tr><td><strong>${esc(item.filename)}</strong></td><td>${esc(item.kind)}</td><td>${esc(item.media_type)}</td><td>${formatBytes(item.size_bytes)}</td><td class="mono">${esc(item.sha256.slice(0,16))}…</td><td><button class="nav-btn signed" data-file="${esc(item.filename)}" style="color:#27647c;padding:4px 0">下载</button></td></tr>`).join('');
@@ -711,13 +722,16 @@
       const ticket = await api(`/api/v1/demo/download-tickets/${encodeURIComponent(filename)}`, {method:'POST'});
       window.location.assign(ticket.download_url);
     }
+    function onlineDownload(sha256) {
+      window.location.assign(`/api/v1/online/artifacts/${encodeURIComponent(sha256)}`);
+    }
     async function load() {
       try { [snapshot,delivery,runtime,configuration]=await Promise.all([api('/api/v1/workbench'),api('/api/v1/demo/status'),api('/api/v1/runtime'),api('/api/v1/online/configuration')]); render(); }
       catch(error){$('message').textContent=error.message;$('message').className='error';}
     }
     $('run-form').addEventListener('submit',async event=>{event.preventDefault();$('run').disabled=true;const mode=document.querySelector('input[name="execution-mode"]:checked').value;const query=$('query').value.trim();$('message').textContent=mode==='online'?'正在理解研究主题，由 Qwen 自主生成探索蓝图并执行多源联网检索...':'正在运行内置可复现参考链路...';try{await api('/api/v1/demo/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_mode:mode,research_goal:$('goal').value,retrieval_query:query||null})});await load();}catch(error){$('message').textContent=error.message;$('message').className='error';}finally{$('run').disabled=false;}});
     $('config-form').addEventListener('submit',async event=>{event.preventDefault();const button=$('save-config');button.disabled=true;$('config-message').textContent='正在校验并保存本机配置...';$('config-message').className='subtle';const serp=$('cfg-serpapi-key').value.trim();const dash=$('cfg-dashscope-key').value.trim();const payload={online_enabled:$('cfg-online-enabled').checked,serpapi_api_key:serp||null,dashscope_api_key:dash||null,qwen_base_url:$('cfg-base-url').value.trim()};try{configuration=await api('/api/v1/online/configuration',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});runtime=await api('/api/v1/runtime');$('cfg-serpapi-key').value='';$('cfg-dashscope-key').value='';renderRuntime();renderConfiguration();$('config-message').textContent=configuration.online_ready?'配置已保存，联网智能可以使用':'配置已保存，请补齐两个 API Key';$('config-message').className=configuration.online_ready?'status-text good':'status-text review';}catch(error){$('config-message').textContent=error.message;$('config-message').className='error';}finally{button.disabled=false;}});
-    document.addEventListener('click',async event=>{const nav=event.target.closest('.nav-btn[data-view]');if(nav){document.querySelectorAll('.nav-btn[data-view]').forEach(item=>item.classList.toggle('active',item===nav));document.querySelectorAll('.view').forEach(item=>item.classList.toggle('active',item.id===nav.dataset.view));$('page-title').textContent=nav.textContent;requestAnimationFrame(()=>{drawTopicChart();drawEvidenceGraph();});return;}const button=event.target.closest('.signed,#download-package,#download-csv');if(button&&!button.disabled){try{await signedDownload(button.dataset.file);}catch(error){$('message').textContent=error.message;$('message').className='error';}}});
+    document.addEventListener('click',async event=>{const nav=event.target.closest('.nav-btn[data-view]');if(nav){document.querySelectorAll('.nav-btn[data-view]').forEach(item=>item.classList.toggle('active',item===nav));document.querySelectorAll('.view').forEach(item=>item.classList.toggle('active',item.id===nav.dataset.view));$('page-title').textContent=nav.textContent;requestAnimationFrame(()=>{drawTopicChart();drawEvidenceGraph();});return;}const online=event.target.closest('.online-download');if(online){onlineDownload(online.dataset.sha);return;}const button=event.target.closest('.signed,#download-package,#download-csv');if(button&&!button.disabled){try{await signedDownload(button.dataset.file);}catch(error){$('message').textContent=error.message;$('message').className='error';}}});
     window.addEventListener('resize',()=>{drawTopicChart();drawEvidenceGraph();});
     load();
   </script>

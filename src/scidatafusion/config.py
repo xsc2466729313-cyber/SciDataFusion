@@ -94,12 +94,12 @@ class Settings(BaseSettings):
     search_max_concurrency: int = Field(default=2, ge=1, le=16)
     search_min_interval_seconds: float = Field(default=0.25, ge=0, le=10)
     search_cache_ttl_seconds: int = Field(default=900, ge=1, le=86_400)
-    search_max_results: int = Field(default=10, ge=1, le=10)
+    search_max_results: int = Field(default=20, ge=1, le=20)
     search_engine: Literal["google", "google_scholar"] = "google"
     search_language: SearchLocale = "zh-cn"
     search_country: SearchCountry | None = None
     search_query_planning_enabled: bool = True
-    search_max_queries: int = Field(default=3, ge=1, le=4)
+    search_max_queries: int = Field(default=5, ge=1, le=6)
 
     default_max_sources: int = Field(default=50, ge=1, le=1000)
     default_max_download_bytes: int = Field(default=500 * 1024 * 1024, ge=1)

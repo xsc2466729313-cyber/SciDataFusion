@@ -16,7 +16,7 @@
 
 Windows 10/11 64 位用户可以在
 [GitHub Releases](https://github.com/xsc2466729313-cyber/SciDataFusion/releases/latest)
-下载 `SciDataFusion-1.2.0-windows-x64.zip`：
+下载 `SciDataFusion-1.3.0-windows-x64.zip`：
 
 1. 完整解压 ZIP。
 2. 双击 `SciDataFusion.exe` 或 `Start-SciDataFusion.bat`。
@@ -28,7 +28,7 @@ Windows 10/11 64 位用户可以在
 ## 能做什么
 
 - 只输入研究方向，自动生成主题标题、证据重点、来源类型、候选字段、质量检查和目标成果。
-- 自主规划多条互补检索式，联网发现论文、数据仓库、机器可读表格、补充材料、图像与科学目录。
+- 自主规划多条互补检索式，并行使用 Google 网页、Google Scholar 和 arXiv 发现论文、数据仓库、机器可读表格、补充材料、图像与科学目录。
 - 展示每个来源、原始产物、解析路线、表格单元格和字段证据。
 - 并列查看原始值、规范化值、融合结果和待审核冲突。
 - 由 Qwen 生成结构化探索计划并评估来源；缺少证据时不会编造数值。
@@ -52,7 +52,7 @@ Windows 10/11 64 位用户可以在
 | 解析与整合 | 文档/表格/图像路线、字段值和融合决策 |
 | 证据与质量 | 可交互 3D 知识图谱、字段证据、质量门、问题和审核动作 |
 | 成果交付 | 数据字典、证据图、质量报告和可复现文件 |
-| 联网配置 | SerpApi、百炼、搜索策略和模型设置 |
+| 联网配置 | SerpApi、百炼和模型设置；arXiv 无需额外密钥 |
 
 ## 源码运行
 
@@ -87,7 +87,9 @@ uv run scidatafusion phase8-delivery-demo `
 
 默认使用百炼北京兼容接口和 `qwen-plus`/`qwen-turbo`。`qwen-plus` 根据研究方向生成严格结构化的探索蓝图和互补检索式，`qwen-turbo` 评估真实搜索结果。模型不能直接修改科学数值；解析、证据、质量门和交付仍由本地确定性流程控制。
 
-官方配置参考：[阿里云百炼 Base URL](https://help.aliyun.com/zh/model-studio/base-url)、[SerpApi Search API](https://serpapi.com/search-api)。
+系统会自动为每条检索式选择渠道：Google 网页侧重开放数据库和机器可读文件，Google Scholar 侧重正式论文和引用线索，arXiv 侧重预印本。三个渠道的结果会轮询合并、按 URL 去重，默认最多保留 20 个来源；页面会显示每条检索的渠道、命中数和调用证明。Google 网页与 Google Scholar 共用 SerpApi Key，arXiv 不需要新增配置。
+
+官方配置参考：[阿里云百炼 Base URL](https://help.aliyun.com/zh/model-studio/base-url)、[SerpApi Google Scholar API](https://serpapi.com/google-scholar-api)、[arXiv API](https://info.arxiv.org/help/api/user-manual.html)。
 
 ## 交付内容
 

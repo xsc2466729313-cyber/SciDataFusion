@@ -110,7 +110,7 @@ def test_online_search_strategy_is_bounded_and_normalized() -> None:
     assert settings.search_language == "zh-cn"
     assert settings.search_country == "cn"
     with pytest.raises(ValidationError):
-        Settings(_env_file=None, search_max_queries=5)
+        Settings(_env_file=None, search_max_queries=7)
     with pytest.raises(ValidationError):
         Settings(_env_file=None, search_country="china")
 

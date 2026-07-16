@@ -16,7 +16,7 @@ async def _exercise_api() -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         health = await client.get("/api/health")
         assert health.status_code == 200
-        assert health.json() == {"status": "ok", "service": "scidatafusion", "module": "M22"}
+        assert health.json() == {"status": "ok", "service": "scidatafusion", "module": "M25"}
         assert health.headers["x-content-type-options"] == "nosniff"
 
         page = await client.get("/")
@@ -35,6 +35,8 @@ async def _exercise_api() -> None:
         assert 'from "/assets/knowledge-graph.js"' in page.text
         assert "https://dashscope.aliyuncs.com/compatible-mode/v1" in page.text
         assert "保存并应用" in page.text
+        assert "需人工审核" in page.text
+        assert "待自动取证" in page.text
         assert "规划模型" not in page.text
         assert "国家代码" not in page.text
         assert "M00-M20" not in page.text
@@ -47,7 +49,13 @@ async def _exercise_api() -> None:
         configuration = await client.get("/api/v1/online/configuration")
         assert configuration.status_code == 200
         assert configuration.json()["query_planning_enabled"] is True
-        assert configuration.json()["max_search_queries"] == 3
+        assert configuration.json()["max_search_queries"] == 5
+        assert configuration.json()["max_search_results"] == 20
+        assert configuration.json()["search_channels"] == [
+            "google_web",
+            "google_scholar",
+            "arxiv",
+        ]
         assert all(not item["configured"] for item in configuration.json()["credentials"])
         assert all(
             set(item) == {"environment_variable", "configured"}
@@ -110,6 +118,14 @@ async def _exercise_api() -> None:
         assert detail["scientific_dataset"]["format"] == "fits"
         assert detail["scientific_dataset"]["variable_names"] == ["MJD", "MAG", "MAG_ERR"]
         assert detail["scientific_dataset"]["materialized_cell_count"] == 12
+        assert detail["review_automation"] == {
+            "policy_version": "1.0.0",
+            "automatic_item_count": 3,
+            "evidence_wait_count": 0,
+            "human_review_count": 0,
+            "ai_assessment_performed": False,
+            "proof_hashes": [],
+        }
 
         graph_script = await client.get("/assets/knowledge-graph.js")
         assert graph_script.status_code == 200

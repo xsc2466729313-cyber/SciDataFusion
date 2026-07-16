@@ -8,7 +8,9 @@ from pydantic import Field, StringConstraints
 
 from scidatafusion.contracts.base import ContentHash, StrictContract
 from scidatafusion.contracts.online import (
+    AgentReflectionTrace,
     AutomatedQualityReview,
+    OnlineAcquisitionResult,
     OnlineResearchResult,
     ResearchExecutionMode,
     ResearchExplorationProfile,
@@ -127,6 +129,17 @@ class WorkbenchChartPoint(StrictContract):
     error_y: str
 
 
+class WorkbenchReviewAutomation(StrictContract):
+    """Cost-aware review routing with immutable proof references."""
+
+    policy_version: Literal["1.0.0"] = "1.0.0"
+    automatic_item_count: int = Field(ge=0)
+    evidence_wait_count: int = Field(ge=0)
+    human_review_count: int = Field(ge=0)
+    ai_assessment_performed: bool
+    proof_hashes: tuple[ContentHash, ...] = Field(max_length=32)
+
+
 class WorkbenchScientificDataset(StrictContract):
     format: str
     parser_id: str
@@ -166,7 +179,10 @@ class WorkbenchSnapshot(StrictContract):
     chart_points: tuple[WorkbenchChartPoint, ...]
     scientific_dataset: WorkbenchScientificDataset | None
     online_research: OnlineResearchResult | None
+    online_acquisition: OnlineAcquisitionResult | None = None
+    agent_reflection: AgentReflectionTrace | None = None
     automated_quality_review: AutomatedQualityReview | None = None
+    review_automation: WorkbenchReviewAutomation
     delivery_artifact_count: int = Field(ge=0)
     package_filename: str
     formal_gold_available: bool

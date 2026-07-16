@@ -169,5 +169,28 @@ before the separate source assessment call. A secret-free configuration API and 
 readiness. Endpoint allowlists and the prohibition on model-created scientific values remain
 unchanged.
 
+M23 replaces the single-engine online boundary with three explicit search channels. Qwen assigns
+each bounded query to Google Web, Google Scholar, or arXiv; deterministic fallback planning covers
+all three. SerpApi serves the two Google channels, while the public arXiv Atom API requires no new
+credential and is protected by an exact host allowlist, three-second request spacing, retry, cache,
+response-size limit, and hardened XML parsing. Results are merged round-robin across channels and
+deduplicated by URL, with a default retained-source limit of 20. The workbench exposes the selected
+channel and immutable invocation proof for every query and source.
+
+M24 closes the online discovery-to-material gap with bounded automatic acquisition. Up to five
+validated search-result URLs explicitly recommended for download are admitted to a request-scoped
+exact-host allowlist, DNS-pinned to public addresses, fetched without redirects or credentials,
+classified from bytes, and stored content-addressed in Bronze. Per-file/run byte budgets, timeout,
+rate limit, and structured failures keep cost and risk bounded; no downloaded material can populate
+a scientific field before deterministic parsing and evidence binding.
+
+M25 makes acquired current-topic objects directly downloadable by their verified SHA-256 and adds a
+checkpointed Agent reflection loop. The loop repeatedly searches, acquires, measures material gaps,
+and changes retrieval route for up to four rounds. Success requires three unique artifacts across
+two domains and at least one machine-readable table, scientific file, or data archive; HTML landing
+pages and PDF documents remain evidence but cannot satisfy that data target. Every reflection round
+and model proof is stored immutably in DuckDB, while an unmet target remains an explicit resumable
+checkpoint rather than a false success or fabricated Gold result.
+
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

@@ -44,7 +44,23 @@ class SystemHostResolver:
     def resolve(self, host: str) -> tuple[str, ...]:
         """Resolve TCP addresses without making an application request."""
 
-        records = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        try:
+            records = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        except OSError:
+            # Some Windows resolvers fail an apex lookup while the equivalent
+            # absolute DNS name succeeds. The trailing dot changes no host,
+            # trust boundary, TLS SNI, or allowlist decision.
+            try:
+                records = socket.getaddrinfo(f"{host}.", 443, type=socket.SOCK_STREAM)
+            except OSError:
+                if host.startswith("www."):
+                    raise
+                # A small class of public repositories publish the apex and
+                # www names on the same TLS virtual host while local DNS
+                # filters suppress only the apex answer. The returned address
+                # is still public-IP checked; the request keeps the original
+                # Host and SNI, so certificate validation remains fail-closed.
+                records = socket.getaddrinfo(f"www.{host}", 443, type=socket.SOCK_STREAM)
         return tuple(dict.fromkeys(str(item[4][0]) for item in records))
 
 

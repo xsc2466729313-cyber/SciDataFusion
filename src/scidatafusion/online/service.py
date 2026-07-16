@@ -6,7 +6,7 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Protocol
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from pydantic import HttpUrl, ValidationError
 
@@ -18,20 +18,27 @@ from scidatafusion.contracts.model import (
     StructuredModelRequest,
 )
 from scidatafusion.contracts.online import (
+    AgentReflectionProposal,
+    ArtifactQualification,
+    ArtifactQualificationBatch,
+    ArtifactReviewInput,
     AutomatedQualityReview,
     AutomatedQualityReviewProposal,
     AutomatedReviewDecision,
     CredentialConfigurationStatus,
     LiveSearchBatch,
     LiveSearchResult,
+    OnlineAcquisitionResult,
     OnlineConfigurationView,
     OnlineResearchResult,
     OnlineRuntimeStatus,
     OnlineSourceRecord,
     PlannedSearchQuery,
     QualityIssueInput,
+    SearchChannel,
     SearchExecutionRecord,
     SearchQueryPlan,
+    SourceAssessment,
     SourceAssessmentBatch,
 )
 from scidatafusion.errors import AppError, ErrorCode
@@ -40,13 +47,13 @@ from scidatafusion.exploration import (
     build_fallback_search_query,
 )
 from scidatafusion.models import BailianStructuredClient
-from scidatafusion.online.search import SerpApiSearchClient
+from scidatafusion.online.multichannel import MultiChannelSearchClient
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 class SearchClient(Protocol):
-    async def search(self, query: str) -> LiveSearchBatch: ...
+    async def search(self, query: str, channel: SearchChannel) -> LiveSearchBatch: ...
 
 
 class ModelClient(Protocol):
@@ -133,9 +140,11 @@ class OnlineResearchService:
         assessment_prompt_path: Path | None = None,
         planning_prompt_path: Path | None = None,
         quality_prompt_path: Path | None = None,
+        reflection_prompt_path: Path | None = None,
+        qualification_prompt_path: Path | None = None,
     ) -> None:
         self._settings = settings
-        self._search = search_client or SerpApiSearchClient(settings)
+        self._search = search_client or MultiChannelSearchClient(settings)
         self._model = model_client or BailianStructuredClient(settings)
         self._assessment_prompt_path = (
             assessment_prompt_path or _PROJECT_ROOT / "prompts" / "online_source_assessment.md"
@@ -145,6 +154,13 @@ class OnlineResearchService:
         )
         self._quality_prompt_path = (
             quality_prompt_path or _PROJECT_ROOT / "prompts" / "online_quality_review.md"
+        )
+        self._reflection_prompt_path = (
+            reflection_prompt_path or _PROJECT_ROOT / "prompts" / "online_acquisition_reflection.md"
+        )
+        self._qualification_prompt_path = (
+            qualification_prompt_path
+            or _PROJECT_ROOT / "prompts" / "online_artifact_qualification.md"
         )
 
     async def run(self, *, research_goal: str, query: str | None = None) -> OnlineResearchResult:
@@ -170,7 +186,11 @@ class OnlineResearchService:
         if failed_count:
             warnings.append(f"{failed_count} 条检索式执行失败, 已保留其余可验证结果。")
 
-        results = self._merge_results(tuple(item[1] for item in outcomes))
+        direct_source = self._direct_https_source(query)
+        result_groups = tuple(item[1] for item in outcomes)
+        if direct_source is not None:
+            result_groups = ((direct_source,), *result_groups)
+        results = self._merge_results(result_groups)
         if not successful:
             return OnlineResearchResult(
                 status="failed",
@@ -210,6 +230,17 @@ class OnlineResearchService:
             if not received_urls.issubset(allowed_urls):
                 raise ValueError("model assessment referenced an unknown source URL")
             assessments = {str(item.source_url): item for item in batch.assessments}
+            if direct_source is not None:
+                assessments[str(direct_source.url)] = SourceAssessment(
+                    source_url=direct_source.url,
+                    relevance_score=1.0,
+                    evidence_types=("repository",),
+                    rationale=(
+                        "Explicit user-selected HTTPS source; bytes still require safe download "
+                        "and scientific-content qualification."
+                    ),
+                    recommended_action="download",
+                )
             return OnlineResearchResult(
                 status="completed",
                 query=effective_query,
@@ -226,6 +257,7 @@ class OnlineResearchService:
                 model_performed=True,
                 warnings=tuple(warnings),
             )
+
         except (AppError, ValidationError, ValueError):
             warnings.append("Qwen 来源评估失败; 已保留搜索结果, 未生成任何科学数值。")
             return OnlineResearchResult(
@@ -241,6 +273,81 @@ class OnlineResearchService:
                 model_performed=completion is not None,
                 warnings=tuple(warnings),
             )
+
+    @staticmethod
+    def _direct_https_source(query: str | None) -> LiveSearchResult | None:
+        """Retain one exact user-supplied HTTPS locator without trusting its content."""
+
+        if query is None or query != query.strip() or any(char.isspace() for char in query):
+            return None
+        parsed = urlsplit(query)
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname is None
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port not in (None, 443)
+            or parsed.query
+            or parsed.fragment
+        ):
+            return None
+        try:
+            url = HttpUrl(query)
+        except ValidationError:
+            return None
+        display = f"{parsed.hostname}{parsed.path or '/'}"
+        return LiveSearchResult(
+            channel=SearchChannel.GOOGLE_WEB,
+            position=1,
+            title=f"User-supplied source: {display}"[:256],
+            url=url,
+            display_url=display[:256],
+            source_domain=parsed.hostname,
+            snippet=(
+                "Explicit user-selected HTTPS locator. Treat all remote content as untrusted "
+                "until acquisition and semantic qualification complete."
+            ),
+        )
+
+    async def propose_acquisition_reflection(
+        self,
+        *,
+        research_goal: str,
+        previous_queries: tuple[str, ...],
+        gaps: tuple[str, ...],
+        acquisition: OnlineAcquisitionResult,
+    ) -> tuple[AgentReflectionProposal, ModelInvocationRecord]:
+        """Propose a validated new retrieval route without inventing evidence or URLs."""
+
+        completion = await self._reflect_acquisition(
+            research_goal=research_goal,
+            previous_queries=previous_queries,
+            gaps=gaps,
+            acquisition=acquisition,
+        )
+        proposal = AgentReflectionProposal.model_validate_json(completion.content)
+        normalized_previous = {" ".join(item.casefold().split()) for item in previous_queries}
+        if " ".join(proposal.next_query.casefold().split()) in normalized_previous:
+            raise ValueError("reflection must propose a new query")
+        return proposal, completion.invocation
+
+    async def qualify_acquired_artifacts(
+        self,
+        *,
+        research_goal: str,
+        artifacts: tuple[ArtifactReviewInput, ...],
+    ) -> tuple[tuple[ArtifactQualification, ...], ModelInvocationRecord]:
+        """Classify whether acquired bytes contain relevant scientific records."""
+
+        completion = await self._qualify_artifacts(research_goal, artifacts)
+        batch = ArtifactQualificationBatch.model_validate_json(completion.content)
+        expected = {item.byte_sha256 for item in artifacts}
+        received = {item.byte_sha256 for item in batch.qualifications}
+        if received != expected:
+            raise ValueError(
+                "artifact qualification must decide every supplied artifact exactly once"
+            )
+        return batch.qualifications, completion.invocation
 
     async def review_quality(
         self,
@@ -318,18 +425,14 @@ class OnlineResearchService:
         explicit_query = None if seed_query is None else seed_query.strip()
         effective_seed = explicit_query or build_fallback_search_query(research_goal)
         fallback_profile = build_fallback_exploration_profile(research_goal)
-        seed = PlannedSearchQuery(
-            query=effective_seed,
-            purpose=(
-                "执行用户指定的核心证据检索"
-                if explicit_query
-                else "从研究主题派生论文、数据集和机器可读材料检索"
-            ),
-            expected_evidence_types=("paper", "repository", "table"),
-        )
+        fallback_queries = self._fallback_queries(effective_seed)
         if not self._settings.search_query_planning_enabled:
             return (
-                SearchQueryPlan(strategy="manual", profile=fallback_profile, queries=(seed,)),
+                SearchQueryPlan(
+                    strategy="manual",
+                    profile=fallback_profile,
+                    queries=fallback_queries[: self._settings.search_max_queries],
+                ),
                 None,
                 (),
             )
@@ -338,10 +441,19 @@ class OnlineResearchService:
         try:
             completion = await self._plan(research_goal, effective_seed)
             proposed = SearchQueryPlan.model_validate_json(completion.content)
-            queries: list[PlannedSearchQuery] = [seed] if explicit_query else []
-            normalized = {" ".join(seed.query.lower().split())} if explicit_query else set()
+            queries: list[PlannedSearchQuery] = [fallback_queries[0]] if explicit_query else []
+            normalized = (
+                {
+                    (
+                        fallback_queries[0].channel,
+                        " ".join(fallback_queries[0].query.lower().split()),
+                    )
+                }
+                if explicit_query
+                else set()
+            )
             for item in proposed.queries:
-                key = " ".join(item.query.lower().split())
+                key = (item.channel, " ".join(item.query.lower().split()))
                 if key not in normalized:
                     normalized.add(key)
                     queries.append(item)
@@ -362,20 +474,44 @@ class OnlineResearchService:
                 SearchQueryPlan(
                     strategy="seed_fallback",
                     profile=fallback_profile,
-                    queries=(seed,),
+                    queries=fallback_queries[: self._settings.search_max_queries],
                 ),
                 invocation,
                 ("Qwen 自主探索蓝图未通过严格校验, 已回退到主题派生检索式。",),
             )
+
+    @staticmethod
+    def _fallback_queries(seed_query: str) -> tuple[PlannedSearchQuery, ...]:
+        return (
+            PlannedSearchQuery(
+                channel=SearchChannel.GOOGLE_WEB,
+                query=seed_query,
+                purpose="发现开放数据库、机构页面和可下载的机器可读文件",
+                expected_evidence_types=("repository", "table", "catalog"),
+            ),
+            PlannedSearchQuery(
+                channel=SearchChannel.GOOGLE_SCHOLAR,
+                query=seed_query,
+                purpose="发现同行评议论文、引用线索和补充材料",
+                expected_evidence_types=("paper", "supplement", "table"),
+            ),
+            PlannedSearchQuery(
+                channel=SearchChannel.ARXIV,
+                query=seed_query,
+                purpose="发现相关预印本及其方法、数据和代码线索",
+                expected_evidence_types=("paper", "repository", "other"),
+            ),
+        )
 
     async def _execute_search(
         self,
         planned: PlannedSearchQuery,
     ) -> tuple[SearchExecutionRecord, tuple[LiveSearchResult, ...]]:
         try:
-            batch = await self._search.search(planned.query)
+            batch = await self._search.search(planned.query, planned.channel)
             return (
                 SearchExecutionRecord(
+                    channel=planned.channel,
                     query=planned.query,
                     purpose=planned.purpose,
                     status="completed",
@@ -387,6 +523,7 @@ class OnlineResearchService:
         except AppError as exc:
             return (
                 SearchExecutionRecord(
+                    channel=planned.channel,
                     query=planned.query,
                     purpose=planned.purpose,
                     status="failed",
@@ -403,8 +540,11 @@ class OnlineResearchService:
     ) -> tuple[LiveSearchResult, ...]:
         merged: list[LiveSearchResult] = []
         seen: set[str] = set()
-        for group in groups:
-            for item in group:
+        for offset in range(max((len(group) for group in groups), default=0)):
+            for group in groups:
+                if offset >= len(group):
+                    continue
+                item = group[offset]
                 key = str(item.url)
                 if key in seen:
                     continue
@@ -452,6 +592,7 @@ class OnlineResearchService:
             "search_results": [
                 {
                     "position": item.position,
+                    "channel": item.channel.value,
                     "title": item.title,
                     "url": str(item.url),
                     "source_domain": item.source_domain,
@@ -504,6 +645,76 @@ class OnlineResearchService:
             user_prompt=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
             prompt_version="1.0.0",
             schema_name="AutomatedQualityReviewProposal",
+            temperature=0.0,
+            max_tokens=4096,
+        )
+        return await self._model.complete(request)
+
+    async def _reflect_acquisition(
+        self,
+        *,
+        research_goal: str,
+        previous_queries: tuple[str, ...],
+        gaps: tuple[str, ...],
+        acquisition: OnlineAcquisitionResult,
+    ) -> StructuredModelCompletion:
+        system_prompt = self._reflection_prompt_path.read_text(encoding="utf-8")
+        payload = {
+            "research_goal": research_goal,
+            "previous_queries": previous_queries,
+            "gaps": gaps,
+            "acquisition_summary": {
+                "attempted_count": acquisition.attempted_count,
+                "artifacts": [
+                    {
+                        "source_title": item.source_title,
+                        "media_type": item.media_type,
+                        "artifact_kind": item.artifact_kind,
+                        "size_bytes": item.size_bytes,
+                    }
+                    for item in acquisition.artifacts
+                ],
+                "failures": [
+                    {
+                        "source_title": item.source_title,
+                        "error_code": item.error_code,
+                        "retryable": item.retryable,
+                    }
+                    for item in acquisition.failures
+                ],
+            },
+            "output_schema": AgentReflectionProposal.model_json_schema(),
+        }
+        request = StructuredModelRequest(
+            role=ModelRole.CRITIC,
+            model_id=self._settings.critic_model_id,
+            system_prompt=system_prompt,
+            user_prompt=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            prompt_version="1.0.0",
+            schema_name="AgentReflectionProposal",
+            temperature=0.0,
+            max_tokens=2048,
+        )
+        return await self._model.complete(request)
+
+    async def _qualify_artifacts(
+        self,
+        research_goal: str,
+        artifacts: tuple[ArtifactReviewInput, ...],
+    ) -> StructuredModelCompletion:
+        system_prompt = self._qualification_prompt_path.read_text(encoding="utf-8")
+        payload = {
+            "research_goal": research_goal,
+            "acquired_artifacts": [item.model_dump(mode="json") for item in artifacts],
+            "output_schema": ArtifactQualificationBatch.model_json_schema(),
+        }
+        request = StructuredModelRequest(
+            role=ModelRole.CRITIC,
+            model_id=self._settings.critic_model_id,
+            system_prompt=system_prompt,
+            user_prompt=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            prompt_version="1.0.0",
+            schema_name="ArtifactQualificationBatch",
             temperature=0.0,
             max_tokens=4096,
         )

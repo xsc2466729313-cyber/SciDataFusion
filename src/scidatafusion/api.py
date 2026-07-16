@@ -39,7 +39,9 @@ from scidatafusion.delivery.fixtures import build_offline_delivery_bundle
 from scidatafusion.delivery.service import DeliveryOrchestrator
 from scidatafusion.errors import AppError, ErrorCode
 from scidatafusion.online import (
+    AgentReflectionCoordinator,
     LocalOnlineConfigurationStore,
+    OnlineAcquisitionService,
     OnlineResearchService,
     build_online_configuration,
     build_online_runtime_status,
@@ -111,9 +113,18 @@ class DemoDeliveryProvider:
         *,
         settings: Settings | None = None,
         online_service: OnlineResearchService | None = None,
+        online_acquisition_service: OnlineAcquisitionService | None = None,
+        reflection_max_rounds: int = 4,
     ) -> None:
         self.settings = settings or get_settings()
         self._online_service = online_service or OnlineResearchService(self.settings)
+        self._online_acquisition_service = online_acquisition_service or OnlineAcquisitionService()
+        self._reflection_max_rounds = reflection_max_rounds
+        self._reflection_coordinator = AgentReflectionCoordinator(
+            self._online_service,
+            self._online_acquisition_service,
+            max_rounds=self._reflection_max_rounds,
+        )
         self._lock = asyncio.Lock()
         self._request: DeliveryRequest | None = None
         self._result: DeliveryResult | None = None
@@ -145,11 +156,16 @@ class DemoDeliveryProvider:
                 _execute_offline_scientific(phase1.confirmation.contract),
             )
             online_result: OnlineResearchResult | None = None
+            online_acquisition = None
+            agent_reflection = None
             if execution_mode is ResearchExecutionMode.ONLINE:
-                online_result = await self._online_service.run(
+                reflection_outcome = await self._reflection_coordinator.run(
                     research_goal=payload.research_goal,
                     query=payload.retrieval_query,
                 )
+                online_result = reflection_outcome.research
+                online_acquisition = reflection_outcome.acquisition
+                agent_reflection = reflection_outcome.trace
             knowledge_request, knowledge_result, bronze_store = knowledge_chain
             _, figure_result, _ = figure_chain
             scientific_request, scientific_result, _ = scientific_chain
@@ -182,6 +198,8 @@ class DemoDeliveryProvider:
                 delivery=result,
                 execution_mode=execution_mode,
                 online_research=online_result,
+                online_acquisition=online_acquisition,
+                agent_reflection=agent_reflection,
                 automated_quality_review=automated_review,
             )
             return _summary(request, result)
@@ -192,6 +210,11 @@ class DemoDeliveryProvider:
         async with self._lock:
             self.settings = settings
             self._online_service = OnlineResearchService(settings)
+            self._reflection_coordinator = AgentReflectionCoordinator(
+                self._online_service,
+                self._online_acquisition_service,
+                max_rounds=self._reflection_max_rounds,
+            )
 
     async def current(self) -> tuple[DeliveryRequest, DeliveryResult, DeliveryOrchestrator]:
         """Return the current delivery, creating the default demonstration when absent."""
@@ -210,6 +233,18 @@ class DemoDeliveryProvider:
         if self._workbench is None:
             raise AppError(ErrorCode.INTERNAL_ERROR, "workbench state is unavailable")
         return self._workbench
+
+    async def read_online_artifact(self, byte_sha256: str) -> tuple[bytes, str]:
+        """Read a current-topic Bronze artifact only after hash and scope verification."""
+
+        snapshot = await self.workbench()
+        artifact = next(
+            (item for item in snapshot.artifacts if item.sha256 == byte_sha256),
+            None,
+        )
+        if snapshot.topic_data_status != "live_discovery" or artifact is None:
+            raise AppError(ErrorCode.INVALID_REQUEST, "Unknown current-topic online artifact")
+        return self._online_acquisition_service.read_artifact(byte_sha256), artifact.media_type
 
 
 def create_app(
@@ -304,7 +339,7 @@ def create_app(
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "service": "scidatafusion", "module": "M22"}
+        return {"status": "ok", "service": "scidatafusion", "module": "M25"}
 
     @app.get("/api/v1/runtime", response_model=OnlineRuntimeStatus)
     async def runtime_status() -> OnlineRuntimeStatus:
@@ -423,7 +458,38 @@ def create_app(
             headers={"Content-Disposition": f'attachment; filename="{artifact.filename}"'},
         )
 
+    @app.get("/api/v1/online/artifacts/{byte_sha256}")
+    async def download_online_artifact(
+        byte_sha256: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$")],
+    ) -> Response:
+        payload, media_type = await state.read_online_artifact(byte_sha256)
+        suffix = _online_artifact_suffix(media_type)
+        return Response(
+            payload,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{byte_sha256}{suffix}"',
+                "Content-Length": str(len(payload)),
+                "X-Content-SHA256": byte_sha256,
+            },
+        )
+
     return app
+
+
+def _online_artifact_suffix(media_type: str) -> str:
+    return {
+        "application/fits": ".fits",
+        "application/geo+json": ".geojson",
+        "application/json": ".json",
+        "application/pdf": ".pdf",
+        "application/vnd.apache.parquet": ".parquet",
+        "application/zip": ".zip",
+        "text/csv": ".csv",
+        "text/html": ".html",
+        "text/plain": ".txt",
+        "text/tab-separated-values": ".tsv",
+    }.get(media_type.casefold(), ".bin")
 
 
 def _summary(request: DeliveryRequest, result: DeliveryResult) -> DeliverySummary:
