@@ -1720,6 +1720,19 @@ def test_fastapi_online_mode_connects_live_discovery_to_workbench(tmp_path: Path
         assert workbench["scientific_dataset"] is None
         assert workbench["formal_gold_available"] is False
         assert workbench["agent_reflection"]["status"] == "checkpointed"
+        assert workbench["status"] == "structured_preview_ready"
+        assert len(workbench["sources"]) == 1
+        assert workbench["artifacts"][0]["parser"] == "polars-structured-preview"
+        assert workbench["online_structured_data"]["attempted_count"] == 1
+        structured = workbench["online_structured_data"]["datasets"][0]
+        assert structured["row_count"] == 1
+        assert structured["column_count"] == 3
+        assert [item["name"] for item in structured["columns"]] == ["city", "lst", "ndvi"]
+        assert len(workbench["evidence"]) == 3
+        assert workbench["evidence"][0]["raw_value"] == '"A"'
+        assert workbench["stages"][2]["label"] == "获取与解析"
+        assert any(item["kind"] == "dataset" for item in workbench["graph_nodes"])
+        assert workbench["issues"] == []
         assert downloaded.status_code == 200
         assert downloaded.content == b"city,lst,ndvi\nA,32.1,0.4\n"
         assert downloaded.headers["x-content-sha256"] == artifact_hash
@@ -1766,7 +1779,10 @@ def test_fastapi_accepts_online_topic_without_retrieval_query() -> None:
         assert workbench["topic_data_status"] == "live_discovery"
         assert "城市热岛" in workbench["research_blueprint"]["topic_title"]
         assert "城市热岛" in workbench["retrieval_query"]
-        assert workbench["sources"] == []
+        assert len(workbench["sources"]) == 1
+        assert workbench["sources"][0]["source_names"] == [
+            "Type Ia supernova light curves data release"
+        ]
         assert workbench["chart_points"] == []
         assert workbench["delivery_artifact_count"] == 0
 

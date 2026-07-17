@@ -9,11 +9,23 @@ WORKDIR /app
 RUN groupadd --system scidata && useradd --system --gid scidata --create-home scidata
 
 COPY pyproject.toml README.md ./
-COPY src ./src
-RUN if [ "$SCIDATA_INSTALL_TORCH" = "true" ]; then \
+# Resolve the large scientific/platform dependency layer independently from
+# application source changes. The real package is installed without dependency
+# resolution after its source is copied below.
+RUN mkdir -p src/scidatafusion && \
+    printf '__version__ = "dependency-layer"\n' > src/scidatafusion/__init__.py && \
+    if [ "$SCIDATA_INSTALL_TORCH" = "true" ]; then \
       python -m pip install ".[platform,scientific,ai-full]"; \
     else \
       python -m pip install ".[platform,scientific]"; \
+    fi && \
+    rm -rf src
+
+COPY src ./src
+RUN if [ "$SCIDATA_INSTALL_TORCH" = "true" ]; then \
+      python -m pip install --no-deps ".[platform,scientific,ai-full]"; \
+    else \
+      python -m pip install --no-deps ".[platform,scientific]"; \
     fi
 
 RUN mkdir -p /app/var /app/config && chown -R scidata:scidata /app

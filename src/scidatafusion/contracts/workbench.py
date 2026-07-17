@@ -15,6 +15,7 @@ from scidatafusion.contracts.online import (
     ResearchExecutionMode,
     ResearchExplorationProfile,
 )
+from scidatafusion.contracts.structured import OnlineStructuredDataResult
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=256)]
 DetailText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1024)]
@@ -180,6 +181,7 @@ class WorkbenchSnapshot(StrictContract):
     scientific_dataset: WorkbenchScientificDataset | None
     online_research: OnlineResearchResult | None
     online_acquisition: OnlineAcquisitionResult | None = None
+    online_structured_data: OnlineStructuredDataResult | None = None
     agent_reflection: AgentReflectionTrace | None = None
     automated_quality_review: AutomatedQualityReview | None = None
     review_automation: WorkbenchReviewAutomation

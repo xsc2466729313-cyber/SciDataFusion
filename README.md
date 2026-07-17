@@ -8,6 +8,7 @@
 
 - **主题自主探索**：用户只需描述想研究什么，AI 自动生成检索式、候选数据源、目标字段和质量检查。
 - **多源数据发现**：组合网页、学术论文、预印本、开放数据库、CSV/TSV/JSON、附件、图表和科学文件。
+- **真实数据预览**：联网获得的 CSV、TSV、JSON 会在哈希校验后显示真实行列、空值概况和单元格证据，不支持的结构明确保留失败原因。
 - **可追溯整合**：原始文件按内容寻址，字段保留来源、位置、转换和 EvidenceAtom，冲突值不会被静默覆盖。
 - **中文交互工作台**：展示研究进度、来源覆盖、证据质量、交付文件，以及可拖拽、缩放、点击查看详情的 3D 知识图谱。
 - **两种运行方式**：单机模式开箱即用；平台模式使用 PostgreSQL、Redis、Celery 和 Chroma 支撑持久化任务与证据向量索引。
@@ -35,7 +36,7 @@ docker compose down
 
 ## Windows 直接下载
 
-在 [GitHub Releases](https://github.com/xsc2466729313-cyber/SciDataFusion/releases/latest) 下载 `SciDataFusion-1.4.0-windows-x64.zip`，完整解压后双击 `SciDataFusion.exe`。便携版包含 Python 运行环境和中文 React 页面，无需安装 Python、Node.js 或 Git。
+在 [GitHub Releases](https://github.com/xsc2466729313-cyber/SciDataFusion/releases/latest) 下载 `SciDataFusion-1.5.0-windows-x64.zip`，完整解压后双击 `SciDataFusion.exe`。便携版包含 Python 运行环境和中文 React 页面，无需安装 Python、Node.js 或 Git。
 
 ## 源码开发
 
@@ -76,4 +77,4 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 
 门禁包含 Ruff、mypy、pytest、Bandit、秘密扫描和依赖漏洞检查。外部文档和模型输出都按不可信输入处理；模型只能提出检索、映射或修复建议，不能直接写入或发明科学值。
 
-架构边界见 [M26 ADR](docs/adr/0033-deployable-ai-service-platform.md)，验收结果见 [M26 Definition of Done](docs/deployable-ai-platform-acceptance.md)。
+部署边界见 [M26 ADR](docs/adr/0033-deployable-ai-service-platform.md)，当前主题结构化预览边界见 [M27 ADR](docs/adr/0034-current-topic-structured-preview.md) 和 [M27 Definition of Done](docs/current-topic-structured-preview-acceptance.md)。

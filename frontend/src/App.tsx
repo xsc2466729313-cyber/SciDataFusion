@@ -6,6 +6,7 @@ import {
   CircleAlert,
   Database,
   Download,
+  ExternalLink,
   FileSearch,
   FlaskConical,
   KeyRound,
@@ -23,6 +24,7 @@ import type {
   OnlineConfiguration,
   PlatformStatus,
   ResearchJob,
+  StructuredDatasetPreview,
   TabKey,
   WorkbenchSnapshot
 } from "./types";
@@ -252,9 +254,32 @@ function Sources({ snapshot }: { snapshot: WorkbenchSnapshot }) {
         {snapshot.sources.map((source) => <tr key={source.candidate_id}><td>{source.rank}</td><td><strong>{source.source_names.join(" · ")}</strong><small className="mono">{source.candidate_id}</small></td><td>{source.categories.join(" / ")}</td><td>{source.covered_fields.join("、") || "待解析"}</td><td>{source.license_status}</td><td><span className="table-status">{source.download_status}</span></td><td>{source.score.toFixed(2)}</td></tr>)}
       </tbody></table></div>
       <div className="artifact-band">
-        {snapshot.artifacts.slice(0, 12).map((artifact) => <div className="artifact-row" key={artifact.object_id}><FileSearch /><div><strong>{artifact.format.toUpperCase()}</strong><span>{artifact.media_type}</span></div><span>{formatBytes(artifact.size_bytes)}</span><code>{artifact.sha256.slice(0, 12)}</code></div>)}
+        {snapshot.artifacts.slice(0, 12).map((artifact) => {
+          const content = <><FileSearch /><div><strong>{artifact.format.toUpperCase()}</strong><span>{artifact.media_type}</span></div><span>{formatBytes(artifact.size_bytes)}</span><code>{artifact.sha256.slice(0, 12)}</code>{snapshot.topic_data_status === "live_discovery" && <Download />}</>;
+          return snapshot.topic_data_status === "live_discovery"
+            ? <a className="artifact-row" key={artifact.object_id} href={`/api/v1/online/artifacts/${artifact.sha256}`}>{content}</a>
+            : <div className="artifact-row" key={artifact.object_id}>{content}</div>;
+        })}
       </div>
+      {snapshot.online_structured_data?.datasets.map((dataset) => <StructuredPreview dataset={dataset} key={dataset.dataset_id} />)}
     </section>
+  );
+}
+
+function StructuredPreview({ dataset }: { dataset: StructuredDatasetPreview }) {
+  const columns = dataset.columns.slice(0, dataset.preview_column_count);
+  const values = new Map(dataset.cells.map((cell) => [`${cell.row_index}:${cell.column_index}`, cell.raw_value_json]));
+  return (
+    <article className="dataset-preview">
+      <div className="dataset-heading">
+        <div><span>{dataset.format.toUpperCase()}</span><h3>{dataset.row_count.toLocaleString()} 行 · {dataset.column_count} 列</h3><p>{dataset.parser_id} {dataset.parser_version}{dataset.truncated ? " · 有界预览" : " · 完整预览"}</p></div>
+        <div className="dataset-actions"><a href={dataset.source_url} target="_blank" rel="noreferrer" title="打开来源"><ExternalLink /></a><a href={`/api/v1/online/artifacts/${dataset.artifact_sha256}`} title="下载原文件"><Download /></a></div>
+      </div>
+      <div className="table-wrap preview-table"><table><thead><tr><th>#</th>{columns.map((column) => <th key={column.column_index}>{column.name}<small>{column.non_empty_count} 有值 · {column.empty_count + column.null_count} 空</small></th>)}</tr></thead><tbody>
+        {Array.from({ length: dataset.preview_row_count }, (_, row) => <tr key={row}><td>{row + 1}</td>{columns.map((column) => <td className="mono" key={column.column_index}>{displayRawValue(values.get(`${row + 1}:${column.column_index}`) ?? "null")}</td>)}</tr>)}
+      </tbody></table></div>
+      <footer><code>{dataset.artifact_sha256}</code><span>数据集身份 {dataset.dataset_hash.slice(0, 16)}</span></footer>
+    </article>
   );
 }
 
@@ -265,7 +290,7 @@ function Evidence({ snapshot }: { snapshot: WorkbenchSnapshot }) {
     <section className="section-block">
       <div className="section-heading"><div><h2>证据与字段</h2><p>科学值只展示可回溯证据，不足项不会由 AI 编造</p></div><div className="search-box"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="筛选字段、值或位置" /></div></div>
       <div className="table-wrap"><table><thead><tr><th>字段</th><th>原始值</th><th>来源位置</th><th>提取方法</th><th>置信度</th><th>源哈希</th></tr></thead><tbody>
-        {rows.map((item) => <tr key={item.evidence_id}><td><strong>{item.field_name}</strong></td><td className="mono">{item.raw_value}</td><td>{item.source_location}<small>{item.byte_range}</small></td><td>{item.method}</td><td>{Math.round(item.confidence * 100)}%</td><td><code>{item.source_hash.slice(0, 14)}</code></td></tr>)}
+        {rows.map((item) => <tr key={item.evidence_id}><td><strong>{item.field_name}</strong></td><td className="mono">{snapshot.topic_data_status === "live_discovery" ? displayRawValue(item.raw_value) : item.raw_value}</td><td>{item.source_location}<small>{item.byte_range}</small></td><td>{item.method}</td><td>{Math.round(item.confidence * 100)}%</td><td><code>{item.source_hash.slice(0, 14)}</code></td></tr>)}
       </tbody></table></div>
     </section>
   );
@@ -273,6 +298,11 @@ function Evidence({ snapshot }: { snapshot: WorkbenchSnapshot }) {
 
 function Delivery({ snapshot }: { snapshot: WorkbenchSnapshot }) {
   const download = async () => {
+    if (snapshot.topic_data_status === "live_discovery") {
+      const artifact = snapshot.artifacts[0];
+      if (artifact) window.location.assign(`/api/v1/online/artifacts/${artifact.sha256}`);
+      return;
+    }
     const response = await fetch(`/api/v1/demo/download-tickets/${encodeURIComponent(snapshot.package_filename)}`, { method: "POST" });
     if (response.ok) {
       const ticket = await response.json() as { download_url: string };
@@ -282,8 +312,8 @@ function Delivery({ snapshot }: { snapshot: WorkbenchSnapshot }) {
   return (
     <>
       <section className="delivery-hero">
-        <div><span className={snapshot.quality_gate_passed ? "pass" : "review"}>{snapshot.quality_gate_passed ? "质量门通过" : "需要复核"}</span><h2>{snapshot.formal_gold_available ? "正式数据与复现包已就绪" : "复核包已就绪，正式数据暂缓发布"}</h2><p>{snapshot.evidence.length} 条证据 · {snapshot.issues.length} 个问题 · {snapshot.delivery_artifact_count} 个交付文件</p></div>
-        <button className="primary-action" onClick={() => void download()}><Download />下载复现包</button>
+        <div><span className={snapshot.quality_gate_passed ? "pass" : "review"}>{snapshot.quality_gate_passed ? "质量门通过" : snapshot.topic_data_status === "live_discovery" ? "结构化预览" : "需要复核"}</span><h2>{snapshot.formal_gold_available ? "正式数据与复现包已就绪" : snapshot.topic_data_status === "live_discovery" && snapshot.online_structured_data?.datasets.length ? "真实材料与结构化预览已就绪" : "复核包已就绪，正式数据暂缓发布"}</h2><p>{snapshot.evidence.length} 条证据 · {snapshot.issues.length} 个问题 · {snapshot.artifacts.length} 个原始文件</p></div>
+        <button className="primary-action" disabled={snapshot.topic_data_status === "live_discovery" && snapshot.artifacts.length === 0} onClick={() => void download()}><Download />{snapshot.topic_data_status === "live_discovery" ? "下载原文件" : "下载复现包"}</button>
       </section>
       <section className="section-block">
         <div className="section-heading"><div><h2>质量问题</h2><p>每个问题保留受影响字段、证据数量和明确动作</p></div><span>{snapshot.issues.length} 项</span></div>
@@ -291,6 +321,17 @@ function Delivery({ snapshot }: { snapshot: WorkbenchSnapshot }) {
       </section>
     </>
   );
+}
+
+function displayRawValue(value: string) {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed === null) return "null";
+    if (typeof parsed === "string") return parsed;
+    return String(parsed);
+  } catch {
+    return value;
+  }
 }
 
 function Configuration() {

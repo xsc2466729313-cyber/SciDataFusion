@@ -27,6 +27,7 @@ from scidatafusion.contracts.online import (
 )
 from scidatafusion.contracts.quality import QualityAuditResult
 from scidatafusion.contracts.scientific import FieldContract
+from scidatafusion.contracts.structured import OnlineStructuredDataResult
 from scidatafusion.contracts.workbench import (
     WorkbenchArtifact,
     WorkbenchChartPoint,
@@ -73,6 +74,7 @@ def build_workbench_snapshot(
     execution_mode: ResearchExecutionMode = ResearchExecutionMode.OFFLINE,
     online_research: OnlineResearchResult | None = None,
     online_acquisition: OnlineAcquisitionResult | None = None,
+    online_structured_data: OnlineStructuredDataResult | None = None,
     agent_reflection: AgentReflectionTrace | None = None,
     automated_quality_review: AutomatedQualityReview | None = None,
 ) -> WorkbenchSnapshot:
@@ -157,7 +159,9 @@ def build_workbench_snapshot(
     )
     live_discovery = execution_mode is ResearchExecutionMode.ONLINE
     stages = (
-        _live_discovery_stages(blueprint, online_research, online_acquisition)
+        _live_discovery_stages(
+            blueprint, online_research, online_acquisition, online_structured_data
+        )
         if live_discovery
         else (
             WorkbenchStage(
@@ -211,7 +215,7 @@ def build_workbench_snapshot(
         )
     )
     graph_nodes, graph_edges = (
-        _exploration_graph(blueprint, online_research)
+        _exploration_graph(blueprint, online_research, online_structured_data)
         if live_discovery
         else (
             tuple(
@@ -244,11 +248,19 @@ def build_workbench_snapshot(
         task_id=knowledge.task_id,
         run_id=knowledge.run_id,
         contract_id=knowledge.contract_id,
-        status="discovery_completed" if live_discovery else delivery.status.value,
+        status=(
+            "structured_preview_ready"
+            if live_discovery
+            and online_structured_data is not None
+            and online_structured_data.datasets
+            else "discovery_completed"
+            if live_discovery
+            else delivery.status.value
+        ),
         quality_score=0.0 if live_discovery else report.quality_score,
         quality_gate_passed=False if live_discovery else report.quality_gate_passed,
         stages=stages,
-        sources=()
+        sources=_live_sources(online_research, online_acquisition, online_structured_data)
         if live_discovery
         else tuple(
             WorkbenchSource(
@@ -272,7 +284,7 @@ def build_workbench_snapshot(
                     media_type=item.media_type,
                     size_bytes=item.size_bytes,
                     disposition="parse",
-                    parser=None,
+                    parser=_structured_parser_for(item.byte_sha256, online_structured_data),
                     confidence=1.0,
                     sha256=item.byte_sha256,
                 )
@@ -282,7 +294,7 @@ def build_workbench_snapshot(
             else (() if live_discovery else artifacts)
         ),
         fields=() if live_discovery else fields,
-        evidence=()
+        evidence=_live_structured_evidence(online_structured_data)
         if live_discovery
         else tuple(
             WorkbenchEvidence(
@@ -311,7 +323,7 @@ def build_workbench_snapshot(
             )
             for item in quality.gate_evaluation_set.evaluations
         ),
-        issues=()
+        issues=_live_structured_issues(online_structured_data)
         if live_discovery
         else tuple(
             WorkbenchIssue(
@@ -371,6 +383,7 @@ def build_workbench_snapshot(
         ),
         online_research=online_research,
         online_acquisition=online_acquisition,
+        online_structured_data=online_structured_data,
         agent_reflection=agent_reflection,
         automated_quality_review=automated_quality_review,
         review_automation=_review_automation(
@@ -449,11 +462,23 @@ def _live_discovery_stages(
     blueprint: ResearchExplorationProfile,
     online_research: OnlineResearchResult | None,
     online_acquisition: OnlineAcquisitionResult | None,
+    online_structured_data: OnlineStructuredDataResult | None,
 ) -> tuple[WorkbenchStage, ...]:
     source_count = 0 if online_research is None else len(online_research.sources)
     query_count = 0 if online_research is None else len(online_research.search_plan.queries)
     discovery_status: Literal["complete", "review"] = "complete" if source_count else "review"
     artifact_count = 0 if online_acquisition is None else len(online_acquisition.artifacts)
+    dataset_count = 0 if online_structured_data is None else len(online_structured_data.datasets)
+    evidence_count = (
+        0
+        if online_structured_data is None
+        else sum(len(item.cells) for item in online_structured_data.datasets)
+    )
+    field_count = (
+        0
+        if online_structured_data is None
+        else sum(item.column_count for item in online_structured_data.datasets)
+    )
     return (
         WorkbenchStage(
             key="goal",
@@ -473,19 +498,19 @@ def _live_discovery_stages(
         ),
         WorkbenchStage(
             key="parse",
-            label="材料获取",
-            status="complete" if artifact_count else "review",
-            primary_count=artifact_count,
-            count_label="已获取材料",
-            detail=f"已自动获取并内容寻址保存 {artifact_count} 个真实材料; 失败来源保留结构化原因, 不阻塞其他来源。",
+            label="获取与解析",
+            status="complete" if dataset_count else "review",
+            primary_count=evidence_count,
+            count_label="单元格证据",
+            detail=f"已内容寻址保存 {artifact_count} 个真实材料, 其中 {dataset_count} 个机器可读文件完成严格结构化预览。",
         ),
         WorkbenchStage(
             key="integrate",
             label="字段整合",
             status="review",
-            primary_count=len(blueprint.candidate_fields),
-            count_label="候选字段",
-            detail="字段仅为主题驱动的提取计划; 取得真实数据前不生成、不填充科学值。",
+            primary_count=field_count,
+            count_label="真实原始列",
+            detail="页面展示文件中的原始列和值; 语义映射、单位转换和跨源合并仍须证据与质量规则确认。",
         ),
         WorkbenchStage(
             key="quality",
@@ -493,7 +518,7 @@ def _live_discovery_stages(
             status="review",
             primary_count=len(blueprint.quality_checks),
             count_label="计划检查",
-            detail="后续数据必须通过来源、完整性、单位、冲突与不确定性检查。",
+            detail="当前预览已绑定文件哈希与行列位置, 但尚未通过语义、单位、冲突和不确定性质量门。",
         ),
         WorkbenchStage(
             key="deliver",
@@ -501,7 +526,7 @@ def _live_discovery_stages(
             status="review",
             primary_count=len(blueprint.target_outputs),
             count_label="目标成果",
-            detail="当前完成主题探索; 只有真实数据完成解析并通过质量门后才开放 CSV 与复现包。",
+            detail="当前主题原始文件可直接下载并查看结构化预览; 只有通过全部质量门后才开放正式 Gold 数据。",
         ),
     )
 
@@ -509,6 +534,7 @@ def _live_discovery_stages(
 def _exploration_graph(
     blueprint: ResearchExplorationProfile,
     online_research: OnlineResearchResult | None,
+    online_structured_data: OnlineStructuredDataResult | None,
 ) -> tuple[tuple[WorkbenchGraphNode, ...], tuple[WorkbenchGraphEdge, ...]]:
     task_id = "explore-topic"
     nodes = [
@@ -571,7 +597,149 @@ def _exploration_graph(
                     evidence_refs=(url,),
                 )
             )
+    if online_structured_data is not None:
+        for dataset in online_structured_data.datasets:
+            nodes.append(
+                WorkbenchGraphNode(
+                    node_id=dataset.dataset_id,
+                    kind="dataset",
+                    source_id=dataset.artifact_sha256,
+                    label=f"{dataset.format.upper()} · {dataset.row_count} 行 x {dataset.column_count} 列",
+                    trusted=True,
+                )
+            )
+            edges.append(
+                WorkbenchGraphEdge(
+                    source=task_id,
+                    target=dataset.dataset_id,
+                    kind="parsed_from",
+                    evidence_refs=(dataset.artifact_sha256,),
+                )
+            )
+            for column in dataset.columns[:20]:
+                column_id = f"column-{dataset.dataset_id[4:20]}-{column.column_index}"
+                nodes.append(
+                    WorkbenchGraphNode(
+                        node_id=column_id,
+                        kind="field",
+                        source_id=dataset.artifact_sha256,
+                        label=column.name,
+                        trusted=True,
+                    )
+                )
+                column_evidence = tuple(
+                    item.evidence_id
+                    for item in dataset.cells
+                    if item.column_index == column.column_index
+                )
+                edges.append(
+                    WorkbenchGraphEdge(
+                        source=dataset.dataset_id,
+                        target=column_id,
+                        kind="contains_field",
+                        evidence_refs=column_evidence or (dataset.artifact_sha256,),
+                    )
+                )
     return tuple(nodes), tuple(edges)
+
+
+def _structured_parser_for(
+    artifact_sha256: str, online_structured_data: OnlineStructuredDataResult | None
+) -> str | None:
+    if online_structured_data is None:
+        return None
+    dataset = next(
+        (
+            item
+            for item in online_structured_data.datasets
+            if item.artifact_sha256 == artifact_sha256
+        ),
+        None,
+    )
+    return None if dataset is None else dataset.parser_id
+
+
+def _live_structured_evidence(
+    online_structured_data: OnlineStructuredDataResult | None,
+) -> tuple[WorkbenchEvidence, ...]:
+    if online_structured_data is None:
+        return ()
+    return tuple(
+        WorkbenchEvidence(
+            evidence_id=cell.evidence_id,
+            field_name=cell.column_name,
+            raw_value=cell.raw_value_json,
+            source_location=cell.source_location,
+            byte_range="内容哈希与结构位置联合定位",
+            method=dataset.parser_id,
+            confidence=1.0,
+            source_hash=cell.source_hash,
+        )
+        for dataset in online_structured_data.datasets
+        for cell in dataset.cells
+    )
+
+
+def _live_structured_issues(
+    online_structured_data: OnlineStructuredDataResult | None,
+) -> tuple[WorkbenchIssue, ...]:
+    if online_structured_data is None:
+        return ()
+    return tuple(
+        WorkbenchIssue(
+            issue_id=f"issue_{hashlib.sha256(f'{item.artifact_sha256}:{item.code}'.encode()).hexdigest()[:32]}",
+            code=item.code,
+            severity="info" if item.code == "unsupported_media_type" else "warning",
+            fields=(),
+            detail=item.detail,
+            action="下载原文件核验或配置对应格式解析器",
+            evidence_count=0,
+        )
+        for item in online_structured_data.failures
+    )
+
+
+def _live_sources(
+    online_research: OnlineResearchResult | None,
+    online_acquisition: OnlineAcquisitionResult | None,
+    online_structured_data: OnlineStructuredDataResult | None,
+) -> tuple[WorkbenchSource, ...]:
+    if online_research is None:
+        return ()
+    acquired_urls = (
+        set()
+        if online_acquisition is None
+        else {str(item.source_url) for item in online_acquisition.artifacts}
+    )
+    fields_by_url: dict[str, tuple[str, ...]] = {}
+    if online_structured_data is not None:
+        fields_by_url = {
+            str(item.source_url): tuple(column.name for column in item.columns)
+            for item in online_structured_data.datasets
+        }
+    return tuple(
+        WorkbenchSource(
+            candidate_id=f"live_{hashlib.sha256(str(item.search.url).encode()).hexdigest()[:32]}",
+            rank=index,
+            source_names=(item.search.title,),
+            categories=(
+                *((value for value in item.assessment.evidence_types) if item.assessment else ()),
+                item.search.channel.value,
+            ),
+            covered_fields=fields_by_url.get(str(item.search.url), ()),
+            license_status="待核验",
+            download_status=(
+                "已内容寻址保存" if str(item.search.url) in acquired_urls else "已发现待获取"
+            ),
+            primary=index <= 3,
+            score=(
+                item.assessment.relevance_score
+                if item.assessment is not None
+                else max(0.0, 1.0 - (index - 1) * 0.05)
+            ),
+        )
+        for index, item in enumerate(online_research.sources, start=1)
+    )
 
 
 def _gold_chart_points(

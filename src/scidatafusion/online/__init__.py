@@ -11,6 +11,7 @@ from scidatafusion.online.service import (
     build_online_configuration,
     build_online_runtime_status,
 )
+from scidatafusion.online.structured import OnlineStructuredDataService
 
 __all__ = [
     "AgentReflectionCoordinator",
@@ -20,6 +21,7 @@ __all__ = [
     "MultiChannelSearchClient",
     "OnlineAcquisitionService",
     "OnlineResearchService",
+    "OnlineStructuredDataService",
     "SerpApiSearchClient",
     "build_online_configuration",
     "build_online_runtime_status",

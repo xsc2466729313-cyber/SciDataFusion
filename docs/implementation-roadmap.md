@@ -201,5 +201,14 @@ value. The Chinese React/TypeScript/Vite workbench is delivered through Docker C
 in the Windows package, with adaptive research planning, source/evidence views, and an interactive 3D
 knowledge graph. Local mode remains the zero-infrastructure reproducible profile.
 
+M27 closes the current-topic raw-material-to-preview gap for machine-readable artifacts. Every
+acquired CSV, TSV, or scalar-record JSON object is replayed from Bronze and SHA256-verified before a
+bounded structured adapter builds a Polars string frame. CSV strings and JSON number lexemes remain
+distinguishable, while each displayed cell retains its exact file hash and row/column location.
+Duplicate headers, ragged rows, nested cells, invalid encodings, and limit violations fail closed.
+The Chinese workbench now presents real source rows, columns, completeness counts, raw downloads,
+and dataset/field graph nodes. These outputs are explicitly previews: no semantic mapping, unit
+conversion, value repair, conflict selection, or Gold publication occurs in this module.
+
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

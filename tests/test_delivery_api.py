@@ -16,7 +16,7 @@ async def _exercise_api() -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         health = await client.get("/api/health")
         assert health.status_code == 200
-        assert health.json() == {"status": "ok", "service": "scidatafusion", "module": "M26"}
+        assert health.json() == {"status": "ok", "service": "scidatafusion", "module": "M27"}
         assert health.headers["x-content-type-options"] == "nosniff"
 
         page = await client.get("/")

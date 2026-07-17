@@ -117,6 +117,23 @@ td small { margin-top: 4px; color: #7b8d88; }
 .artifact-row div span { margin-top: 3px; color: #71847f; }
 .artifact-row > span { color: #60766f; }
 .artifact-row code { color: #497068; }
+a.artifact-row { color: inherit; text-decoration: none; }
+a.artifact-row:hover { border-color: var(--green); background: #f4faf7; }
+.artifact-row > svg:last-child { width: 17px; color: var(--green); }
+.dataset-preview { margin-top: 22px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: white; }
+.dataset-heading { min-height: 86px; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--border); }
+.dataset-heading > div:first-child > span { color: var(--green); font-size: 12px; font-weight: 800; }
+.dataset-heading h3 { margin: 3px 0; font-size: 18px; }
+.dataset-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+.dataset-actions { display: flex; gap: 8px; }
+.dataset-actions a { width: 38px; height: 38px; display: grid; place-items: center; color: var(--ink); border: 1px solid var(--border); border-radius: 5px; }
+.dataset-actions a:hover { color: var(--green); border-color: var(--green); }
+.dataset-actions svg { width: 17px; }
+.preview-table { max-height: 460px; }
+.preview-table th small { display: block; margin-top: 4px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+.preview-table td { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dataset-preview footer { padding: 11px 18px; display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
+.dataset-preview footer code { overflow: hidden; text-overflow: ellipsis; }
 .search-box { width: min(320px, 40vw); position: relative; }
 .search-box svg { position: absolute; left: 11px; top: 11px; color: #6e837e; }
 .search-box input { padding-left: 37px; }
@@ -189,6 +206,8 @@ td small { margin-top: 4px; color: #7b8d88; }
   .artifact-band { grid-template-columns: 1fr; }
   .artifact-row { grid-template-columns: auto 1fr auto; }
   .artifact-row code { display: none; }
+  .dataset-heading { align-items: flex-start; }
+  .dataset-preview footer { flex-direction: column; }
   .search-box { width: 100%; }
   .delivery-hero { align-items: flex-start; flex-direction: column; }
   .settings-form { grid-template-columns: 1fr; }

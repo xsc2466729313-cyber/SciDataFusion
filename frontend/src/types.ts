@@ -70,6 +70,52 @@ export interface WorkbenchEvidence {
   source_hash: string;
 }
 
+export interface StructuredColumnProfile {
+  name: string;
+  column_index: number;
+  non_empty_count: number;
+  empty_count: number;
+  null_count: number;
+}
+
+export interface StructuredCellEvidence {
+  evidence_id: string;
+  row_index: number;
+  column_index: number;
+  column_name: string;
+  raw_value_json: string;
+  source_location: string;
+  source_hash: string;
+}
+
+export interface StructuredDatasetPreview {
+  dataset_id: string;
+  artifact_sha256: string;
+  source_url: string;
+  media_type: string;
+  format: "csv" | "tsv" | "json";
+  parser_id: string;
+  parser_version: string;
+  row_count: number;
+  column_count: number;
+  preview_row_count: number;
+  preview_column_count: number;
+  truncated: boolean;
+  columns: StructuredColumnProfile[];
+  cells: StructuredCellEvidence[];
+  dataset_hash: string;
+}
+
+export interface OnlineStructuredDataResult {
+  attempted_count: number;
+  datasets: StructuredDatasetPreview[];
+  failures: Array<{
+    artifact_sha256: string;
+    code: string;
+    detail: string;
+  }>;
+}
+
 export interface WorkbenchIssue {
   issue_id: string;
   code: string;
@@ -126,6 +172,7 @@ export interface WorkbenchSnapshot {
   package_filename: string;
   formal_gold_available: boolean;
   online_research: { results: Array<{ title: string; url: string; domain: string; channel: string }> } | null;
+  online_structured_data: OnlineStructuredDataResult | null;
 }
 
 export interface OnlineConfiguration {

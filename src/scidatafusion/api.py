@@ -51,6 +51,7 @@ from scidatafusion.online import (
     LocalOnlineConfigurationStore,
     OnlineAcquisitionService,
     OnlineResearchService,
+    OnlineStructuredDataService,
     build_online_configuration,
     build_online_runtime_status,
 )
@@ -131,11 +132,13 @@ class DemoDeliveryProvider:
         settings: Settings | None = None,
         online_service: OnlineResearchService | None = None,
         online_acquisition_service: OnlineAcquisitionService | None = None,
+        online_structured_service: OnlineStructuredDataService | None = None,
         reflection_max_rounds: int = 4,
     ) -> None:
         self.settings = settings or get_settings()
         self._online_service = online_service or OnlineResearchService(self.settings)
         self._online_acquisition_service = online_acquisition_service or OnlineAcquisitionService()
+        self._online_structured_service = online_structured_service or OnlineStructuredDataService()
         self._reflection_max_rounds = reflection_max_rounds
         self._reflection_coordinator = AgentReflectionCoordinator(
             self._online_service,
@@ -174,6 +177,7 @@ class DemoDeliveryProvider:
             )
             online_result: OnlineResearchResult | None = None
             online_acquisition = None
+            online_structured_data = None
             agent_reflection = None
             if execution_mode is ResearchExecutionMode.ONLINE:
                 reflection_outcome = await self._reflection_coordinator.run(
@@ -183,6 +187,11 @@ class DemoDeliveryProvider:
                 online_result = reflection_outcome.research
                 online_acquisition = reflection_outcome.acquisition
                 agent_reflection = reflection_outcome.trace
+                online_structured_data = await asyncio.to_thread(
+                    self._online_structured_service.parse,
+                    online_acquisition.artifacts,
+                    self._online_acquisition_service.read_artifact,
+                )
             knowledge_request, knowledge_result, bronze_store = knowledge_chain
             _, figure_result, _ = figure_chain
             scientific_request, scientific_result, _ = scientific_chain
@@ -216,6 +225,7 @@ class DemoDeliveryProvider:
                 execution_mode=execution_mode,
                 online_research=online_result,
                 online_acquisition=online_acquisition,
+                online_structured_data=online_structured_data,
                 agent_reflection=agent_reflection,
                 automated_quality_review=automated_review,
             )
@@ -377,7 +387,7 @@ def create_app(
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "service": "scidatafusion", "module": "M26"}
+        return {"status": "ok", "service": "scidatafusion", "module": "M27"}
 
     @app.get("/api/v1/platform", response_model=PlatformStatus)
     async def platform_status() -> PlatformStatus:
