@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import mimetypes
 import secrets
 from importlib.resources import files
 from pathlib import Path as FileSystemPath
@@ -33,6 +34,13 @@ from scidatafusion.contracts.online import (
     OnlineRuntimeStatus,
     ResearchExecutionMode,
 )
+from scidatafusion.contracts.platform import (
+    PlatformStatus,
+    ResearchJobPage,
+    ResearchJobRecord,
+    ResearchJobResult,
+    ResearchJobSubmission,
+)
 from scidatafusion.contracts.workbench import WorkbenchSnapshot
 from scidatafusion.delivery.downloads import DownloadTicketSigner
 from scidatafusion.delivery.fixtures import build_offline_delivery_bundle
@@ -46,6 +54,15 @@ from scidatafusion.online import (
     build_online_configuration,
     build_online_runtime_status,
 )
+from scidatafusion.platform.agent_graph import BoundedResearchGraph
+from scidatafusion.platform.jobs import (
+    CeleryJobDispatcher,
+    InMemoryResearchJobRepository,
+    PostgresResearchJobRepository,
+    ResearchJobService,
+)
+from scidatafusion.platform.status import build_platform_status
+from scidatafusion.platform.vectors import ChromaEvidenceIndex, build_evidence_documents
 from scidatafusion.workbench import build_workbench_snapshot
 
 DEFAULT_GOAL = "Study Type Ia supernova light curves using multi-source data integration into CSV."
@@ -250,6 +267,7 @@ class DemoDeliveryProvider:
 def create_app(
     provider: DemoDeliveryProvider | None = None,
     configuration_store: LocalOnlineConfigurationStore | None = None,
+    research_jobs: ResearchJobService | None = None,
 ) -> FastAPI:
     """Create the SciDataFusion workbench application with injectable demo state."""
 
@@ -261,9 +279,10 @@ def create_app(
     )
     state = provider or DemoDeliveryProvider()
     local_configuration = configuration_store or LocalOnlineConfigurationStore(
-        FileSystemPath(".env")
+        FileSystemPath(state.settings.local_configuration_file)
     )
     ticket_signer = DownloadTicketSigner(secrets.token_bytes(32))
+    jobs = research_jobs or _build_research_job_service(state)
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next: Any) -> Response:
@@ -312,8 +331,27 @@ def create_app(
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     async def workbench() -> HTMLResponse:
-        page = files("scidatafusion.web").joinpath("index.html").read_text(encoding="utf-8")
+        react_index = files("scidatafusion.web").joinpath("react").joinpath("index.html")
+        page = (
+            react_index.read_text(encoding="utf-8")
+            if react_index.is_file()
+            else files("scidatafusion.web").joinpath("index.html").read_text(encoding="utf-8")
+        )
         return HTMLResponse(page)
+
+    @app.get("/app-assets/{filename:path}", include_in_schema=False)
+    async def react_asset(
+        filename: Annotated[str, Path(pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$")],
+    ) -> Response:
+        if ".." in filename.split("/"):
+            raise AppError(ErrorCode.INVALID_REQUEST, "Invalid application asset path")
+        asset = files("scidatafusion.web").joinpath("react").joinpath("app-assets")
+        for segment in filename.split("/"):
+            asset = asset.joinpath(segment)
+        if not asset.is_file():
+            raise AppError(ErrorCode.INVALID_REQUEST, "Unknown application asset")
+        media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        return Response(asset.read_bytes(), media_type=media_type)
 
     @app.get("/assets/knowledge-graph.js", include_in_schema=False)
     async def knowledge_graph_asset() -> Response:
@@ -339,7 +377,34 @@ def create_app(
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "service": "scidatafusion", "module": "M25"}
+        return {"status": "ok", "service": "scidatafusion", "module": "M26"}
+
+    @app.get("/api/v1/platform", response_model=PlatformStatus)
+    async def platform_status() -> PlatformStatus:
+        return build_platform_status(state.settings)
+
+    @app.post(
+        "/api/v1/research-jobs",
+        response_model=ResearchJobRecord,
+        status_code=202,
+    )
+    async def submit_research_job(payload: ResearchJobSubmission) -> ResearchJobRecord:
+        return await jobs.submit(payload)
+
+    @app.get("/api/v1/research-jobs", response_model=ResearchJobPage)
+    async def list_research_jobs(
+        limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    ) -> ResearchJobPage:
+        return await jobs.list(limit)
+
+    @app.get("/api/v1/research-jobs/{job_id}", response_model=ResearchJobRecord)
+    async def get_research_job(
+        job_id: Annotated[str, Path(pattern=r"^job_[0-9a-f]{32}$")],
+    ) -> ResearchJobRecord:
+        record = await jobs.get(job_id)
+        if record is None:
+            raise AppError(ErrorCode.INVALID_REQUEST, "Unknown research job")
+        return record
 
     @app.get("/api/v1/runtime", response_model=OnlineRuntimeStatus)
     async def runtime_status() -> OnlineRuntimeStatus:
@@ -475,6 +540,69 @@ def create_app(
         )
 
     return app
+
+
+def _build_research_job_service(state: DemoDeliveryProvider) -> ResearchJobService:
+    settings = state.settings
+    if settings.platform_mode.value == "celery":
+        if settings.database_url is None or settings.redis_url is None:
+            raise AppError(ErrorCode.CONFIGURATION_ERROR, "platform persistence is not configured")
+        persistent_repository = PostgresResearchJobRepository(
+            settings.database_url.get_secret_value(),
+            timeout_seconds=settings.platform_connection_timeout_seconds,
+        )
+        dispatcher = CeleryJobDispatcher(settings.redis_url.get_secret_value())
+
+        async def unused_executor(submission: ResearchJobSubmission) -> ResearchJobResult:
+            raise RuntimeError("Celery workers execute platform jobs")
+
+        return ResearchJobService(persistent_repository, unused_executor, dispatcher=dispatcher)
+
+    local_repository = InMemoryResearchJobRepository()
+
+    async def execute(submission: ResearchJobSubmission) -> ResearchJobResult:
+        return await execute_research_submission(state, submission)
+
+    return ResearchJobService(local_repository, execute)
+
+
+async def execute_research_submission(
+    state: DemoDeliveryProvider, submission: ResearchJobSubmission
+) -> ResearchJobResult:
+    """Run one validated job through the bounded graph and optional evidence index."""
+
+    async def run_workflow(payload: ResearchJobSubmission) -> ResearchJobResult:
+        summary = await state.run(
+            DemoRunRequest(
+                execution_mode=payload.execution_mode,
+                research_goal=payload.research_goal,
+                retrieval_query=payload.retrieval_query,
+            )
+        )
+        snapshot = await state.workbench()
+        return ResearchJobResult(
+            task_id=summary.task_id,
+            run_id=summary.run_id,
+            quality_gate_passed=summary.quality_gate_passed,
+            quality_score=summary.quality_score,
+            source_count=len(snapshot.sources),
+            evidence_count=len(snapshot.evidence),
+            artifact_count=len(snapshot.artifacts),
+            issue_count=summary.issue_count,
+            formal_gold_record_count=summary.formal_gold_record_count,
+            package_filename=snapshot.package_filename,
+        )
+
+    async def index_evidence() -> None:
+        settings = state.settings
+        if settings.chroma_url is None:
+            return
+        snapshot = await state.workbench()
+        index = ChromaEvidenceIndex(str(settings.chroma_url), dimensions=settings.vector_dimensions)
+        await index.index(build_evidence_documents(snapshot))
+
+    graph = BoundedResearchGraph(run_workflow, index_evidence)
+    return await graph.run(submission)
 
 
 def _online_artifact_suffix(media_type: str) -> str:

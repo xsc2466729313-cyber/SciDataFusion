@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "1.3.0"
+    [string]$Version = "1.4.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +12,7 @@ $Stage = Join-Path $BuildRoot $StageName
 $Dist = Join-Path $Root "dist"
 $Archive = Join-Path $Dist "$StageName.zip"
 $Checksum = "$Archive.sha256"
+$ReactDist = Join-Path $Root "frontend\dist"
 
 if (-not $BuildRoot.StartsWith($Root, [StringComparison]::OrdinalIgnoreCase)) {
     throw "Build directory must remain inside the repository"
@@ -23,6 +24,18 @@ New-Item -ItemType Directory -Path $BuildRoot, $Dist -Force | Out-Null
 
 Push-Location $Root
 try {
+    & npm.cmd --prefix frontend ci
+    if ($LASTEXITCODE -ne 0) {
+        throw "Frontend dependency installation failed with exit code $LASTEXITCODE"
+    }
+    & npm.cmd --prefix frontend run build
+    if ($LASTEXITCODE -ne 0) {
+        throw "Frontend production build failed with exit code $LASTEXITCODE"
+    }
+    if (-not (Test-Path (Join-Path $ReactDist "index.html"))) {
+        throw "Frontend production index is missing"
+    }
+
     & uv run pyinstaller `
         --noconfirm `
         --clean `
@@ -34,6 +47,7 @@ try {
         --specpath $BuildRoot `
         --additional-hooks-dir packaging\pyinstaller_hooks `
         --collect-data scidatafusion `
+        --add-data "$ReactDist;scidatafusion\web\react" `
         --hidden-import astropy.io.fits `
         --exclude-module astropy.visualization `
         --exclude-module matplotlib `

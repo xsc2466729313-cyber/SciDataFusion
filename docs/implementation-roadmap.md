@@ -192,5 +192,14 @@ pages and PDF documents remain evidence but cannot satisfy that data target. Eve
 and model proof is stored immutably in DuckDB, while an unmet target remains an explicit resumable
 checkpoint rather than a false success or fabricated Gold result.
 
+M26 turns the local workflow into a deployable AI research platform without changing its scientific
+trust boundary. A strict asynchronous job API has interchangeable in-memory and PostgreSQL
+repositories; Celery and Redis isolate worker execution, while Chroma indexes only evidence-derived
+documents. A bounded LangGraph runner may expose LangChain and LlamaIndex views, scikit-learn hashing,
+and optional PyTorch validation, but none of those components can create or mutate a scientific
+value. The Chinese React/TypeScript/Vite workbench is delivered through Docker Compose and embedded
+in the Windows package, with adaptive research planning, source/evidence views, and an interactive 3D
+knowledge graph. Local mode remains the zero-infrastructure reproducible profile.
+
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

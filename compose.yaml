@@ -1,0 +1,113 @@
+name: scidatafusion
+
+x-backend-environment: &backend-environment
+  SCIDATA_ENVIRONMENT: production
+  SCIDATA_PLATFORM_MODE: celery
+  SCIDATA_DATABASE_URL: postgresql://scidatafusion:${POSTGRES_PASSWORD:-scidatafusion-local}@postgres:5432/scidatafusion
+  SCIDATA_REDIS_URL: redis://redis:6379/0
+  SCIDATA_CHROMA_URL: http://chroma:8000
+  SCIDATA_LOCAL_CONFIGURATION_FILE: /app/config/.env
+  SCIDATA_DATA_DIR: /app/var
+  DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+  SERPAPI_API_KEY: ${SERPAPI_API_KEY:-}
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "${SCIDATA_WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      args:
+        SCIDATA_INSTALL_TORCH: ${SCIDATA_INSTALL_TORCH:-false}
+    environment: *backend-environment
+    volumes:
+      - scidata-data:/app/var
+      - scidata-config:/app/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      args:
+        SCIDATA_INSTALL_TORCH: ${SCIDATA_INSTALL_TORCH:-false}
+    command: ["celery", "-A", "scidatafusion.platform.celery_app:app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment: *backend-environment
+    volumes:
+      - scidata-data:/app/var
+      - scidata-config:/app/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A scidatafusion.platform.celery_app:app inspect ping -d celery@$$HOSTNAME --timeout 5 | grep -q pong"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: scidatafusion
+      POSTGRES_USER: scidatafusion
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scidatafusion-local}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scidatafusion -d scidatafusion"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  chroma:
+    image: chromadb/chroma:1.5.9
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "FALSE"
+    volumes:
+      - chroma-data:/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  chroma-data:
+  scidata-data:
+  scidata-config:

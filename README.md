@@ -1,133 +1,79 @@
-# SciDataFusion
+# SciDataFusion 科学数据智能工作台
 
-> 默认演示使用 VizieR `J/AJ/154/211/OptPhot` 中 SN 2004dt 的 8 条真实 B
-> 波段测光记录。原始 `JD` 按 `MJD = JD - 2400000.5` 确定性转换，质量门通过后可直接下载
-> Gold CSV/Parquet。数据字段定义见 [VizieR 官方目录说明](https://cdsarc.cds.unistra.fr/viz-bin/ReadMe/J/AJ/154/211?format=html&tex=true)。
+输入一个研究方向，系统会自主规划检索重点，从 Google、Google Scholar、arXiv 和开放数据站点发现论文与多源材料，完成受控下载、解析、字段对齐、证据绑定、质量检查和结构化交付。缺少真实证据时不会生成科学数值，也不会把内置样例冒充当前主题结果。
 
-面向科学研究的数据发现与整合工作台。用户只需输入“我想研究什么”，联网模式会由 Qwen 自主生成研究探索蓝图、证据检索重点、候选字段、质量检查和多条检索式，并搜索论文、开放数据库、表格、附件、图像与科学目录。
+![SciDataFusion 中文工作台](docs/assets/workbench-v1.4.png)
 
-联网发现结果与内置参考数据严格隔离：没有取得并解析当前主题的真实文件时，页面只展示真实来源、候选结构和探索知识图谱，不会用超新星样例冒充结果，也不会开放当前主题的 CSV。
+## 主要能力
 
-它适合需要把“研究问题”快速变成“可检查数据”的研究人员、数据工程师和科研团队。默认离线运行，配置密钥后可切换到联网搜索与百炼 Qwen 智能规划。
+- **主题自主探索**：用户只需描述想研究什么，AI 自动生成检索式、候选数据源、目标字段和质量检查。
+- **多源数据发现**：组合网页、学术论文、预印本、开放数据库、CSV/TSV/JSON、附件、图表和科学文件。
+- **可追溯整合**：原始文件按内容寻址，字段保留来源、位置、转换和 EvidenceAtom，冲突值不会被静默覆盖。
+- **中文交互工作台**：展示研究进度、来源覆盖、证据质量、交付文件，以及可拖拽、缩放、点击查看详情的 3D 知识图谱。
+- **两种运行方式**：单机模式开箱即用；平台模式使用 PostgreSQL、Redis、Celery 和 Chroma 支撑持久化任务与证据向量索引。
 
-![研究总览](docs/assets/workbench-online-exploration-v1.2.jpg)
+## Docker 一键运行
 
-## 直接下载运行
+需要 Docker Desktop。首次启动：
 
-Windows 10/11 64 位用户可以在
-[GitHub Releases](https://github.com/xsc2466729313-cyber/SciDataFusion/releases/latest)
-下载 `SciDataFusion-1.3.0-windows-x64.zip`：
+```powershell
+Copy-Item compose.env.example .env
+docker compose --env-file .env up --build -d
+```
 
-1. 完整解压 ZIP。
-2. 双击 `SciDataFusion.exe` 或 `Start-SciDataFusion.bat`。
-3. 保持启动窗口开启，浏览器会自动打开中文工作台。
+打开 [http://127.0.0.1:8080](http://127.0.0.1:8080)。默认可以离线体验；联网研究可直接在页面“配置”中填写：
 
-便携版已经包含 Python 和运行依赖，不需要安装 Python、uv 或 Git。首次运行默认进入离线演示；
-联网搜索所需的 API Key 可在页面“联网配置”中填写，只保存在解压目录的本机 `.env`。
+- 阿里云百炼 API Key
+- SerpApi Key
+- 百炼 Base URL，默认 `https://dashscope.aliyuncs.com/compatible-mode/v1`
 
-## 能做什么
+页面不会回显密钥，配置文件 `.env` 已被 Git 忽略。停止服务：
 
-- 只输入研究方向，自动生成主题标题、证据重点、来源类型、候选字段、质量检查和目标成果。
-- 自主规划多条互补检索式，并行使用 Google 网页、Google Scholar 和 arXiv 发现论文、数据仓库、机器可读表格、补充材料、图像与科学目录。
-- 展示每个来源、原始产物、解析路线、表格单元格和字段证据。
-- 并列查看原始值、规范化值、融合结果和待审核冲突。
-- 由 Qwen 生成结构化探索计划并评估来源；缺少证据时不会编造数值。
-- 提供 light-curve 图表、可交互 3D 证据知识图谱、数据字典、质量报告和复现包。
+```powershell
+docker compose down
+```
 
-![3D 证据知识图谱](docs/assets/workbench-online-graph-v1.2.jpg)
+## Windows 直接下载
 
-在“证据与质量”页面可以旋转、缩放和拖拽图谱，点击节点查看来源 ID、可信状态、
-直接关系及边的证据引用；节点类型可以独立筛选。图谱布局只改变展示位置，不改写任何科学数据。
+在 [GitHub Releases](https://github.com/xsc2466729313-cyber/SciDataFusion/releases/latest) 下载 `SciDataFusion-1.4.0-windows-x64.zip`，完整解压后双击 `SciDataFusion.exe`。便携版包含 Python 运行环境和中文 React 页面，无需安装 Python、Node.js 或 Git。
 
-## 工作方式
+## 源码开发
 
-`研究目标 → 多源发现 → 解析提取 → 清洗整合 → 证据与质量 → 成果交付`
+需要 Python 3.11+、[uv](https://docs.astral.sh/uv/)、Node.js 24+。
 
-页面中的六个视图对应这条主线：
+```powershell
+uv sync --python 3.11 --group dev --extra scientific --extra platform
+npm.cmd --prefix frontend ci
+Start-Process powershell -ArgumentList '-NoProfile','-Command','uv run uvicorn scidatafusion.api:app --host 127.0.0.1 --port 8000'
+npm.cmd --prefix frontend run dev
+```
 
-| 页面 | 你可以看到 |
+前端地址为 [http://127.0.0.1:5173](http://127.0.0.1:5173)，API 文档为 [http://127.0.0.1:8000/api/docs](http://127.0.0.1:8000/api/docs)。
+
+## 输出内容
+
+每个研究任务会形成来源清单、原始产物哈希、字段级证据、数据字典、质量报告、待处理冲突、证据关系图和复现元数据。只有当前主题的真实文件被解析并通过质量门后，才会开放正式 CSV/Parquet；否则页面会明确展示仍缺少的证据与下一步检索方向。
+
+默认演示使用 VizieR `J/AJ/154/211/OptPhot` 中 SN 2004dt 的 8 条真实 B 波段测光记录，字段定义可在 [VizieR 官方目录](https://cdsarc.cds.unistra.fr/viz-bin/ReadMe/J/AJ/154/211?format=html&tex=true) 核验。
+
+## 技术结构
+
+| 层 | 实现 |
 | --- | --- |
-| 研究总览 | 研究方向、自主探索蓝图、流程状态和主题覆盖图 |
-| 数据来源 | 来源类型、覆盖字段、许可、评分和检索结果 |
-| 解析与整合 | 文档/表格/图像路线、字段值和融合决策 |
-| 证据与质量 | 可交互 3D 知识图谱、字段证据、质量门、问题和审核动作 |
-| 成果交付 | 数据字典、证据图、质量报告和可复现文件 |
-| 联网配置 | SerpApi、百炼和模型设置；arXiv 无需额外密钥 |
+| 交互界面 | React、TypeScript、Vite、Three.js 生态 3D 图谱 |
+| AI 服务 | FastAPI、Pydantic v2、LangGraph，可选 LangChain/LlamaIndex 视图 |
+| 数据处理 | Polars、DuckDB、scikit-learn，可选 PyTorch 向量校验 |
+| 平台服务 | PostgreSQL、Celery、Redis、Chroma |
+| 部署发行 | Docker Compose、Nginx、PyInstaller Windows 便携包 |
 
-## 源码运行
+平台能力均采用可选依赖。默认镜像保持轻量；需要 PyTorch 时在 `.env` 设置 `SCIDATA_INSTALL_TORCH=true` 后重建。
 
-需要 Python 3.11+、[uv](https://docs.astral.sh/uv/) 和 PowerShell：
-
-```powershell
-uv sync --python 3.11 --group dev --extra scientific
-Copy-Item .env.example .env
-uv run uvicorn scidatafusion.api:app --host 127.0.0.1 --port 8000
-```
-
-打开 [http://127.0.0.1:8000](http://127.0.0.1:8000)。首次启动会进入离线复现模式，不需要任何密钥。
-
-也可以运行一个离线命令行演示：
-
-```powershell
-uv run scidatafusion phase8-delivery-demo `
-  --goal "研究 Ia 型超新星光变曲线并整合为可追溯数据" `
-  --query "质量证据 观测时间 星等 来源记录" `
-  --confirmed-by "demo-reviewer"
-```
-
-## 开启联网智能
-
-![联网配置](docs/assets/online-configuration.jpg)
-
-1. 打开左侧“联网配置”。
-2. 勾选“启用联网智能”，填写 SerpApi Key 和百炼 API Key。
-3. 保持默认百炼 Base URL，点击“保存并应用”。配置会写入本机项目目录的 `.env`，立即对后续任务生效。
-
-密钥输入框留空会保留原值。接口只返回“已配置/未配置”，不会回显密钥。配置写入接口仅允许本机回环地址访问，且不会把 `.env` 提交到 GitHub。
-
-默认使用百炼北京兼容接口和 `qwen-plus`/`qwen-turbo`。`qwen-plus` 根据研究方向生成严格结构化的探索蓝图和互补检索式，`qwen-turbo` 评估真实搜索结果。模型不能直接修改科学数值；解析、证据、质量门和交付仍由本地确定性流程控制。
-
-系统会自动为每条检索式选择渠道：Google 网页侧重开放数据库和机器可读文件，Google Scholar 侧重正式论文和引用线索，arXiv 侧重预印本。三个渠道的结果会轮询合并、按 URL 去重，默认最多保留 20 个来源；页面会显示每条检索的渠道、命中数和调用证明。Google 网页与 Google Scholar 共用 SerpApi Key，arXiv 不需要新增配置。
-
-官方配置参考：[阿里云百炼 Base URL](https://help.aliyun.com/zh/model-studio/base-url)、[SerpApi Google Scholar API](https://serpapi.com/google-scholar-api)、[arXiv API](https://info.arxiv.org/help/api/user-manual.html)。
-
-## 交付内容
-
-每次任务都会形成可追溯的工作台结果。联网探索首先交付来源清单、候选字段、质量检查和知识图谱；只有真实证据被下载、解析并通过质量门后才会开放正式 CSV/Parquet。
-
-交付包通常包括：
-
-- 数据字典与字段来源说明
-- 原始产物清单和内容哈希
-- 字段级证据与证据关系图
-- 质量报告、审核问题和运行指标
-- 可复现的验证笔记本与元数据
-
-## 安全与边界
-
-- 默认离线，测试和演示不调用外部服务。
-- 外部页面和模型输出都按不可信输入处理，并经过严格结构校验。
-- 原始产物不可变、按内容寻址；冲突值不会被静默覆盖。
-- API Key 只保存在本机 `.env`，请勿写入代码、截图或提交记录。
-
-## 开发检查
-
-提交前运行完整门禁：
+## 质量与安全
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
-该命令会执行 Ruff、mypy、pytest、Bandit、秘密扫描和依赖检查。
+门禁包含 Ruff、mypy、pytest、Bandit、秘密扫描和依赖漏洞检查。外部文档和模型输出都按不可信输入处理；模型只能提出检索、映射或修复建议，不能直接写入或发明科学值。
 
-## 项目结构
-
-```text
-src/scidatafusion/       FastAPI、工作流、在线服务和中文工作台
-tests/                    单元、契约、API 和离线演示测试
-docs/                     验收记录、架构决策和页面截图
-prompts/                  版本化的模型提示词
-scripts/                  本地检查与演示脚本
-```
-
-更多边界说明见 [联网配置验收](docs/phase-9-m22-acceptance.md) 和 [工作台验收](docs/product-workbench-acceptance.md)。
+架构边界见 [M26 ADR](docs/adr/0033-deployable-ai-service-platform.md)，验收结果见 [M26 Definition of Done](docs/deployable-ai-platform-acceptance.md)。

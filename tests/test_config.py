@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from scidatafusion.config import BailianRegion, Environment, Settings, get_settings
+from scidatafusion.config import BailianRegion, Environment, PlatformMode, Settings, get_settings
 
 
 def test_defaults_are_offline_and_secret_safe(tmp_path: Path) -> None:
@@ -118,6 +118,35 @@ def test_online_search_strategy_is_bounded_and_normalized() -> None:
 def test_get_settings_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCIDATA_OFFLINE_MODE", "true")
     get_settings.cache_clear()
+
+
+def test_platform_defaults_are_local_and_secret_safe() -> None:
+    settings = Settings(_env_file=None)
+
+    summary = settings.diagnostic_summary()
+    assert settings.platform_mode is PlatformMode.LOCAL
+    assert summary["postgres_configured"] is False
+    assert summary["redis_configured"] is False
+    assert summary["chroma_host"] is None
+    assert "database_url" not in str(summary)
+
+
+def test_celery_platform_requires_all_infrastructure_urls() -> None:
+    with pytest.raises(ValidationError, match="SCIDATA_DATABASE_URL"):
+        Settings(_env_file=None, platform_mode="celery")
+
+    settings = Settings(
+        _env_file=None,
+        platform_mode="celery",
+        database_url="postgresql://user:secret@postgres:5432/scidatafusion",
+        redis_url="redis://:secret@redis:6379/0",
+        chroma_url="http://chroma:8000",
+    )
+    summary = settings.diagnostic_summary()
+    assert summary["postgres_configured"] is True
+    assert summary["redis_configured"] is True
+    assert summary["chroma_host"] == "chroma"
+    assert "secret" not in str(summary)
 
     assert get_settings() is get_settings()
 

@@ -6,6 +6,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from pydantic import (
     AliasChoices,
@@ -31,6 +32,11 @@ class BailianRegion(StrEnum):
     US_VIRGINIA = "us-virginia"
     AP_SINGAPORE = "ap-southeast-1"
     AP_TOKYO = "ap-northeast-1"
+
+
+class PlatformMode(StrEnum):
+    LOCAL = "local"
+    CELERY = "celery"
 
 
 WorkspaceId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -65,6 +71,7 @@ class Settings(BaseSettings):
     environment: Environment = Environment.LOCAL
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     data_dir: Path = Path("var")
+    local_configuration_file: Path = Path(".env")
     offline_mode: bool = True
 
     dashscope_api_key: SecretStr | None = Field(
@@ -105,6 +112,13 @@ class Settings(BaseSettings):
     default_max_download_bytes: int = Field(default=500 * 1024 * 1024, ge=1)
     default_model_token_budget: int = Field(default=100_000, ge=1)
 
+    platform_mode: PlatformMode = PlatformMode.LOCAL
+    database_url: SecretStr | None = Field(default=None, repr=False)
+    redis_url: SecretStr | None = Field(default=None, repr=False)
+    chroma_url: HttpUrl | None = None
+    platform_connection_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    vector_dimensions: int = Field(default=384, ge=64, le=4096)
+
     @field_validator("search_language", "search_country", mode="before")
     @classmethod
     def normalize_search_locale(cls, value: object) -> object:
@@ -112,25 +126,30 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def require_credentials_for_online_mode(self) -> Settings:
-        if self.offline_mode:
-            return self
         problems: list[str] = []
-        if self.dashscope_api_key is None:
-            problems.append("DASHSCOPE_API_KEY is required")
-        if self.resolved_qwen_base_url is None:
-            problems.append("an official Bailian endpoint is required for this region")
-        if self.qwen_base_url_override is not None and not self._is_allowed_online_endpoint(
-            self.qwen_base_url_override
-        ):
-            problems.append(
-                "SCIDATA_QWEN_BASE_URL must be an official Alibaba Cloud HTTPS endpoint"
-            )
-        model_ids = (self.planner_model_id, self.fast_model_id, self.critic_model_id)
-        if any(not model_id.lower().startswith("qwen") for model_id in model_ids):
-            problems.append("online core model roles must use Qwen model IDs")
+        if not self.offline_mode:
+            if self.dashscope_api_key is None:
+                problems.append("DASHSCOPE_API_KEY is required")
+            if self.resolved_qwen_base_url is None:
+                problems.append("an official Bailian endpoint is required for this region")
+            if self.qwen_base_url_override is not None and not self._is_allowed_online_endpoint(
+                self.qwen_base_url_override
+            ):
+                problems.append(
+                    "SCIDATA_QWEN_BASE_URL must be an official Alibaba Cloud HTTPS endpoint"
+                )
+            model_ids = (self.planner_model_id, self.fast_model_id, self.critic_model_id)
+            if any(not model_id.lower().startswith("qwen") for model_id in model_ids):
+                problems.append("online core model roles must use Qwen model IDs")
+        if self.platform_mode is PlatformMode.CELERY:
+            if self.database_url is None:
+                problems.append("SCIDATA_DATABASE_URL is required")
+            if self.redis_url is None:
+                problems.append("SCIDATA_REDIS_URL is required")
+            if self.chroma_url is None:
+                problems.append("SCIDATA_CHROMA_URL is required")
         if problems:
-            msg = "; ".join(problems) + " when SCIDATA_OFFLINE_MODE=false"
-            raise ValueError(msg)
+            raise ValueError("; ".join(problems))
         return self
 
     @property
@@ -175,6 +194,7 @@ class Settings(BaseSettings):
             "environment": self.environment.value,
             "log_level": self.log_level,
             "data_dir": str(self.data_dir),
+            "local_configuration_file": str(self.local_configuration_file),
             "offline_mode": self.offline_mode,
             "bailian_region": self.bailian_region.value,
             "qwen_base_url": self.resolved_qwen_base_url,
@@ -188,7 +208,16 @@ class Settings(BaseSettings):
             "search_query_planning_enabled": self.search_query_planning_enabled,
             "search_max_queries": self.search_max_queries,
             "search_max_results": self.search_max_results,
+            "platform_mode": self.platform_mode.value,
+            "postgres_configured": self.database_url is not None,
+            "redis_configured": self.redis_url is not None,
+            "chroma_host": self._safe_host(self.chroma_url),
+            "vector_dimensions": self.vector_dimensions,
         }
+
+    @staticmethod
+    def _safe_host(value: HttpUrl | None) -> str | None:
+        return None if value is None else urlsplit(str(value)).hostname
 
 
 @lru_cache(maxsize=1)
