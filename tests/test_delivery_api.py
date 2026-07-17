@@ -16,7 +16,7 @@ async def _exercise_api() -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         health = await client.get("/api/health")
         assert health.status_code == 200
-        assert health.json() == {"status": "ok", "service": "scidatafusion", "module": "M27"}
+        assert health.json() == {"status": "ok", "service": "scidatafusion", "module": "M28"}
         assert health.headers["x-content-type-options"] == "nosniff"
 
         page = await client.get("/")
@@ -45,6 +45,10 @@ async def _exercise_api() -> None:
         assert runtime.status_code == 200
         assert runtime.json()["online_ready"] is False
         assert runtime.json()["search_endpoint_host"] == "serpapi.com"
+
+        evidence_table = await client.get("/api/v1/online/evidence-table.csv")
+        assert evidence_table.status_code == 400
+        assert "没有可导出的结构化证据表" in evidence_table.json()["detail"]
 
         configuration = await client.get("/api/v1/online/configuration")
         assert configuration.status_code == 200

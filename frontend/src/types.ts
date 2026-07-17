@@ -116,6 +116,29 @@ export interface OnlineStructuredDataResult {
   }>;
 }
 
+export interface FieldMappingDecision {
+  mapping_id: string;
+  dataset_id: string;
+  artifact_sha256: string;
+  column_index: number;
+  source_column: string;
+  target_field: string | null;
+  status: "mapped" | "unmapped";
+  method: "exact" | "qwen" | "unmapped";
+  confidence: number;
+  rationale: string;
+  evidence_ids: string[];
+}
+
+export interface OnlineFieldMappingResult {
+  target_fields: string[];
+  decisions: FieldMappingDecision[];
+  mapped_count: number;
+  unmapped_count: number;
+  model_invocation: unknown | null;
+  warnings: string[];
+}
+
 export interface WorkbenchIssue {
   issue_id: string;
   code: string;
@@ -173,6 +196,7 @@ export interface WorkbenchSnapshot {
   formal_gold_available: boolean;
   online_research: { results: Array<{ title: string; url: string; domain: string; channel: string }> } | null;
   online_structured_data: OnlineStructuredDataResult | null;
+  online_field_mapping: OnlineFieldMappingResult | null;
 }
 
 export interface OnlineConfiguration {

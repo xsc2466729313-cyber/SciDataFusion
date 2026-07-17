@@ -210,5 +210,14 @@ The Chinese workbench now presents real source rows, columns, completeness count
 and dataset/field graph nodes. These outputs are explicitly previews: no semantic mapping, unit
 conversion, value repair, conflict selection, or Gold publication occurs in this module.
 
+M28 turns those verified previews into a useful but still non-Gold cross-source result. Exact field
+names map deterministically; unresolved names may be proposed by Qwen using only the research goal,
+allowed target vocabulary, and source headers. Strict validation rejects incomplete, unknown,
+duplicate, or low-confidence proposals and leaves those columns explicitly unmapped. Export replays
+and re-hashes Bronze bytes, then emits a UTF-8 evidence long table whose every cell carries source
+URL, file hash, row, column, original JSON value, evidence identity, and mapping decision. The Chinese
+workbench shows coverage and rationale and links mapped columns into the evidence graph. No model can
+see, generate, normalize, or overwrite a scientific cell value in this module.
+
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

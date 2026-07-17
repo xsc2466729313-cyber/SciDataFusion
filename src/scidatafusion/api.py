@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import ipaddress
 import mimetypes
 import secrets
@@ -178,6 +179,7 @@ class DemoDeliveryProvider:
             online_result: OnlineResearchResult | None = None
             online_acquisition = None
             online_structured_data = None
+            online_field_mapping = None
             agent_reflection = None
             if execution_mode is ResearchExecutionMode.ONLINE:
                 reflection_outcome = await self._reflection_coordinator.run(
@@ -191,6 +193,11 @@ class DemoDeliveryProvider:
                     self._online_structured_service.parse,
                     online_acquisition.artifacts,
                     self._online_acquisition_service.read_artifact,
+                )
+                online_field_mapping = await self._online_service.map_structured_fields(
+                    research_goal=payload.research_goal,
+                    target_fields=online_result.search_plan.profile.candidate_fields,
+                    structured_data=online_structured_data,
                 )
             knowledge_request, knowledge_result, bronze_store = knowledge_chain
             _, figure_result, _ = figure_chain
@@ -226,6 +233,7 @@ class DemoDeliveryProvider:
                 online_research=online_result,
                 online_acquisition=online_acquisition,
                 online_structured_data=online_structured_data,
+                online_field_mapping=online_field_mapping,
                 agent_reflection=agent_reflection,
                 automated_quality_review=automated_review,
             )
@@ -272,6 +280,27 @@ class DemoDeliveryProvider:
         if snapshot.topic_data_status != "live_discovery" or artifact is None:
             raise AppError(ErrorCode.INVALID_REQUEST, "Unknown current-topic online artifact")
         return self._online_acquisition_service.read_artifact(byte_sha256), artifact.media_type
+
+    async def read_online_evidence_table(self) -> bytes:
+        """Build the current task's provenance-rich long table from verified Bronze bytes."""
+
+        snapshot = await self.workbench()
+        if (
+            snapshot.topic_data_status != "live_discovery"
+            or snapshot.online_acquisition is None
+            or snapshot.online_field_mapping is None
+            or not snapshot.online_field_mapping.decisions
+        ):
+            raise AppError(
+                ErrorCode.INVALID_REQUEST,
+                "当前任务没有可导出的结构化证据表。",
+            )
+        return await asyncio.to_thread(
+            self._online_structured_service.build_evidence_csv,
+            snapshot.online_acquisition.artifacts,
+            self._online_acquisition_service.read_artifact,
+            snapshot.online_field_mapping,
+        )
 
 
 def create_app(
@@ -387,7 +416,7 @@ def create_app(
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "service": "scidatafusion", "module": "M27"}
+        return {"status": "ok", "service": "scidatafusion", "module": "M28"}
 
     @app.get("/api/v1/platform", response_model=PlatformStatus)
     async def platform_status() -> PlatformStatus:
@@ -546,6 +575,22 @@ def create_app(
                 "Content-Disposition": f'attachment; filename="{byte_sha256}{suffix}"',
                 "Content-Length": str(len(payload)),
                 "X-Content-SHA256": byte_sha256,
+            },
+        )
+
+    @app.get("/api/v1/online/evidence-table.csv")
+    async def download_online_evidence_table() -> Response:
+        payload = await state.read_online_evidence_table()
+        digest = hashlib.sha256(payload).hexdigest()
+        return Response(
+            payload,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="scidatafusion-current-topic-evidence.csv"'
+                ),
+                "Content-Length": str(len(payload)),
+                "X-Content-SHA256": digest,
             },
         )
 

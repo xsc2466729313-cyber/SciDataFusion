@@ -21,6 +21,7 @@ from scidatafusion.contracts.base import (
 class ModelRole(StrEnum):
     PLANNER = "planner"
     FAST_CLASSIFIER = "fast_classifier"
+    FIELD_MAPPER = "field_mapper"
     CRITIC = "critic"
 
 

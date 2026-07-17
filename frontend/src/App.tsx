@@ -247,6 +247,7 @@ function Overview({ snapshot, selectedNode, onNodeSelect }: { snapshot: Workbenc
 }
 
 function Sources({ snapshot }: { snapshot: WorkbenchSnapshot }) {
+  const mapping = snapshot.online_field_mapping;
   return (
     <section className="section-block">
       <div className="section-heading"><div><h2>来源与样本</h2><p>统一展示检索渠道、许可、字段覆盖和下载状态</p></div><span>{snapshot.sources.length} 个来源 · {snapshot.artifacts.length} 个对象</span></div>
@@ -261,21 +262,29 @@ function Sources({ snapshot }: { snapshot: WorkbenchSnapshot }) {
             : <div className="artifact-row" key={artifact.object_id}>{content}</div>;
         })}
       </div>
-      {snapshot.online_structured_data?.datasets.map((dataset) => <StructuredPreview dataset={dataset} key={dataset.dataset_id} />)}
+      {mapping && mapping.decisions.length > 0 && <div className="mapping-summary">
+        <div><Network /><div><strong>字段语义映射已生成</strong><p>AI 只读取研究目标和字段名，原始单元格从未交给模型，也没有被改写。</p></div></div>
+        <div className="mapping-metrics"><span><strong>{mapping.mapped_count}</strong> 已映射</span><span><strong>{mapping.unmapped_count}</strong> 保留原名</span><span>{mapping.model_invocation ? "Qwen 辅助" : "确定性映射"}</span></div>
+      </div>}
+      {snapshot.online_structured_data?.datasets.map((dataset) => <StructuredPreview dataset={dataset} mappings={mapping?.decisions.filter((item) => item.dataset_id === dataset.dataset_id) ?? []} key={dataset.dataset_id} />)}
     </section>
   );
 }
 
-function StructuredPreview({ dataset }: { dataset: StructuredDatasetPreview }) {
+function StructuredPreview({ dataset, mappings }: { dataset: StructuredDatasetPreview; mappings: NonNullable<WorkbenchSnapshot["online_field_mapping"]>["decisions"] }) {
   const columns = dataset.columns.slice(0, dataset.preview_column_count);
   const values = new Map(dataset.cells.map((cell) => [`${cell.row_index}:${cell.column_index}`, cell.raw_value_json]));
+  const mappingByColumn = new Map(mappings.map((item) => [item.column_index, item]));
   return (
     <article className="dataset-preview">
       <div className="dataset-heading">
         <div><span>{dataset.format.toUpperCase()}</span><h3>{dataset.row_count.toLocaleString()} 行 · {dataset.column_count} 列</h3><p>{dataset.parser_id} {dataset.parser_version}{dataset.truncated ? " · 有界预览" : " · 完整预览"}</p></div>
         <div className="dataset-actions"><a href={dataset.source_url} target="_blank" rel="noreferrer" title="打开来源"><ExternalLink /></a><a href={`/api/v1/online/artifacts/${dataset.artifact_sha256}`} title="下载原文件"><Download /></a></div>
       </div>
-      <div className="table-wrap preview-table"><table><thead><tr><th>#</th>{columns.map((column) => <th key={column.column_index}>{column.name}<small>{column.non_empty_count} 有值 · {column.empty_count + column.null_count} 空</small></th>)}</tr></thead><tbody>
+      <div className="table-wrap preview-table"><table><thead><tr><th>#</th>{columns.map((column) => {
+        const fieldMapping = mappingByColumn.get(column.column_index);
+        return <th key={column.column_index}>{column.name}<small>{column.non_empty_count} 有值 · {column.empty_count + column.null_count} 空</small>{fieldMapping && <span className={`mapping-chip ${fieldMapping.status}`} title={fieldMapping.rationale}>{fieldMapping.target_field ? `→ ${fieldMapping.target_field}` : "未确认语义"}{fieldMapping.status === "mapped" && ` · ${Math.round(fieldMapping.confidence * 100)}%`}</span>}</th>;
+      })}</tr></thead><tbody>
         {Array.from({ length: dataset.preview_row_count }, (_, row) => <tr key={row}><td>{row + 1}</td>{columns.map((column) => <td className="mono" key={column.column_index}>{displayRawValue(values.get(`${row + 1}:${column.column_index}`) ?? "null")}</td>)}</tr>)}
       </tbody></table></div>
       <footer><code>{dataset.artifact_sha256}</code><span>数据集身份 {dataset.dataset_hash.slice(0, 16)}</span></footer>
@@ -299,8 +308,7 @@ function Evidence({ snapshot }: { snapshot: WorkbenchSnapshot }) {
 function Delivery({ snapshot }: { snapshot: WorkbenchSnapshot }) {
   const download = async () => {
     if (snapshot.topic_data_status === "live_discovery") {
-      const artifact = snapshot.artifacts[0];
-      if (artifact) window.location.assign(`/api/v1/online/artifacts/${artifact.sha256}`);
+      if (snapshot.online_field_mapping?.decisions.length) window.location.assign("/api/v1/online/evidence-table.csv");
       return;
     }
     const response = await fetch(`/api/v1/demo/download-tickets/${encodeURIComponent(snapshot.package_filename)}`, { method: "POST" });
@@ -312,8 +320,8 @@ function Delivery({ snapshot }: { snapshot: WorkbenchSnapshot }) {
   return (
     <>
       <section className="delivery-hero">
-        <div><span className={snapshot.quality_gate_passed ? "pass" : "review"}>{snapshot.quality_gate_passed ? "质量门通过" : snapshot.topic_data_status === "live_discovery" ? "结构化预览" : "需要复核"}</span><h2>{snapshot.formal_gold_available ? "正式数据与复现包已就绪" : snapshot.topic_data_status === "live_discovery" && snapshot.online_structured_data?.datasets.length ? "真实材料与结构化预览已就绪" : "复核包已就绪，正式数据暂缓发布"}</h2><p>{snapshot.evidence.length} 条证据 · {snapshot.issues.length} 个问题 · {snapshot.artifacts.length} 个原始文件</p></div>
-        <button className="primary-action" disabled={snapshot.topic_data_status === "live_discovery" && snapshot.artifacts.length === 0} onClick={() => void download()}><Download />{snapshot.topic_data_status === "live_discovery" ? "下载原文件" : "下载复现包"}</button>
+        <div><span className={snapshot.quality_gate_passed ? "pass" : "review"}>{snapshot.quality_gate_passed ? "质量门通过" : snapshot.topic_data_status === "live_discovery" ? "可审核数据表" : "需要复核"}</span><h2>{snapshot.formal_gold_available ? "正式数据与复现包已就绪" : snapshot.topic_data_status === "live_discovery" && snapshot.online_field_mapping?.decisions.length ? "多源证据长表已就绪" : "复核包已就绪，正式数据暂缓发布"}</h2><p>{snapshot.topic_data_status === "live_discovery" ? "原始值未改写 · 字段映射可复核 · 每行携带来源证据" : `${snapshot.evidence.length} 条证据 · ${snapshot.issues.length} 个问题 · ${snapshot.artifacts.length} 个原始文件`}</p></div>
+        <button className="primary-action" disabled={snapshot.topic_data_status === "live_discovery" && !snapshot.online_field_mapping?.decisions.length} onClick={() => void download()}><Download />{snapshot.topic_data_status === "live_discovery" ? "下载多源证据 CSV" : "下载复现包"}</button>
       </section>
       <section className="section-block">
         <div className="section-heading"><div><h2>质量问题</h2><p>每个问题保留受影响字段、证据数量和明确动作</p></div><span>{snapshot.issues.length} 项</span></div>

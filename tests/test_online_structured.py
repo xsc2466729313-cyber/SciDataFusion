@@ -8,6 +8,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
+import scidatafusion.online.structured as structured_module
 from scidatafusion.contracts.online import OnlineAcquiredArtifact
 from scidatafusion.contracts.structured import OnlineStructuredDataResult
 from scidatafusion.online.structured import OnlineStructuredDataService
@@ -168,6 +169,62 @@ def test_preview_is_bounded_without_changing_total_shape() -> None:
     assert dataset.truncated
 
 
+def test_total_cell_limit_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(structured_module, "_MAX_CELLS", 3)
+
+    result = _parse(b"a,b\n1,2\n3,4\n")
+
+    assert not result.datasets
+    assert result.failures[0].code == "limit_exceeded"
+
+
+def test_structured_parser_covers_bounded_failure_edges(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert _parse(b"a\t b\n1\t2\n", media_type="text/tab-separated-values").failures
+    assert _parse(b"a\n1\n", media_type="text/plain", url="https://x.test/a.csv").datasets
+    assert _parse(b'[{"a":1}]', media_type="text/plain", url="https://x.test/a.json").datasets
+    with pytest.raises(structured_module._StructuredParseError, match="\u8868\u5934"):
+        structured_module._parse_delimited("", "csv")
+    assert _parse(b"[1]", media_type="application/json").failures[0].code == "invalid_structure"
+    assert (
+        _parse(b'{"unknown":1}', media_type="application/json").failures[0].code
+        == "invalid_structure"
+    )
+    assert _parse(b'{"data":[{"a":1}]}', media_type="application/json").datasets
+    assert _parse(b'{"results":[{"a":1}]}', media_type="application/json").datasets
+    assert _parse(b"[]", media_type="application/json").failures[0].code == "invalid_structure"
+    assert _parse(b'a\n"' + b"x" * 8_193 + b'"\n').failures[0].code == "limit_exceeded"
+    assert (
+        _parse(b'[{"a":NaN}]', media_type="application/json").failures[0].code
+        == "invalid_structure"
+    )
+    invalid_geojson = b'{"type":"FeatureCollection","features":[{"properties":1}]}'
+    assert _parse(invalid_geojson, media_type="application/geo+json").failures
+
+    monkeypatch.setattr(structured_module, "_MAX_ROWS", 1)
+    assert _parse(b"a\n1\n2\n").failures[0].code == "limit_exceeded"
+    assert (
+        _parse(b'[{"a":1},{"a":2}]', media_type="application/json").failures[0].code
+        == "limit_exceeded"
+    )
+    monkeypatch.setattr(structured_module, "_MAX_ROWS", 100_000)
+    monkeypatch.setattr(structured_module, "_MAX_COLUMNS", 1)
+    assert _parse(b"a,b\n1,2\n").failures[0].code == "limit_exceeded"
+
+
+def test_unexpected_parser_value_error_is_accounted_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = b"a\n1\n"
+    service = OnlineStructuredDataService()
+    monkeypatch.setattr(service, "_parse_artifact", lambda *_: (_ for _ in ()).throw(ValueError()))
+
+    result = service.parse((_artifact(payload),), lambda _: payload)
+
+    assert result.failures[0].code == "invalid_structure"
+
+
 def test_structured_contracts_reject_extra_or_inconsistent_payloads() -> None:
     result = _parse(b"a\n1\n")
     payload = result.model_dump(mode="json")
@@ -179,3 +236,8 @@ def test_structured_contracts_reject_extra_or_inconsistent_payloads() -> None:
     dataset_payload["preview_row_count"] = 0
     with pytest.raises(ValidationError):
         type(result.datasets[0]).model_validate(dataset_payload)
+
+
+def test_internal_json_column_guard_rejects_non_string_keys() -> None:
+    with pytest.raises(structured_module._StructuredParseError, match="JSON"):
+        structured_module._ordered_json_columns(({1: "value"},))

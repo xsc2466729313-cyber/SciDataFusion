@@ -131,6 +131,15 @@ a.artifact-row:hover { border-color: var(--green); background: #f4faf7; }
 .dataset-actions svg { width: 17px; }
 .preview-table { max-height: 460px; }
 .preview-table th small { display: block; margin-top: 4px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+.mapping-summary { margin: 22px 0 14px; padding: 16px 18px; border: 1px solid #b8d6cb; border-left: 4px solid var(--green); background: #f4faf7; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.mapping-summary > div:first-child { display: flex; align-items: center; gap: 12px; }
+.mapping-summary svg { width: 22px; color: var(--green); flex: 0 0 auto; }
+.mapping-summary p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+.mapping-metrics { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.mapping-metrics span { padding: 6px 9px; border: 1px solid #c9d9d3; background: #fff; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.mapping-metrics strong { color: var(--ink); }
+.mapping-chip { display: block; width: max-content; max-width: 220px; margin-top: 7px; padding: 3px 6px; border-radius: 3px; background: #e5f4ed; color: #176d52; font-size: 11px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.mapping-chip.unmapped { background: #f3f0eb; color: #71675c; }
 .preview-table td { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dataset-preview footer { padding: 11px 18px; display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
 .dataset-preview footer code { overflow: hidden; text-overflow: ellipsis; }
@@ -182,6 +191,8 @@ a.artifact-row:hover { border-color: var(--green); background: #f4faf7; }
 }
 
 @media (max-width: 700px) {
+  .mapping-summary { align-items: flex-start; flex-direction: column; }
+  .mapping-metrics { justify-content: flex-start; }
   .app-shell { display: block; padding-bottom: 64px; }
   .sidebar { z-index: 20; position: fixed; top: auto; bottom: 0; width: 100%; height: 64px; padding: 7px 8px; flex-direction: row; }
   .brand-mark, .sidebar-runtime { display: none; }

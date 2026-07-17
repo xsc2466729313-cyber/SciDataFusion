@@ -25,6 +25,7 @@ from scidatafusion.contracts.online import (
     ResearchExecutionMode,
     ResearchExplorationProfile,
 )
+from scidatafusion.contracts.online_mapping import OnlineFieldMappingResult
 from scidatafusion.contracts.quality import QualityAuditResult
 from scidatafusion.contracts.scientific import FieldContract
 from scidatafusion.contracts.structured import OnlineStructuredDataResult
@@ -75,6 +76,7 @@ def build_workbench_snapshot(
     online_research: OnlineResearchResult | None = None,
     online_acquisition: OnlineAcquisitionResult | None = None,
     online_structured_data: OnlineStructuredDataResult | None = None,
+    online_field_mapping: OnlineFieldMappingResult | None = None,
     agent_reflection: AgentReflectionTrace | None = None,
     automated_quality_review: AutomatedQualityReview | None = None,
 ) -> WorkbenchSnapshot:
@@ -160,7 +162,11 @@ def build_workbench_snapshot(
     live_discovery = execution_mode is ResearchExecutionMode.ONLINE
     stages = (
         _live_discovery_stages(
-            blueprint, online_research, online_acquisition, online_structured_data
+            blueprint,
+            online_research,
+            online_acquisition,
+            online_structured_data,
+            online_field_mapping,
         )
         if live_discovery
         else (
@@ -215,7 +221,7 @@ def build_workbench_snapshot(
         )
     )
     graph_nodes, graph_edges = (
-        _exploration_graph(blueprint, online_research, online_structured_data)
+        _exploration_graph(blueprint, online_research, online_structured_data, online_field_mapping)
         if live_discovery
         else (
             tuple(
@@ -249,10 +255,10 @@ def build_workbench_snapshot(
         run_id=knowledge.run_id,
         contract_id=knowledge.contract_id,
         status=(
-            "structured_preview_ready"
+            "evidence_table_ready"
             if live_discovery
-            and online_structured_data is not None
-            and online_structured_data.datasets
+            and online_field_mapping is not None
+            and online_field_mapping.decisions
             else "discovery_completed"
             if live_discovery
             else delivery.status.value
@@ -384,6 +390,7 @@ def build_workbench_snapshot(
         online_research=online_research,
         online_acquisition=online_acquisition,
         online_structured_data=online_structured_data,
+        online_field_mapping=online_field_mapping,
         agent_reflection=agent_reflection,
         automated_quality_review=automated_quality_review,
         review_automation=_review_automation(
@@ -463,6 +470,7 @@ def _live_discovery_stages(
     online_research: OnlineResearchResult | None,
     online_acquisition: OnlineAcquisitionResult | None,
     online_structured_data: OnlineStructuredDataResult | None,
+    online_field_mapping: OnlineFieldMappingResult | None,
 ) -> tuple[WorkbenchStage, ...]:
     source_count = 0 if online_research is None else len(online_research.sources)
     query_count = 0 if online_research is None else len(online_research.search_plan.queries)
@@ -479,6 +487,8 @@ def _live_discovery_stages(
         if online_structured_data is None
         else sum(item.column_count for item in online_structured_data.datasets)
     )
+    mapped_count = 0 if online_field_mapping is None else online_field_mapping.mapped_count
+    unmapped_count = 0 if online_field_mapping is None else online_field_mapping.unmapped_count
     return (
         WorkbenchStage(
             key="goal",
@@ -507,10 +517,10 @@ def _live_discovery_stages(
         WorkbenchStage(
             key="integrate",
             label="字段整合",
-            status="review",
-            primary_count=field_count,
-            count_label="真实原始列",
-            detail="页面展示文件中的原始列和值; 语义映射、单位转换和跨源合并仍须证据与质量规则确认。",
+            status="complete" if field_count and online_field_mapping is not None else "review",
+            primary_count=mapped_count,
+            count_label=f"已映射 / {field_count} 列",
+            detail=f"已对真实表头生成可审核字段映射; {unmapped_count} 列证据不足并保留原名, 原始科学值未改写。",
         ),
         WorkbenchStage(
             key="quality",
@@ -522,11 +532,11 @@ def _live_discovery_stages(
         ),
         WorkbenchStage(
             key="deliver",
-            label="结构化交付",
-            status="review",
-            primary_count=len(blueprint.target_outputs),
-            count_label="目标成果",
-            detail="当前主题原始文件可直接下载并查看结构化预览; 只有通过全部质量门后才开放正式 Gold 数据。",
+            label="证据表交付",
+            status="complete" if online_field_mapping and field_count else "review",
+            primary_count=field_count,
+            count_label="可追溯列",
+            detail="可下载多源证据长表, 每个单元格保留来源、哈希、行列和映射状态; 正式 Gold 仍须通过全部质量门。",
         ),
     )
 
@@ -535,6 +545,7 @@ def _exploration_graph(
     blueprint: ResearchExplorationProfile,
     online_research: OnlineResearchResult | None,
     online_structured_data: OnlineStructuredDataResult | None,
+    online_field_mapping: OnlineFieldMappingResult | None,
 ) -> tuple[tuple[WorkbenchGraphNode, ...], tuple[WorkbenchGraphEdge, ...]]:
     task_id = "explore-topic"
     nodes = [
@@ -640,6 +651,20 @@ def _exploration_graph(
                         evidence_refs=column_evidence or (dataset.artifact_sha256,),
                     )
                 )
+    if online_field_mapping is not None:
+        for mapping in online_field_mapping.decisions:
+            if mapping.target_field is None or mapping.column_index > 20:
+                continue
+            column_id = f"column-{mapping.dataset_id[4:20]}-{mapping.column_index}"
+            digest = hashlib.sha256(f"field:{mapping.target_field}".encode()).hexdigest()[:16]
+            edges.append(
+                WorkbenchGraphEdge(
+                    source=column_id,
+                    target=f"field-{digest}",
+                    kind="maps_to",
+                    evidence_refs=mapping.evidence_ids or (mapping.artifact_sha256,),
+                )
+            )
     return tuple(nodes), tuple(edges)
 
 

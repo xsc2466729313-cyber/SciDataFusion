@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 import polars as pl
 
 from scidatafusion.contracts.online import OnlineAcquiredArtifact
+from scidatafusion.contracts.online_mapping import OnlineFieldMappingResult
 from scidatafusion.contracts.structured import (
     OnlineStructuredDataResult,
     StructuredCellEvidence,
@@ -23,9 +24,12 @@ from scidatafusion.contracts.structured import (
     StructuredParseFailure,
 )
 from scidatafusion.domain.registry import canonical_hash
+from scidatafusion.errors import AppError, ErrorCode
 
 _MAX_ROWS = 100_000
 _MAX_COLUMNS = 128
+_MAX_CELLS = 250_000
+_MAX_EXPORT_BYTES = 64 * 1024 * 1024
 _PREVIEW_ROWS = 20
 _PREVIEW_COLUMNS = 20
 _MAX_VALUE_JSON_LENGTH = 8_192
@@ -103,6 +107,87 @@ class OnlineStructuredDataService:
     def _parse_artifact(
         self, artifact: OnlineAcquiredArtifact, payload: bytes
     ) -> StructuredDatasetPreview:
+        return _build_preview(artifact, self._parse_table(artifact, payload))
+
+    def build_evidence_csv(
+        self,
+        artifacts: tuple[OnlineAcquiredArtifact, ...],
+        reader: Callable[[str], bytes],
+        mappings: OnlineFieldMappingResult,
+    ) -> bytes:
+        """Export every accepted cell as a provenance-rich row without value mutation."""
+
+        artifact_by_hash = {item.byte_sha256: item for item in artifacts}
+        decisions = {(item.artifact_sha256, item.column_index): item for item in mappings.decisions}
+        output = io.StringIO(newline="")
+        writer = csv.writer(output, lineterminator="\n")
+        writer.writerow(
+            (
+                "dataset_id",
+                "source_url",
+                "artifact_sha256",
+                "source_row",
+                "source_column_index",
+                "source_column_json",
+                "target_field_json",
+                "mapping_status",
+                "mapping_method",
+                "raw_value_json",
+                "evidence_id",
+                "source_location_json",
+            )
+        )
+        exported_decisions: set[tuple[str, int]] = set()
+        for artifact_hash in dict.fromkeys(item.artifact_sha256 for item in mappings.decisions):
+            artifact = artifact_by_hash.get(artifact_hash)
+            if artifact is None:
+                raise AppError(
+                    ErrorCode.ARTIFACT_INTEGRITY_ERROR,
+                    "字段映射引用了当前任务之外的原始文件。",
+                )
+            parsed = self._parse_table(artifact, reader(artifact_hash))
+            dataset = _build_preview(artifact, parsed)
+            for column_index, source_column in enumerate(parsed.columns, start=1):
+                decision = decisions.get((artifact_hash, column_index))
+                if decision is None or decision.source_column != source_column:
+                    raise AppError(
+                        ErrorCode.ARTIFACT_INTEGRITY_ERROR,
+                        "字段映射与重新校验后的原始表头不一致。",
+                    )
+                exported_decisions.add((artifact_hash, column_index))
+                for row_index, row in enumerate(parsed.rows, start=1):
+                    evidence_id = _cell_evidence_id(artifact_hash, row_index, column_index)
+                    writer.writerow(
+                        (
+                            dataset.dataset_id,
+                            str(artifact.source_url),
+                            artifact_hash,
+                            row_index,
+                            column_index,
+                            _json_string(source_column),
+                            "null"
+                            if decision.target_field is None
+                            else _json_string(decision.target_field),
+                            decision.status,
+                            decision.method,
+                            row[column_index - 1],
+                            evidence_id,
+                            _json_string(parsed.locations[row_index - 1][column_index - 1]),
+                        )
+                    )
+                    if output.tell() > _MAX_EXPORT_BYTES:
+                        raise AppError(
+                            ErrorCode.BUDGET_EXCEEDED,
+                            "多源证据表超过 64 MiB 导出上限, 请缩小研究范围。",
+                        )
+        if exported_decisions != set(decisions):
+            raise AppError(
+                ErrorCode.ARTIFACT_INTEGRITY_ERROR,
+                "字段映射包含未导出的列。",
+            )
+        return output.getvalue().encode("utf-8-sig")
+
+    def _parse_table(self, artifact: OnlineAcquiredArtifact, payload: bytes) -> _ParsedTable:
         if hashlib.sha256(payload).hexdigest() != artifact.byte_sha256:
             raise _StructuredParseError("hash_mismatch", "Bronze 文件内容哈希校验失败。")
         format_name = _detect_format(artifact)
@@ -120,7 +205,7 @@ class OnlineStructuredDataService:
             parsed = _parse_delimited(text, "tsv")
         else:
             parsed = _parse_json_records(text)
-        return _build_preview(artifact, parsed)
+        return parsed
 
 
 def _detect_format(
@@ -153,6 +238,7 @@ def _parse_delimited(text: str, format_name: Literal["csv", "tsv"]) -> _ParsedTa
     data_rows = records[1:]
     if len(data_rows) > _MAX_ROWS:
         raise _StructuredParseError("limit_exceeded", "记录数超过 100000 行安全上限。")
+    _validate_cell_count(len(data_rows), len(columns))
     if any(len(row) != len(columns) for row in data_rows):
         raise _StructuredParseError("invalid_structure", "数据行列数与表头不一致。")
     rows = tuple(tuple(_json_string(value) for value in row) for row in data_rows)
@@ -180,6 +266,7 @@ def _parse_json_records(text: str) -> _ParsedTable:
         raise _StructuredParseError("invalid_structure", "JSON 记录必须全部为对象。")
     columns = _ordered_json_columns(records)
     _validate_columns(columns)
+    _validate_cell_count(len(records), len(columns))
     rows: list[tuple[str, ...]] = []
     locations: list[tuple[str, ...]] = []
     for row_index, record in enumerate(records):
@@ -246,6 +333,11 @@ def _validate_columns(columns: tuple[str, ...]) -> None:
         raise _StructuredParseError("invalid_structure", "字段名不能重复。")
 
 
+def _validate_cell_count(row_count: int, column_count: int) -> None:
+    if row_count * column_count > _MAX_CELLS:
+        raise _StructuredParseError("limit_exceeded", "单个文件超过 250000 个单元格安全上限。")
+
+
 def _json_string(value: str) -> str:
     return _bounded_json(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
 
@@ -293,7 +385,7 @@ def _build_preview(
     )
     cells = tuple(
         StructuredCellEvidence(
-            evidence_id=f"sev_{canonical_hash({'artifact': artifact.byte_sha256, 'row': row_index + 1, 'column': column_index + 1})[:32]}",
+            evidence_id=_cell_evidence_id(artifact.byte_sha256, row_index + 1, column_index + 1),
             row_index=row_index + 1,
             column_index=column_index + 1,
             column_name=parsed.columns[column_index],
@@ -330,3 +422,8 @@ def _build_preview(
         cells=cells,
         dataset_hash=dataset_hash,
     )
+
+
+def _cell_evidence_id(artifact_sha256: str, row_index: int, column_index: int) -> str:
+    digest = canonical_hash({"artifact": artifact_sha256, "row": row_index, "column": column_index})
+    return f"sev_{digest[:32]}"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import json
 import zipfile
@@ -1708,6 +1709,7 @@ def test_fastapi_online_mode_connects_live_discovery_to_workbench(tmp_path: Path
             workbench = (await client.get("/api/v1/workbench")).json()
             artifact_hash = workbench["artifacts"][0]["sha256"]
             downloaded = await client.get(f"/api/v1/online/artifacts/{artifact_hash}")
+            evidence_table = await client.get("/api/v1/online/evidence-table.csv")
             unknown = await client.get(f"/api/v1/online/artifacts/{'f' * 64}")
 
         assert workbench["execution_mode"] == "online"
@@ -1720,10 +1722,11 @@ def test_fastapi_online_mode_connects_live_discovery_to_workbench(tmp_path: Path
         assert workbench["scientific_dataset"] is None
         assert workbench["formal_gold_available"] is False
         assert workbench["agent_reflection"]["status"] == "checkpointed"
-        assert workbench["status"] == "structured_preview_ready"
+        assert workbench["status"] == "evidence_table_ready"
         assert len(workbench["sources"]) == 1
         assert workbench["artifacts"][0]["parser"] == "polars-structured-preview"
         assert workbench["online_structured_data"]["attempted_count"] == 1
+        assert workbench["online_field_mapping"]["unmapped_count"] == 3
         structured = workbench["online_structured_data"]["datasets"][0]
         assert structured["row_count"] == 1
         assert structured["column_count"] == 3
@@ -1736,6 +1739,13 @@ def test_fastapi_online_mode_connects_live_discovery_to_workbench(tmp_path: Path
         assert downloaded.status_code == 200
         assert downloaded.content == b"city,lst,ndvi\nA,32.1,0.4\n"
         assert downloaded.headers["x-content-sha256"] == artifact_hash
+        assert evidence_table.status_code == 200
+        assert evidence_table.content.startswith(b"\xef\xbb\xbf")
+        assert (
+            evidence_table.headers["x-content-sha256"]
+            == hashlib.sha256(evidence_table.content).hexdigest()
+        )
+        assert b"raw_value_json" in evidence_table.content
         assert "attachment" in downloaded.headers["content-disposition"]
         assert unknown.status_code == 400
 

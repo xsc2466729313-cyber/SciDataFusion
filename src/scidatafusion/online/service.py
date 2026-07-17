@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+import unicodedata
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 from urllib.parse import urlparse, urlsplit
 
 from pydantic import HttpUrl, ValidationError
@@ -41,6 +43,13 @@ from scidatafusion.contracts.online import (
     SourceAssessment,
     SourceAssessmentBatch,
 )
+from scidatafusion.contracts.online_mapping import (
+    FieldMappingDecision,
+    FieldMappingProposalBatch,
+    OnlineFieldMappingResult,
+)
+from scidatafusion.contracts.structured import OnlineStructuredDataResult
+from scidatafusion.domain.registry import canonical_hash
 from scidatafusion.errors import AppError, ErrorCode
 from scidatafusion.exploration import (
     build_fallback_exploration_profile,
@@ -142,6 +151,7 @@ class OnlineResearchService:
         quality_prompt_path: Path | None = None,
         reflection_prompt_path: Path | None = None,
         qualification_prompt_path: Path | None = None,
+        field_mapping_prompt_path: Path | None = None,
     ) -> None:
         self._settings = settings
         self._search = search_client or MultiChannelSearchClient(settings)
@@ -161,6 +171,9 @@ class OnlineResearchService:
         self._qualification_prompt_path = (
             qualification_prompt_path
             or _PROJECT_ROOT / "prompts" / "online_artifact_qualification.md"
+        )
+        self._field_mapping_prompt_path = (
+            field_mapping_prompt_path or _PROJECT_ROOT / "prompts" / "online_field_mapping.md"
         )
 
     async def run(self, *, research_goal: str, query: str | None = None) -> OnlineResearchResult:
@@ -348,6 +361,150 @@ class OnlineResearchService:
                 "artifact qualification must decide every supplied artifact exactly once"
             )
         return batch.qualifications, completion.invocation
+
+    async def map_structured_fields(
+        self,
+        *,
+        research_goal: str,
+        target_fields: tuple[str, ...],
+        structured_data: OnlineStructuredDataResult,
+    ) -> OnlineFieldMappingResult:
+        """Map column names only; source values are never sent to or changed by the model."""
+
+        target_groups: dict[str, list[str]] = {}
+        for target_field in target_fields:
+            target_groups.setdefault(_normalize_field_name(target_field), []).append(target_field)
+        target_lookup = {
+            normalized: values[0]
+            for normalized, values in target_groups.items()
+            if len(values) == 1
+        }
+        exact: dict[tuple[str, int], str] = {}
+        unresolved: list[dict[str, object]] = []
+        used_by_artifact: dict[str, set[str]] = {}
+        for dataset in structured_data.datasets:
+            used = used_by_artifact.setdefault(dataset.artifact_sha256, set())
+            for column in dataset.columns:
+                key = (dataset.artifact_sha256, column.column_index)
+                candidate = target_lookup.get(_normalize_field_name(column.name))
+                if candidate is not None and candidate.casefold() not in used:
+                    exact[key] = candidate
+                    used.add(candidate.casefold())
+                else:
+                    unresolved.append(
+                        {
+                            "artifact_sha256": dataset.artifact_sha256,
+                            "column_index": column.column_index,
+                            "source_column": column.name,
+                        }
+                    )
+
+        proposals = {}
+        completion: StructuredModelCompletion | None = None
+        warnings: list[str] = []
+        if unresolved:
+            try:
+                completion = await self._map_fields(
+                    research_goal=research_goal,
+                    target_fields=target_fields,
+                    unresolved=tuple(unresolved),
+                )
+                batch = FieldMappingProposalBatch.model_validate_json(completion.content)
+                expected = {
+                    (str(item["artifact_sha256"]), int(str(item["column_index"]))): str(
+                        item["source_column"]
+                    )
+                    for item in unresolved
+                }
+                received = {
+                    (item.artifact_sha256, item.column_index): item.source_column
+                    for item in batch.mappings
+                }
+                if received != expected:
+                    raise ValueError("field mapper must decide every unresolved column once")
+                allowed_targets = set(target_fields)
+                if any(
+                    item.target_field is not None and item.target_field not in allowed_targets
+                    for item in batch.mappings
+                ):
+                    raise ValueError("field mapper referenced an unknown target")
+                proposals = {
+                    (item.artifact_sha256, item.column_index): item for item in batch.mappings
+                }
+            except (AppError, ValidationError, ValueError):
+                warnings.append("Qwen 字段映射未通过严格校验, 未确认字段已保留原名。")
+
+        decisions: list[FieldMappingDecision] = []
+        for dataset in structured_data.datasets:
+            used = {
+                value.casefold()
+                for key, value in exact.items()
+                if key[0] == dataset.artifact_sha256
+            }
+            for column in dataset.columns:
+                key = (dataset.artifact_sha256, column.column_index)
+                target = exact.get(key)
+                method: Literal["exact", "qwen", "unmapped"] = "exact"
+                confidence = 1.0
+                rationale = "规范化后的源字段名与目标字段完全一致。"
+                proposal = proposals.get(key)
+                if target is None and proposal is not None:
+                    proposed_target = proposal.target_field
+                    if (
+                        proposed_target is not None
+                        and proposal.confidence >= 0.7
+                        and proposed_target.casefold() not in used
+                    ):
+                        target = proposed_target
+                        used.add(proposed_target.casefold())
+                        method = "qwen"
+                        confidence = proposal.confidence
+                        rationale = proposal.rationale
+                if target is None:
+                    method = "unmapped"
+                    confidence = 0.0
+                    rationale = (
+                        proposal.rationale
+                        if proposal is not None and proposal.target_field is None
+                        else "现有字段名称证据不足, 保留原字段且不推断语义。"
+                    )
+                evidence_ids = tuple(
+                    item.evidence_id
+                    for item in dataset.cells
+                    if item.column_index == column.column_index
+                )
+                identity = {
+                    "dataset_id": dataset.dataset_id,
+                    "artifact_sha256": dataset.artifact_sha256,
+                    "column_index": column.column_index,
+                    "source_column": column.name,
+                    "target_field": target,
+                    "method": method,
+                }
+                decisions.append(
+                    FieldMappingDecision(
+                        mapping_id=f"sfm_{canonical_hash(identity)[:32]}",
+                        dataset_id=dataset.dataset_id,
+                        artifact_sha256=dataset.artifact_sha256,
+                        column_index=column.column_index,
+                        source_column=column.name,
+                        target_field=target,
+                        status="mapped" if target is not None else "unmapped",
+                        method=method,
+                        confidence=confidence,
+                        rationale=rationale,
+                        evidence_ids=evidence_ids,
+                    )
+                )
+        mapped_count = sum(item.status == "mapped" for item in decisions)
+        return OnlineFieldMappingResult(
+            target_fields=target_fields,
+            decisions=tuple(decisions),
+            mapped_count=mapped_count,
+            unmapped_count=len(decisions) - mapped_count,
+            model_invocation=None if completion is None else completion.invocation,
+            warnings=tuple(warnings),
+        )
 
     async def review_quality(
         self,
@@ -719,3 +876,34 @@ class OnlineResearchService:
             max_tokens=4096,
         )
         return await self._model.complete(request)
+
+    async def _map_fields(
+        self,
+        *,
+        research_goal: str,
+        target_fields: tuple[str, ...],
+        unresolved: tuple[dict[str, object], ...],
+    ) -> StructuredModelCompletion:
+        system_prompt = self._field_mapping_prompt_path.read_text(encoding="utf-8")
+        payload = {
+            "research_goal": research_goal,
+            "allowed_target_fields": target_fields,
+            "unresolved_source_columns": unresolved,
+            "output_schema": FieldMappingProposalBatch.model_json_schema(),
+        }
+        request = StructuredModelRequest(
+            role=ModelRole.FIELD_MAPPER,
+            model_id=self._settings.fast_model_id,
+            system_prompt=system_prompt,
+            user_prompt=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            prompt_version="1.0.0",
+            schema_name="FieldMappingProposalBatch",
+            temperature=0.0,
+            max_tokens=4096,
+        )
+        return await self._model.complete(request)
+
+
+def _normalize_field_name(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return re.sub(r"[^\w]+", "", normalized, flags=re.UNICODE)
