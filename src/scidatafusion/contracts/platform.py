@@ -10,12 +10,14 @@ from uuid import uuid4
 from pydantic import Field, StringConstraints, field_validator
 
 from scidatafusion.contracts.base import ContentHash, StrictContract, utc_now
+from scidatafusion.contracts.workbench import WorkbenchSnapshot
 
 JobId = Annotated[str, StringConstraints(pattern=r"^job_[0-9a-f]{32}$")]
 IdempotencyKey = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=8, max_length=128, pattern=r"^[\w.-]+$"),
 ]
+JobMessage = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=512)]
 
 
 class ResearchJobStatus(StrEnum):
@@ -47,6 +49,7 @@ class ResearchJobResult(StrictContract):
     issue_count: int = Field(ge=0)
     formal_gold_record_count: int = Field(ge=0)
     package_filename: str
+    workbench_snapshot: WorkbenchSnapshot | None = None
 
 
 class ResearchJobRecord(StrictContract):
@@ -55,6 +58,8 @@ class ResearchJobRecord(StrictContract):
     submission: ResearchJobSubmission
     result: ResearchJobResult | None = None
     failure_code: str | None = None
+    failure_message: JobMessage | None = None
+    recovery_action: JobMessage | None = None
     submitted_at: datetime = Field(default_factory=utc_now)
     started_at: datetime | None = None
     finished_at: datetime | None = None

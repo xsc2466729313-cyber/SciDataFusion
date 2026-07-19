@@ -219,5 +219,15 @@ URL, file hash, row, column, original JSON value, evidence identity, and mapping
 workbench shows coverage and rationale and links mapped columns into the evidence graph. No model can
 see, generate, normalize, or overwrite a scientific cell value in this module.
 
+M29 closes the workbench reliability and interpretation gap. Online submission now checks local
+configuration readiness before queueing, while persisted failures expose bounded Chinese guidance
+and retain full server-side tracebacks without returning secrets or untrusted external text. Docker
+binds the workbench to loopback; its Nginx proxy overwrites a private marker accepted only from a
+private backend peer, so configuration can be saved from the local React page into the persistent
+configuration volume while public clients remain blocked. Graph presentation localizes node and
+relationship types and adds explicit dataset-to-evidence, evidence-to-field, and same-record
+evidence-to-evidence edges. These links describe provenance or co-observation only; they do not
+claim causality, agreement, or scientific equivalence.
+
 Each phase ends with contract tests, offline replay fixtures, metrics, security checks, an ADR for
 new architectural choices, and an updated acceptance record.

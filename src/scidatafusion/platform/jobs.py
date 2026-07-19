@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -15,6 +16,9 @@ from scidatafusion.contracts.platform import (
     ResearchJobStatus,
     ResearchJobSubmission,
 )
+from scidatafusion.errors import AppError, ErrorCode
+
+logger = logging.getLogger(__name__)
 
 JobExecutor = Callable[[ResearchJobSubmission], Awaitable[ResearchJobResult]]
 
@@ -218,11 +222,15 @@ class ResearchJobService:
         await self._repository.replace(running)
         try:
             result = await self._executor(running.submission)
-        except Exception:
+        except Exception as exc:
+            failure_code, failure_message, recovery_action = _public_failure(exc)
+            logger.exception("Research job %s failed with code %s", job_id, failure_code)
             failed = running.model_copy(
                 update={
                     "status": ResearchJobStatus.FAILED,
-                    "failure_code": "research_execution_failed",
+                    "failure_code": failure_code,
+                    "failure_message": failure_message,
+                    "recovery_action": recovery_action,
                     "finished_at": datetime.now(UTC),
                 }
             )
@@ -243,3 +251,39 @@ class ResearchJobService:
     async def list(self, limit: int = 20) -> ResearchJobPage:
         records = await self._repository.list(limit)
         return ResearchJobPage(items=records, count=len(records))
+
+
+def _public_failure(exc: Exception) -> tuple[str, str, str]:
+    """Map internal failures to bounded Chinese guidance without leaking untrusted data."""
+
+    if isinstance(exc, AppError):
+        if "configuration is incomplete" in exc.message:
+            return (
+                "online_configuration_incomplete",
+                "联网配置尚未完成, 研究任务未开始调用模型与联网搜索。",
+                "请在“联网配置”中保存阿里云百炼和 SerpApi 配置后重新运行。",
+            )
+        mappings = {
+            ErrorCode.EXTERNAL_SERVICE_ERROR: (
+                "external_service_unavailable",
+                "外部论文或数据服务暂时不可用, 已保留当前任务记录。",
+                "请稍后重试; 若持续失败, 可切换离线复现模式检查本地链路。",
+            ),
+            ErrorCode.BUDGET_EXCEEDED: (
+                "research_budget_exceeded",
+                "本次研究达到来源数量、文件大小或时间预算上限。",
+                "请缩小研究范围, 或在高级配置中调整允许的预算后重试。",
+            ),
+            ErrorCode.SECURITY_POLICY_VIOLATION: (
+                "security_policy_blocked",
+                "外部请求未通过安全策略, 任务已停止且未采用相关数据。",
+                "请检查来源地址和本机联网配置后重新运行。",
+            ),
+        }
+        if exc.code in mappings:
+            return mappings[exc.code]
+    return (
+        "research_execution_failed",
+        "研究流程在处理来源或数据时未能完成, 已保留失败检查点。",
+        "请重试任务; 若再次失败, 请查看服务日志中的任务编号。",
+    )

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import re
+from itertools import pairwise
 from typing import Literal
 
 from scidatafusion.contracts.datasets import ScientificParsingRequest, ScientificParsingResult
@@ -229,7 +231,7 @@ def build_workbench_snapshot(
                     node_id=item.node_id,
                     kind=item.kind.value,
                     source_id=item.source_id,
-                    label=item.label,
+                    label=_chinese_graph_label(item.kind.value, item.label),
                     trusted=item.trusted_fact,
                 )
                 for item in knowledge.graph.nodes
@@ -594,7 +596,7 @@ def _exploration_graph(
             nodes.append(
                 WorkbenchGraphNode(
                     node_id=node_id,
-                    kind="evidence",
+                    kind="source",
                     source_id=url,
                     label=value[:256],
                     trusted=False,
@@ -651,6 +653,48 @@ def _exploration_graph(
                         evidence_refs=column_evidence or (dataset.artifact_sha256,),
                     )
                 )
+            cells_by_row: dict[int, list[str]] = {}
+            for cell in dataset.cells[:120]:
+                nodes.append(
+                    WorkbenchGraphNode(
+                        node_id=cell.evidence_id,
+                        kind="evidence",
+                        source_id=cell.source_hash,
+                        label=(
+                            f"证据: {cell.column_name} (第 {cell.row_index} 行, "
+                            f"第 {cell.column_index} 列)"
+                        )[:256],
+                        trusted=True,
+                    )
+                )
+                edges.append(
+                    WorkbenchGraphEdge(
+                        source=dataset.dataset_id,
+                        target=cell.evidence_id,
+                        kind="contains_evidence",
+                        evidence_refs=(cell.evidence_id,),
+                    )
+                )
+                column_id = f"column-{dataset.dataset_id[4:20]}-{cell.column_index}"
+                edges.append(
+                    WorkbenchGraphEdge(
+                        source=cell.evidence_id,
+                        target=column_id,
+                        kind="supports_field",
+                        evidence_refs=(cell.evidence_id,),
+                    )
+                )
+                cells_by_row.setdefault(cell.row_index, []).append(cell.evidence_id)
+            for row_evidence in cells_by_row.values():
+                for left, right in pairwise(row_evidence):
+                    edges.append(
+                        WorkbenchGraphEdge(
+                            source=left,
+                            target=right,
+                            kind="co_observed",
+                            evidence_refs=(left, right),
+                        )
+                    )
     if online_field_mapping is not None:
         for mapping in online_field_mapping.decisions:
             if mapping.target_field is None or mapping.column_index > 20:
@@ -666,6 +710,26 @@ def _exploration_graph(
                 )
             )
     return tuple(nodes), tuple(edges)
+
+
+def _chinese_graph_label(kind: str, label: str) -> str:
+    """Localize deterministic M19 labels while preserving immutable graph identities."""
+
+    match = re.fullmatch(r"evidence table_cell row (\d+) column (\d+)", label)
+    if match:
+        return f"表格单元格证据 (第 {match.group(1)} 行, 第 {match.group(2)} 列)"
+    prefixes = {
+        "field ": "字段: ",
+        "quality gate ": "质量门: ",
+        "quality issue ": "质量问题: ",
+        "task memory ": "任务记忆: ",
+    }
+    for prefix, translated in prefixes.items():
+        if label.startswith(prefix):
+            return f"{translated}{label[len(prefix) :]}"[:256]
+    if kind == "task" and label.lower().startswith("task"):
+        return "当前研究任务"
+    return label[:256]
 
 
 def _structured_parser_for(

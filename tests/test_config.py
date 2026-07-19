@@ -17,6 +17,38 @@ def test_defaults_are_offline_and_secret_safe(tmp_path: Path) -> None:
     assert "api_key" not in summary
 
 
+def test_get_settings_reloads_persistent_local_configuration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configuration_file = tmp_path / "online.env"
+    configuration_file.write_text(
+        "\n".join(
+            (
+                "SCIDATA_OFFLINE_MODE=false",
+                "DASHSCOPE_API_KEY=test-dashscope-key-material",
+                "SERPAPI_API_KEY=test-serpapi-key-material",
+                "SCIDATA_QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1",
+            )
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIDATA_LOCAL_CONFIGURATION_FILE", str(configuration_file))
+    monkeypatch.delenv("SCIDATA_OFFLINE_MODE", raising=False)
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    get_settings.cache_clear()
+
+    try:
+        settings = get_settings()
+        assert settings.offline_mode is False
+        assert settings.dashscope_api_key is not None
+        assert settings.serpapi_api_key is not None
+        assert settings.local_configuration_file == configuration_file
+    finally:
+        get_settings.cache_clear()
+
+
 def test_secret_value_never_appears_in_repr_or_diagnostics(tmp_path: Path) -> None:
     secret = "competition-secret-value"
     settings = Settings(

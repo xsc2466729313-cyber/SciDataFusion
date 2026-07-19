@@ -15,8 +15,7 @@ from scidatafusion.contracts.model import (
     StructuredModelRequest,
 )
 from scidatafusion.contracts.problem import CandidateBatch
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+from scidatafusion.prompting import prompt_path as resolve_prompt_path
 
 
 class StructuredModelClient(Protocol):
@@ -37,7 +36,7 @@ class QwenCandidateExtractor:
     ) -> None:
         self._client = client
         self._settings = settings
-        self._prompt_path = prompt_path or _PROJECT_ROOT / "prompts" / "problem_compiler.md"
+        self._prompt_path = prompt_path or resolve_prompt_path("problem_compiler.md")
         self._prompt_version = prompt_version
         self._records: ContextVar[tuple[ModelInvocationRecord, ...]] = ContextVar(
             "m01_model_invocations", default=()

@@ -57,8 +57,7 @@ from scidatafusion.exploration import (
 )
 from scidatafusion.models import BailianStructuredClient
 from scidatafusion.online.multichannel import MultiChannelSearchClient
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+from scidatafusion.prompting import prompt_path
 
 
 class SearchClient(Protocol):
@@ -157,23 +156,23 @@ class OnlineResearchService:
         self._search = search_client or MultiChannelSearchClient(settings)
         self._model = model_client or BailianStructuredClient(settings)
         self._assessment_prompt_path = (
-            assessment_prompt_path or _PROJECT_ROOT / "prompts" / "online_source_assessment.md"
+            assessment_prompt_path or prompt_path("online_source_assessment.md")
         )
         self._planning_prompt_path = (
-            planning_prompt_path or _PROJECT_ROOT / "prompts" / "online_search_planning.md"
+            planning_prompt_path or prompt_path("online_search_planning.md")
         )
         self._quality_prompt_path = (
-            quality_prompt_path or _PROJECT_ROOT / "prompts" / "online_quality_review.md"
+            quality_prompt_path or prompt_path("online_quality_review.md")
         )
         self._reflection_prompt_path = (
-            reflection_prompt_path or _PROJECT_ROOT / "prompts" / "online_acquisition_reflection.md"
+            reflection_prompt_path or prompt_path("online_acquisition_reflection.md")
         )
         self._qualification_prompt_path = (
             qualification_prompt_path
-            or _PROJECT_ROOT / "prompts" / "online_artifact_qualification.md"
+            or prompt_path("online_artifact_qualification.md")
         )
         self._field_mapping_prompt_path = (
-            field_mapping_prompt_path or _PROJECT_ROOT / "prompts" / "online_field_mapping.md"
+            field_mapping_prompt_path or prompt_path("online_field_mapping.md")
         )
 
     async def run(self, *, research_goal: str, query: str | None = None) -> OnlineResearchResult:

@@ -21,6 +21,7 @@ from scidatafusion.contracts.platform import (
     ResearchJobStatus,
     ResearchJobSubmission,
 )
+from scidatafusion.errors import AppError, ErrorCode
 from scidatafusion.platform.agent_graph import BoundedResearchGraph
 from scidatafusion.platform.jobs import (
     CeleryJobDispatcher,
@@ -124,9 +125,48 @@ def test_local_job_service_succeeds_fails_and_ignores_reexecution() -> None:
         failure = await _wait_terminal(service, failed.job_id)
         assert failure.status is ResearchJobStatus.FAILED
         assert failure.failure_code == "research_execution_failed"
+        assert failure.failure_message == "研究流程在处理来源或数据时未能完成, 已保留失败检查点。"
+        assert failure.recovery_action is not None
         assert "secret" not in failure.model_dump_json()
         page = await service.list(1)
         assert page.count == 1
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_code"),
+    [
+        (
+            AppError(
+                ErrorCode.CONFIGURATION_ERROR,
+                "online research configuration is incomplete: secret material",
+            ),
+            "online_configuration_incomplete",
+        ),
+        (
+            AppError(ErrorCode.EXTERNAL_SERVICE_ERROR, "provider detail"),
+            "external_service_unavailable",
+        ),
+        (AppError(ErrorCode.BUDGET_EXCEEDED, "budget detail"), "research_budget_exceeded"),
+        (
+            AppError(ErrorCode.SECURITY_POLICY_VIOLATION, "policy detail"),
+            "security_policy_blocked",
+        ),
+    ],
+)
+def test_job_failures_expose_safe_chinese_guidance(error: AppError, expected_code: str) -> None:
+    async def exercise() -> None:
+        async def fail(_: ResearchJobSubmission) -> ResearchJobResult:
+            raise error
+
+        service = ResearchJobService(InMemoryResearchJobRepository(), fail)
+        submitted = await service.submit(_submission())
+        failed = await _wait_terminal(service, submitted.job_id)
+        assert failed.failure_code == expected_code
+        assert failed.failure_message is not None
+        assert failed.recovery_action is not None
+        assert "detail" not in failed.model_dump_json()
 
     asyncio.run(exercise())
 

@@ -119,6 +119,11 @@ async def _exercise_api() -> None:
         }
         assert detail["graph_nodes"][0]["source_id"]
         assert detail["graph_edges"][0]["evidence_refs"]
+        evidence_labels = [
+            item["label"] for item in detail["graph_nodes"] if item["kind"] == "evidence"
+        ]
+        assert evidence_labels
+        assert all("表格单元格证据" in label for label in evidence_labels)
         assert detail["scientific_dataset"]["format"] == "fits"
         assert detail["scientific_dataset"]["variable_names"] == ["MJD", "MAG", "MAG_ERR"]
         assert detail["scientific_dataset"]["materialized_cell_count"] == 12

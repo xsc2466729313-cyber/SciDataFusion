@@ -1735,6 +1735,9 @@ def test_fastapi_online_mode_connects_live_discovery_to_workbench(tmp_path: Path
         assert workbench["evidence"][0]["raw_value"] == '"A"'
         assert workbench["stages"][2]["label"] == "获取与解析"
         assert any(item["kind"] == "dataset" for item in workbench["graph_nodes"])
+        assert any(item["kind"] == "evidence" for item in workbench["graph_nodes"])
+        graph_edge_kinds = {item["kind"] for item in workbench["graph_edges"]}
+        assert {"contains_evidence", "supports_field", "co_observed"}.issubset(graph_edge_kinds)
         assert workbench["issues"] == []
         assert downloaded.status_code == 200
         assert downloaded.content == b"city,lst,ndvi\nA,32.1,0.4\n"
@@ -1863,6 +1866,39 @@ def test_configuration_api_rejects_remote_writes(tmp_path: Path) -> None:
             )
         assert response.status_code == 403
         assert response.json()["code"] == "security_policy_violation"
+        assert not (tmp_path / ".env").exists()
+
+    asyncio.run(scenario())
+
+
+def test_configuration_api_accepts_trusted_private_workbench_proxy(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = create_app(configuration_store=LocalOnlineConfigurationStore(tmp_path / ".env"))
+        transport = httpx.ASGITransport(app=app, client=("172.21.0.7", 54321))
+        async with httpx.AsyncClient(transport=transport, base_url="http://workbench") as client:
+            response = await client.put(
+                "/api/v1/online/configuration",
+                headers={"X-SciDataFusion-Local-Proxy": "workbench-v1"},
+                json={"online_enabled": False},
+            )
+        assert response.status_code == 200
+        assert (tmp_path / ".env").exists()
+
+    asyncio.run(scenario())
+
+
+def test_configuration_api_rejects_forged_public_proxy_marker(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = create_app(configuration_store=LocalOnlineConfigurationStore(tmp_path / ".env"))
+        transport = httpx.ASGITransport(app=app, client=("203.0.113.10", 54321))
+        async with httpx.AsyncClient(transport=transport, base_url="http://remote") as client:
+            response = await client.put(
+                "/api/v1/online/configuration",
+                headers={"X-SciDataFusion-Local-Proxy": "workbench-v1"},
+                json={"online_enabled": False},
+            )
+        assert response.status_code == 403
+        assert "只能从运行 SciDataFusion 的本机工作台修改" in response.text
         assert not (tmp_path / ".env").exists()
 
     asyncio.run(scenario())

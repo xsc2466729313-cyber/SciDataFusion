@@ -9,8 +9,10 @@ from celery import Celery  # type: ignore[import-not-found]
 from scidatafusion.api import DemoDeliveryProvider, execute_research_submission
 from scidatafusion.config import Settings
 from scidatafusion.contracts.platform import ResearchJobResult, ResearchJobSubmission
+from scidatafusion.logging import configure_logging
 from scidatafusion.platform.jobs import PostgresResearchJobRepository, ResearchJobService
 
+configure_logging()
 settings = Settings()
 if settings.redis_url is None or settings.database_url is None:
     raise RuntimeError("Celery mode requires SCIDATA_REDIS_URL and SCIDATA_DATABASE_URL")
@@ -24,6 +26,7 @@ app.conf.update(
     result_serializer="json",
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    worker_hijack_root_logger=False,
 )
 
 

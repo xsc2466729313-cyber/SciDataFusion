@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileSearch,
   FlaskConical,
+  HeartPulse,
   KeyRound,
   Network,
   Play,
@@ -31,6 +32,7 @@ import type {
 
 const tabs: Array<{ key: TabKey; label: string; icon: typeof Activity }> = [
   { key: "overview", label: "研究总览", icon: Activity },
+  { key: "medical", label: "医学图谱", icon: HeartPulse },
   { key: "sources", label: "来源与样本", icon: Database },
   { key: "evidence", label: "证据与字段", icon: Network },
   { key: "delivery", label: "质量与交付", icon: ShieldCheck },
@@ -38,14 +40,39 @@ const tabs: Array<{ key: TabKey; label: string; icon: typeof Activity }> = [
 ];
 
 const nodeColors: Record<string, string> = {
+  task: "#7c3f00",
   evidence: "#0f766e",
   field: "#2563a4",
+  dataset: "#6d4aa2",
+  quality_issue: "#b64132",
+  quality_gate: "#b46b08",
+  memory: "#7b6a28",
   issue: "#b64132",
   gate: "#b46b08",
   source: "#5c6f68"
 };
 
+const nodeKindLabels: Record<string, string> = {
+  task: "研究任务", evidence: "证据", field: "字段", dataset: "数据集",
+  quality_issue: "质量问题", quality_gate: "质量门", memory: "任务记忆",
+  issue: "质量问题", gate: "质量门", source: "来源"
+};
+
+const relationLabels: Record<string, string> = {
+  contains: "任务包含证据", supports: "证据支持字段", violates: "违反质量门",
+  affects: "问题影响字段", derived_from: "派生自", prioritizes: "优先检索",
+  targets: "目标字段", requires: "需要校验", produces: "计划产出",
+  discovered: "发现来源", parsed_from: "解析得到数据集", contains_field: "数据集包含字段",
+  contains_evidence: "数据集包含证据", supports_field: "证据支持字段",
+  co_observed: "同一记录共现", maps_to: "映射到目标字段"
+};
+
+const statusLabels: Record<ResearchJob["status"], string> = {
+  queued: "等待执行", running: "正在执行", succeeded: "已完成", failed: "未完成"
+};
+
 const EvidenceGraph = lazy(() => import("./Graph3D"));
+const MedicalKnowledgeGraph = lazy(() => import("./MedicalKnowledgeGraph"));
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
@@ -62,13 +89,17 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const [platformResult, workbenchResult] = await Promise.all([
+      const [platformResult, workbenchResult, recentJobs] = await Promise.all([
         api.platform(),
-        api.workbench()
+        api.workbench(),
+        api.jobs(1)
       ]);
+      const recentJob = recentJobs.items[0] ?? null;
+      const restoredSnapshot = recentJob?.result?.workbench_snapshot ?? workbenchResult;
       setPlatform(platformResult);
-      setSnapshot(workbenchResult);
-      setGoal(workbenchResult.research_goal);
+      setSnapshot(restoredSnapshot);
+      setJob(recentJob);
+      setGoal(localizeLegacyGoal(restoredSnapshot.research_goal));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "工作台加载失败");
     } finally {
@@ -86,7 +117,9 @@ function App() {
       try {
         const current = await api.job(job.job_id);
         setJob(current);
-        if (current.status === "succeeded") setSnapshot(await api.workbench());
+        if (current.status === "succeeded") {
+          setSnapshot(current.result?.workbench_snapshot ?? await api.workbench());
+        }
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "任务状态读取失败");
       }
@@ -101,6 +134,14 @@ function App() {
     }
     setError(null);
     try {
+      if (mode === "online") {
+        const configuration = await api.configuration();
+        if (!configuration.online_ready) {
+          setActiveTab("settings");
+          setError("联网配置尚未完成，请先保存阿里云百炼和 SerpApi 配置。");
+          return;
+        }
+      }
       setJob(await api.submitJob(goal, mode));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "任务提交失败");
@@ -113,7 +154,7 @@ function App() {
       <main className="main-area">
         <header className="topbar">
           <div>
-            <div className="eyebrow">SCIENTIFIC DATA INTELLIGENCE</div>
+        <div className="eyebrow">科学数据智能工作台</div>
             <h1>SciDataFusion 科学数据工作台</h1>
           </div>
           <div className="header-status">
@@ -149,12 +190,17 @@ function App() {
           </button>
         </section>
 
-        {(error || job) && <RunBanner error={error} job={job} />}
+        {(error || job) && <RunBanner error={error} job={job} onConfigure={() => setActiveTab("settings")} onRetry={() => void runResearch()} />}
 
         <div className="content-area">
           {loading && <LoadingState />}
           {!loading && snapshot && activeTab === "overview" && (
             <Overview snapshot={snapshot} selectedNode={selectedNode} onNodeSelect={setSelectedNode} />
+          )}
+          {!loading && activeTab === "medical" && (
+            <Suspense fallback={<div className="loading-state"><RefreshCw className="spin" /><span>正在加载中文医学图谱</span></div>}>
+              <MedicalKnowledgeGraph />
+            </Suspense>
           )}
           {!loading && snapshot && activeTab === "sources" && <Sources snapshot={snapshot} />}
           {!loading && snapshot && activeTab === "evidence" && <Evidence snapshot={snapshot} />}
@@ -185,18 +231,23 @@ function Sidebar({ active, onChange, platform }: { active: TabKey; onChange: (ta
   );
 }
 
-function RunBanner({ error, job }: { error: string | null; job: ResearchJob | null }) {
+function RunBanner({ error, job, onConfigure, onRetry }: { error: string | null; job: ResearchJob | null; onConfigure: () => void; onRetry: () => void }) {
   const failed = Boolean(error) || job?.status === "failed";
+  const configurationFailure = error?.includes("联网配置") || job?.failure_code === "online_configuration_incomplete";
   return (
     <div className={`run-banner ${failed ? "error" : ""}`}>
       {failed ? <CircleAlert /> : job?.status === "succeeded" ? <CheckCircle2 /> : <RefreshCw className="spin" />}
       <strong>{error ? "请求未完成" : job?.status === "succeeded" ? "研究任务已完成" : job?.status === "failed" ? "研究任务未完成" : "研究任务执行中"}</strong>
-      <span>{error ?? (job ? `任务 ${job.job_id.slice(0, 14)} · ${job.status}` : "")}</span>
+      <span>{error ?? job?.failure_message ?? (job ? `任务 ${job.job_id.slice(0, 14)} · ${statusLabels[job.status]}` : "")}</span>
+      {job?.recovery_action && <small>{job.recovery_action}</small>}
+      {failed && <button onClick={configurationFailure ? onConfigure : onRetry}>{configurationFailure ? "打开联网配置" : "重新运行"}</button>}
     </div>
   );
 }
 
 function Overview({ snapshot, selectedNode, onNodeSelect }: { snapshot: WorkbenchSnapshot; selectedNode: GraphNode | null; onNodeSelect: (node: GraphNode) => void }) {
+  const nodeById = new Map(snapshot.graph_nodes.map((node) => [node.node_id, node]));
+  const selectedRelations = selectedNode ? snapshot.graph_edges.filter((edge) => edge.source === selectedNode.node_id || edge.target === selectedNode.node_id).slice(0, 12) : [];
   return (
     <>
       <section className="section-block">
@@ -221,14 +272,14 @@ function Overview({ snapshot, selectedNode, onNodeSelect }: { snapshot: Workbenc
         <div className="graph-panel">
           <div className="panel-heading"><div><h2>交互式证据知识图谱</h2><p>拖拽旋转 · 滚轮缩放 · 点击节点查看证据</p></div><span>{snapshot.graph_nodes.length} 节点 · {snapshot.graph_edges.length} 关系</span></div>
           <Suspense fallback={<div className="graph-loading"><RefreshCw className="spin" />正在加载三维图谱</div>}>
-            <EvidenceGraph nodes={snapshot.graph_nodes} edges={snapshot.graph_edges} onSelect={onNodeSelect} colors={nodeColors} />
+            <EvidenceGraph nodes={snapshot.graph_nodes} edges={snapshot.graph_edges} onSelect={onNodeSelect} colors={nodeColors} kindLabels={nodeKindLabels} relationLabels={relationLabels} />
           </Suspense>
-          <div className="graph-legend">{Object.entries(nodeColors).map(([kind, color]) => <span key={kind}><i style={{ backgroundColor: color }} />{kind}</span>)}</div>
+          <div className="graph-legend">{Object.entries(nodeColors).filter(([kind]) => snapshot.graph_nodes.some((node) => node.kind === kind)).map(([kind, color]) => <span key={kind}><i style={{ backgroundColor: color }} />{nodeKindLabels[kind] ?? "其他"}</span>)}</div>
         </div>
         <aside className="node-inspector">
           <h3>节点详情</h3>
           {selectedNode ? (
-            <dl><dt>名称</dt><dd>{selectedNode.label}</dd><dt>类型</dt><dd>{selectedNode.kind}</dd><dt>来源</dt><dd>{selectedNode.source_id}</dd><dt>可信状态</dt><dd>{selectedNode.trusted ? "已验证" : "待验证"}</dd><dt>节点标识</dt><dd className="mono">{selectedNode.node_id}</dd></dl>
+            <><dl><dt>名称</dt><dd>{selectedNode.label}</dd><dt>类型</dt><dd>{nodeKindLabels[selectedNode.kind] ?? "其他"}</dd><dt>来源依据</dt><dd className="mono">{selectedNode.source_id}</dd><dt>可信状态</dt><dd>{selectedNode.trusted ? "已验证" : "待验证"}</dd><dt>节点标识</dt><dd className="mono">{selectedNode.node_id}</dd></dl><div className="relation-list"><h4>关联关系</h4>{selectedRelations.length ? selectedRelations.map((edge, index) => { const outgoing = edge.source === selectedNode.node_id; const other = nodeById.get(outgoing ? edge.target : edge.source); return <div key={`${edge.source}-${edge.target}-${index}`}><span>{outgoing ? "指向" : "来自"}</span><strong>{relationLabels[edge.kind] ?? "相关"}</strong><small>{other?.label ?? "关联节点"}</small></div>; }) : <p>暂无直接关系</p>}</div></>
           ) : <div className="empty-inspector"><Network /><p>点击图谱中的节点查看来源、类型与可信状态</p></div>}
         </aside>
       </section>
@@ -237,7 +288,7 @@ function Overview({ snapshot, selectedNode, onNodeSelect }: { snapshot: Workbenc
         <div className="section-heading"><div><h2>{snapshot.research_blueprint.topic_title}</h2><p>{snapshot.research_blueprint.research_summary}</p></div><span className="subtle-badge">自主研究蓝图</span></div>
         <div className="blueprint-grid">
           <ListColumn title="证据检索重点" items={snapshot.research_blueprint.evidence_priorities} />
-          <ListColumn title="多元数据来源" items={snapshot.research_blueprint.source_types} />
+          <ListColumn title="多元数据来源" items={snapshot.research_blueprint.source_types.map(localizeSourceCategory)} />
           <ListColumn title="候选结构化字段" items={snapshot.research_blueprint.candidate_fields} />
           <ListColumn title="目标成果" items={snapshot.research_blueprint.target_outputs} />
         </div>
@@ -252,7 +303,7 @@ function Sources({ snapshot }: { snapshot: WorkbenchSnapshot }) {
     <section className="section-block">
       <div className="section-heading"><div><h2>来源与样本</h2><p>统一展示检索渠道、许可、字段覆盖和下载状态</p></div><span>{snapshot.sources.length} 个来源 · {snapshot.artifacts.length} 个对象</span></div>
       <div className="table-wrap"><table><thead><tr><th>排名</th><th>来源</th><th>类型</th><th>字段覆盖</th><th>许可</th><th>状态</th><th>评分</th></tr></thead><tbody>
-        {snapshot.sources.map((source) => <tr key={source.candidate_id}><td>{source.rank}</td><td><strong>{source.source_names.join(" · ")}</strong><small className="mono">{source.candidate_id}</small></td><td>{source.categories.join(" / ")}</td><td>{source.covered_fields.join("、") || "待解析"}</td><td>{source.license_status}</td><td><span className="table-status">{source.download_status}</span></td><td>{source.score.toFixed(2)}</td></tr>)}
+        {snapshot.sources.map((source) => <tr key={source.candidate_id}><td>{source.rank}</td><td><strong>{source.source_names.join(" · ")}</strong><small className="mono">{source.candidate_id}</small></td><td>{source.categories.map(localizeSourceCategory).join(" / ")}</td><td>{source.covered_fields.join("、") || "待解析"}</td><td>{localizeLicense(source.license_status)}</td><td><span className="table-status">{localizeDownloadStatus(source.download_status)}</span></td><td>{source.score.toFixed(2)}</td></tr>)}
       </tbody></table></div>
       <div className="artifact-band">
         {snapshot.artifacts.slice(0, 12).map((artifact) => {
@@ -299,7 +350,7 @@ function Evidence({ snapshot }: { snapshot: WorkbenchSnapshot }) {
     <section className="section-block">
       <div className="section-heading"><div><h2>证据与字段</h2><p>科学值只展示可回溯证据，不足项不会由 AI 编造</p></div><div className="search-box"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="筛选字段、值或位置" /></div></div>
       <div className="table-wrap"><table><thead><tr><th>字段</th><th>原始值</th><th>来源位置</th><th>提取方法</th><th>置信度</th><th>源哈希</th></tr></thead><tbody>
-        {rows.map((item) => <tr key={item.evidence_id}><td><strong>{item.field_name}</strong></td><td className="mono">{snapshot.topic_data_status === "live_discovery" ? displayRawValue(item.raw_value) : item.raw_value}</td><td>{item.source_location}<small>{item.byte_range}</small></td><td>{item.method}</td><td>{Math.round(item.confidence * 100)}%</td><td><code>{item.source_hash.slice(0, 14)}</code></td></tr>)}
+        {rows.map((item) => <tr key={item.evidence_id}><td><strong>{item.field_name}</strong></td><td className="mono">{snapshot.topic_data_status === "live_discovery" ? displayRawValue(item.raw_value) : item.raw_value}</td><td>{localizeLocation(item.source_location)}<small>{item.byte_range}</small></td><td>{localizeMethod(item.method)}</td><td>{Math.round(item.confidence * 100)}%</td><td><code>{item.source_hash.slice(0, 14)}</code></td></tr>)}
       </tbody></table></div>
     </section>
   );
@@ -342,6 +393,48 @@ function displayRawValue(value: string) {
   }
 }
 
+function localizeLegacyGoal(goal: string) {
+  return goal === "Study Type Ia supernova light curves using multi-source data integration into CSV."
+    ? "研究 Ia 型超新星光变曲线，自动查找论文、开放数据和表格，并整合为可追溯数据"
+    : goal;
+}
+
+function localizeSourceCategory(value: string) {
+  const labels: Record<string, string> = {
+    literature: "论文",
+    paper: "论文",
+    dataset: "数据集",
+    table: "表格",
+    repository: "数据仓库",
+    supplement: "补充材料",
+    figure: "图表",
+    image: "图像",
+    catalog: "目录",
+    document: "文档"
+  };
+  return labels[value] ?? value;
+}
+
+function localizeLicense(value: string) {
+  const labels: Record<string, string> = { allowed: "允许使用", needs_review: "需要复核", unknown: "许可未知", restricted: "受限" };
+  return labels[value] ?? value;
+}
+
+function localizeDownloadStatus(value: string) {
+  const labels: Record<string, string> = { downloaded: "已下载", direct_url: "可直接下载", identifier_resolution: "标识符解析", landing_page: "落地页", not_attempted: "尚未获取", failed: "获取失败", blocked: "安全策略阻止" };
+  return labels[value] ?? value;
+}
+
+function localizeMethod(value: string) {
+  const labels: Record<string, string> = { table_cell: "表格单元格解析", structured_preview: "结构化预览解析", deterministic: "确定性解析", chart_digitization: "图表数字化" };
+  return labels[value] ?? value;
+}
+
+function localizeLocation(value: string) {
+  const match = value.match(/^row (\d+) column (\d+)$/);
+  return match ? `第 ${match[1]} 行，第 ${match[2]} 列` : value;
+}
+
 function Configuration() {
   const [configuration, setConfiguration] = useState<OnlineConfiguration | null>(null);
   const [dashscopeKey, setDashscopeKey] = useState("");
@@ -373,13 +466,13 @@ function Configuration() {
   };
   return (
     <section className="section-block settings-panel">
-      <div className="section-heading"><div><h2>联网配置</h2><p>密钥仅写入本机忽略文件，页面不会回显原值</p></div><span className={configuration?.online_ready ? "subtle-badge" : "warning-badge"}>{configuration?.online_ready ? "已就绪" : "待配置"}</span></div>
+      <div className="section-heading"><div><h2>联网配置</h2><p>保存到本机持久配置区，重启后继续生效；密钥永不回显</p></div><span className={configuration?.online_ready ? "subtle-badge" : "warning-badge"}>{configuration?.online_ready ? "已就绪" : "待配置"}</span></div>
       <div className="settings-form">
         <label><span><KeyRound />阿里云百炼 API Key</span><input type="password" value={dashscopeKey} onChange={(event) => setDashscopeKey(event.target.value)} placeholder={configuration?.credentials.find((item) => item.environment_variable === "DASHSCOPE_API_KEY")?.configured ? "已配置，留空保持原值" : "sk-..."} /></label>
         <label><span><KeyRound />SerpApi Key</span><input type="password" value={serpapiKey} onChange={(event) => setSerpapiKey(event.target.value)} placeholder={configuration?.credentials.find((item) => item.environment_variable === "SERPAPI_API_KEY")?.configured ? "已配置，留空保持原值" : "输入搜索 API Key"} /></label>
-        <label className="wide"><span><Network />Qwen Base URL</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /></label>
+        <label className="wide"><span><Network />百炼兼容接口地址（Base URL）</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /></label>
       </div>
-      <div className="settings-actions"><span>{message}</span><button className="primary-action" onClick={() => void save()}><CheckCircle2 />保存并应用</button></div>
+      <div className="settings-actions"><span>{message || "配置仅允许从当前电脑的工作台修改"}</span><button className="primary-action" onClick={() => void save()}><CheckCircle2 />保存到本机并应用</button></div>
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import type { OnlineConfiguration, PlatformStatus, ResearchJob, WorkbenchSnapshot } from "./types";
+import type { OnlineConfiguration, PlatformStatus, ResearchJob, ResearchJobPage, WorkbenchSnapshot } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -21,6 +21,7 @@ export const api = {
       body: JSON.stringify({ research_goal: researchGoal, execution_mode: executionMode })
     }),
   job: (jobId: string) => request<ResearchJob>(`/api/v1/research-jobs/${jobId}`),
+  jobs: (limit = 1) => request<ResearchJobPage>(`/api/v1/research-jobs?limit=${limit}`),
   configuration: () => request<OnlineConfiguration>("/api/v1/online/configuration"),
   saveConfiguration: (payload: Record<string, unknown>) =>
     request<OnlineConfiguration>("/api/v1/online/configuration", {

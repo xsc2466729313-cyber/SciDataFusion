@@ -9,6 +9,7 @@ WORKDIR /app
 RUN groupadd --system scidata && useradd --system --gid scidata --create-home scidata
 
 COPY pyproject.toml README.md ./
+COPY prompts ./prompts
 # Resolve the large scientific/platform dependency layer independently from
 # application source changes. The real package is installed without dependency
 # resolution after its source is copied below.

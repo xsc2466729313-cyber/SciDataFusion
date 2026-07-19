@@ -222,6 +222,10 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Load and cache process-wide settings."""
+    """Load process settings, then overlay the configured persistent local file."""
 
-    return Settings()
+    bootstrap = Settings()
+    local_configuration_file = bootstrap.local_configuration_file
+    if local_configuration_file.is_file():
+        return Settings(_env_file=local_configuration_file)
+    return bootstrap

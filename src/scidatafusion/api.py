@@ -463,17 +463,33 @@ def create_app(
             is_loopback = host is not None and ipaddress.ip_address(host).is_loopback
         except ValueError:
             is_loopback = False
-        if not is_loopback:
+        is_trusted_local_proxy = False
+        if host is not None:
+            try:
+                proxy_address = ipaddress.ip_address(host)
+                private_proxy_networks = (
+                    ipaddress.ip_network("10.0.0.0/8"),
+                    ipaddress.ip_network("172.16.0.0/12"),
+                    ipaddress.ip_network("192.168.0.0/16"),
+                    ipaddress.ip_network("fc00::/7"),
+                )
+                is_trusted_local_proxy = (
+                    any(proxy_address in network for network in private_proxy_networks)
+                    and request.headers.get("x-scidatafusion-local-proxy") == "workbench-v1"
+                )
+            except ValueError:
+                pass
+        if not (is_loopback or is_trusted_local_proxy):
             raise AppError(
                 ErrorCode.SECURITY_POLICY_VIOLATION,
-                "online configuration may be changed only from the local machine",
+                "联网配置只能从运行 SciDataFusion 的本机工作台修改。",
             )
         try:
             settings = await asyncio.to_thread(local_configuration.save, payload)
         except ValidationError as exc:
             raise AppError(
                 ErrorCode.CONFIGURATION_ERROR,
-                "online configuration failed validation",
+                "联网配置校验失败, 请检查 API Key 和百炼 Base URL。",
             ) from exc
         await state.update_online_settings(settings)
         return build_online_configuration(settings)
@@ -646,6 +662,7 @@ async def execute_research_submission(
             issue_count=summary.issue_count,
             formal_gold_record_count=summary.formal_gold_record_count,
             package_filename=snapshot.package_filename,
+            workbench_snapshot=snapshot,
         )
 
     async def index_evidence() -> None:

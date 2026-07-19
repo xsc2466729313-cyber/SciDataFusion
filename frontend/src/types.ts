@@ -1,4 +1,4 @@
-export type TabKey = "overview" | "sources" | "evidence" | "delivery" | "settings";
+export type TabKey = "overview" | "medical" | "sources" | "evidence" | "delivery" | "settings";
 
 export interface PlatformComponent {
   name: string;
@@ -15,6 +15,8 @@ export interface ResearchJob {
   job_id: string;
   status: "queued" | "running" | "succeeded" | "failed";
   failure_code: string | null;
+  failure_message: string | null;
+  recovery_action: string | null;
   result: {
     quality_gate_passed: boolean;
     quality_score: number;
@@ -24,7 +26,13 @@ export interface ResearchJob {
     issue_count: number;
     formal_gold_record_count: number;
     package_filename: string;
+    workbench_snapshot: WorkbenchSnapshot | null;
   } | null;
+}
+
+export interface ResearchJobPage {
+  items: ResearchJob[];
+  count: number;
 }
 
 export interface WorkbenchStage {

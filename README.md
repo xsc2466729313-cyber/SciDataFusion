@@ -10,7 +10,7 @@
 - **多源数据发现**：组合网页、学术论文、预印本、开放数据库、CSV/TSV/JSON、附件、图表和科学文件。
 - **真实数据整合**：联网获得的 CSV、TSV、JSON 会在哈希校验后显示真实行列；AI 只辅助对齐字段名，未确认列保留原名，并可下载逐单元格可追溯的多源证据 CSV。
 - **可追溯整合**：原始文件按内容寻址，字段保留来源、位置、转换和 EvidenceAtom，冲突值不会被静默覆盖。
-- **中文交互工作台**：展示研究进度、来源覆盖、证据质量、交付文件，以及可拖拽、缩放、点击查看详情的 3D 知识图谱。
+- **中文交互工作台**：展示研究进度、来源覆盖、证据质量、交付文件，以及可拖拽、缩放、点击查看中文关系详情的 3D 知识图谱。
 - **两种运行方式**：单机模式开箱即用；平台模式使用 PostgreSQL、Redis、Celery 和 Chroma 支撑持久化任务与证据向量索引。
 
 ## Docker 一键运行
@@ -28,7 +28,7 @@ docker compose --env-file .env up --build -d
 - SerpApi Key
 - 百炼 Base URL，默认 `https://dashscope.aliyuncs.com/compatible-mode/v1`
 
-页面不会回显密钥，配置文件 `.env` 已被 Git 忽略。停止服务：
+页面不会回显密钥。Docker 模式写入本机持久配置卷，Windows 模式写入程序数据目录中的忽略配置文件，重启后继续生效；工作台只绑定 `127.0.0.1`，配置接口拒绝远程写入。停止服务：
 
 ```powershell
 docker compose down
@@ -36,7 +36,7 @@ docker compose down
 
 ## Windows 直接下载
 
-在 [GitHub Releases](https://github.com/xsc2466729313-cyber/SciDataFusion/releases/latest) 下载 `SciDataFusion-1.6.0-windows-x64.zip`，完整解压后双击 `SciDataFusion.exe`。便携版包含 Python 运行环境和中文 React 页面，无需安装 Python、Node.js 或 Git。
+在 [GitHub Releases](https://github.com/xsc2466729313-cyber/SciDataFusion/releases/latest) 下载 `SciDataFusion-1.7.0-windows-x64.zip`，完整解压后双击 `SciDataFusion.exe`。便携版包含 Python 运行环境和中文 React 页面，无需安装 Python、Node.js 或 Git。
 
 ## 源码开发
 
@@ -77,4 +77,4 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 
 门禁包含 Ruff、mypy、pytest、Bandit、秘密扫描和依赖漏洞检查。外部文档和模型输出都按不可信输入处理；模型只能提出检索、映射或修复建议，不能直接写入或发明科学值。
 
-部署边界见 [M26 ADR](docs/adr/0033-deployable-ai-service-platform.md)，当前主题解析见 [M27 ADR](docs/adr/0034-current-topic-structured-preview.md)，字段映射与证据表边界见 [M28 ADR](docs/adr/0035-reviewable-field-mapping-and-evidence-export.md) 和 [M28 Definition of Done](docs/reviewable-field-mapping-acceptance.md)。
+部署边界见 [M26 ADR](docs/adr/0033-deployable-ai-service-platform.md)，当前主题解析见 [M27 ADR](docs/adr/0034-current-topic-structured-preview.md)，字段映射与证据表边界见 [M28 ADR](docs/adr/0035-reviewable-field-mapping-and-evidence-export.md)。中文任务诊断、本机配置和证据关系语义见 [M29 ADR](docs/adr/0036-local-configuration-and-chinese-evidence-graph.md) 与 [M29 验收清单](docs/chinese-workbench-reliability-acceptance.md)。

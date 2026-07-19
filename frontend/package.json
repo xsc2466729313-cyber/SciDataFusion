@@ -1,7 +1,7 @@
 {
   "name": "scidatafusion-workbench",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -13,7 +13,9 @@
     "lucide-react": "1.24.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "react-force-graph-3d": "1.29.1"
+    "react-force-graph-3d": "1.29.1",
+    "three": "^0.185.1",
+    "three-spritetext": "^1.10.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
