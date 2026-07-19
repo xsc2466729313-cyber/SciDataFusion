@@ -4,7 +4,9 @@ SciDataFusion 是一个面向科研数据获取、解析、整合和审计的中
 
 项目坚持“证据优先”：没有经过来源和质量检查的内容不会被包装成科学结论，模型只能提出检索、映射或修复建议，不能直接发明或覆盖科学数值。
 
-![SciDataFusion 中文工作台](docs/assets/workbench-v1.4.png)
+<p align="center">
+  <img src="docs/assets/workbench-overview.jpg" alt="SciDataFusion 中文工作台总览" width="100%" />
+</p>
 
 ## 核心能力
 
